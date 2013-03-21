@@ -1,5 +1,6 @@
 #include <vector>
 
+// why this C style callback function???!!!
 typedef void (*AudioCallbackFunction)(uint64_t timestamp, const float* input, float *output, void *user);
 
 class AudioStreamConfiguration {
