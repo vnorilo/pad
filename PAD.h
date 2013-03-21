@@ -1,8 +1,10 @@
+#include <string>
 #include <vector>
 #include <cstdint>
 
 namespace PAD{
-	class AudioCallbackDelegate{
+    const char* versionString() { return "0.0.0"; }
+    class AudioCallbackDelegate{
 	public:
 		virtual void Process(uint64_t timestamp, const float* input, float *output) = 0;
 	};
