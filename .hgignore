@@ -5,6 +5,7 @@ msvc/PADTest/Test.App
 *.sdf
 *.suo
 *.opensdf
+ASIOSDK2
 msvc/PADTest/x64
 ipch
 *.user
