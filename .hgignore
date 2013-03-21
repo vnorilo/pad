@@ -1,0 +1,10 @@
+syntax: glob
+msvc/PADTest/Debug
+msvc/PADTest/Release
+msvc/PADTest/Test.App
+*.sdf
+*.suo
+*.opensdf
+msvc/PADTest/x64
+ipch
+*.user
