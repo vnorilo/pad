@@ -2,6 +2,7 @@
 #include "pad.h"
 
 using namespace std;
+using namespace PAD;
 
 class TrollersonDelegate : public PAD::AudioCallbackDelegate
 {
@@ -25,21 +26,21 @@ private:
     double m_phase;
     PAD::AudioStreamConfiguration m_conf;
 };
-// just to allow compilation for now...
-PAD::AudioStreamConfiguration::AudioStreamConfiguration(double sampleRate)
-{
-}
 
 unsigned PAD::AudioStreamConfiguration::GetNumOutputs()
 {
-    return 2;
+    return 1;
 }
 
 int main()
 {
     cout << "Hello from PAD "<<PAD::versionString()<<"!"<<endl;
-    PAD::AudioStreamConfiguration conf;
-    TrollersonDelegate delegate(conf);
+    //PAD::AudioStreamConfiguration conf;
+    //TrollersonDelegate delegate(conf);
+    for(auto& dev : PAD::AudioDevice::Enumerate())
+    {
+        std::cout << "[" << dev->GetHostAPI() << "] " << dev->GetName() << " : " << dev->GetNumOutputs() << "/" << dev->GetNumInputs() << "\n";
+    }
     return 0;
 }
 
