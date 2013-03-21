@@ -79,6 +79,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\..\test1.cpp" />
+    <ClCompile Include="..\..\wasapi.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\PAD.h" />

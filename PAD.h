@@ -4,7 +4,7 @@
 namespace PAD{
 	class AudioCallbackDelegate{
 	public:
-		virtual void Process(uint64_t timestamp, const float* input, float *output) = 0;
+		virtual void Process(uint64_t timestamp, const float* input, float *output, unsigned numFrames) = 0;
 	};
 
 	class AudioStreamConfiguration {
