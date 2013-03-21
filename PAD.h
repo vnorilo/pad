@@ -1,3 +1,5 @@
+#pragma once
+
 #include <vector>
 #include <cstdint>
 
@@ -34,21 +36,21 @@ namespace PAD{
 
 	class AudioDevice;
 	class AudioDeviceCollection {
-		AudioDevice *b, *e;
+		AudioDevice **b, **e;
 	public:
-		AudioDeviceCollection(AudioDevice *b, AudioDevice *e):b(b),e(e){}
-		AudioDevice* begin() {return b;}
-		AudioDevice* end() {return e;}
+		AudioDeviceCollection(AudioDevice **b, AudioDevice **e):b(b),e(e){}
+		AudioDevice** begin() {return b;}
+		AudioDevice** end() {return e;}
 	};
 
 	class AudioDevice {	
 	public:
-		virtual unsigned GetNumInputs() = 0;
-		virtual unsigned GetNumOutputs() = 0;
-		virtual const char *GetName() = 0;
-		virtual const char *GetHostAPI() = 0;
+		virtual unsigned GetNumInputs() const = 0;
+		virtual unsigned GetNumOutputs() const = 0;
+		virtual const char *GetName() const = 0;
+		virtual const char *GetHostAPI() const = 0;
 
-		virtual bool Supports(const AudioStreamConfiguration&) = 0;
+		virtual bool Supports(const AudioStreamConfiguration&) const = 0;
 
 		virtual const AudioStreamConfiguration& Open(AudioCallbackDelegate&, bool startSuspended = false) = 0;
 
