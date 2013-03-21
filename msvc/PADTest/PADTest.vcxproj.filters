@@ -13,6 +13,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Source Files\ASIO">
+      <UniqueIdentifier>{141d6256-08ea-4b1d-b73d-d06f0b88f186}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\ASIO">
+      <UniqueIdentifier>{e65ee15a-7ab6-44bd-88a6-e59286692681}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\test1.cpp">
@@ -21,9 +27,51 @@
     <ClCompile Include="..\..\wasapi.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\ASIOSDK2\host\ASIOConvertSamples.cpp">
+      <Filter>Source Files\ASIO</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ASIOSDK2\host\asiodrivers.cpp">
+      <Filter>Source Files\ASIO</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ASIOSDK2\host\pc\asiolist.cpp">
+      <Filter>Source Files\ASIO</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ASIOSDK2\common\asio.cpp">
+      <Filter>Source Files\ASIO</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ASIOSDK2\common\combase.cpp">
+      <Filter>Source Files\ASIO</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ASIOSDK2\common\debugmessage.cpp">
+      <Filter>Source Files\ASIO</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\ASIOSDK2\common\register.cpp">
+      <Filter>Source Files\ASIO</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\pad_asio.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\PAD.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\PAD.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\ASIOSDK2\host\ASIOConvertSamples.h">
+      <Filter>Header Files\ASIO</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\ASIOSDK2\host\asiodrivers.h">
+      <Filter>Header Files\ASIO</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\ASIOSDK2\host\pc\asiolist.h">
+      <Filter>Header Files\ASIO</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\ASIOSDK2\host\ginclude.h">
+      <Filter>Header Files\ASIO</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\HostAPI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
