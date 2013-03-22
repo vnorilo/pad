@@ -109,19 +109,14 @@ struct WasapiPublisher
             PROPVARIANT varName;
             // Initialize container for property value.
             PropVariantInit(&varName);
-            hr = pProps->GetValue(
-                        PKEY_Device_FriendlyName, &varName);
+            hr = pProps->GetValue(PKEY_Device_FriendlyName, &varName);
             EXIT_ON_ERROR(hr)
-
-                    // Print endpoint friendly name and endpoint ID.
-            //printf("Endpoint %d: \"%S\" (%S)\n",
-            //               i, varName.pwszVal, pwszID);
             unsigned numInputs=0; unsigned numOutputs=0;
-            int sizeNeeded=WideCharToMultiByte(CP_ACP,WC_COMPOSITECHECK,varName.pwszVal,-1,0,0,NULL,NULL);
+            int sizeNeeded=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,varName.pwszVal,-1,0,0,NULL,NULL);
             if (sizeNeeded>0)
             {
                 char* buf=new char[sizeNeeded];
-                int size=WideCharToMultiByte(CP_ACP,WC_COMPOSITECHECK,varName.pwszVal,-1,buf,sizeNeeded,NULL,NULL);
+                int size=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,varName.pwszVal,-1,buf,sizeNeeded,NULL,NULL);
                 if (size>0)
                 {
                     //cout << "wasapi name conversion needed "<<sizeNeeded<<" bytes"<<", used "<<size<<" bytes "<<buf<<"\n";
