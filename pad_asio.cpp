@@ -30,6 +30,7 @@ static std::string utostr(unsigned code)
 
 #define THROW_ERROR(code,expr) {ASIOError err = (expr); if (err != ASE_OK) throw PAD::SoftError(code,std::string(#expr " failed with ASIO error ") + utostr(err) );}
 #define THROW_FALSE(code,expr) {if (expr == false) throw PAD::SoftError(code,#expr " failed");}
+#define THROW_TRUE(code,expr) {if (expr == true) throw PAD::SoftError(code,#expr " failed");}
 
 namespace {
 	using namespace std;
@@ -173,8 +174,8 @@ namespace {
 			if (State < Loaded)
 			{
 				std::vector<char> space(64);
-				THROW_FALSE(DeviceDriverFailure,drivers.asioGetDriverName(index,space.data(),space.size()));
-				THROW_FALSE(DeviceDriverFailure,drivers.loadDriver(space.data()));
+				THROW_TRUE(DeviceDriverFailure,drivers.asioGetDriverName(index,space.data(),space.size()));
+				THROW_TRUE(DeviceDriverFailure,drivers.loadDriver(space.data()));
 				State = Loaded;
 			}
 		}
@@ -275,7 +276,7 @@ namespace {
 					long numInputs = 0;
 					long numOutputs = 0;
 
-					THROW_ERROR(DeviceDriverFailure,drivers.loadDriver(buffer));
+					drivers.loadDriver(buffer);
 					ASIODriverInfo driverInfo;
 					ASIOSampleRate currentSampleRate;
 					THROW_ERROR(DeviceInitializationFailure,ASIOInit(&driverInfo));
