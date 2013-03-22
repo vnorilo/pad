@@ -1,13 +1,28 @@
 #pragma once
 #include <vector>
 #include <cstdint>
+#include <stdexcept>
 
 namespace PAD{
-    static const char* versionString() { return "0.0.0"; }
+    const char* VersionString();
 
-    class AudioCallbackDelegate{
+	enum ErrorCode {
+		NoError,
+		InternalError,
+	};
+
+	class ErrorBase : public std::runtime_error {
+		const std::string message;
+		ErrorCode code;
+		ErrorBase(ErrorCode c,const std::string& message):code(c),message(message){}
+	};
+
+	class SoftError : public std::runtime_error {
 	public:
-        virtual void Process(uint64_t timestamp, const float* input, float *output, unsigned int frames) = 0;
+		static Error Soft(ErrorCode c, const std::string& msg) {return Error(SoftFailure,c,msg);}
+		static Error Hard(ErrorCode c, const std::string& msg) {return Error(HardFailure,c,msg);}
+		static Error Internal(const std::string& msg) {return Error(InternalFailure,Internal,msg);}
+		const char *what() const;
 	};
 
 	class AudioStreamConfiguration {
@@ -19,29 +34,55 @@ namespace PAD{
 		bool valid;
 	public:
 		AudioStreamConfiguration(double sampleRate = 44100.0);
-		void SetSampleRate(double);	
+		void SetSampleRate(double sampleRate) {this->sampleRate = sampleRate;}	
 		void AddInputs(unsigned first = 0, unsigned last = -1);
 		void AddOutputs(unsigned first = 0, unsigned last = -1);
-		void SetPreferredBufferSize(unsigned frames);
+		void SetPreferredBufferSize(unsigned frames) {bufferSize = frames;}
 
 		bool IsInputEnabled(unsigned index) const;
 		bool IsOutputEnabled(unsigned index) const;
 		bool IsValid() const {return valid;}
 
-		unsigned GetNumInputs();
-		unsigned GetNumOutputs();
+		unsigned GetNumInputs() const;
+		unsigned GetNumOutputs() const;
 
 		unsigned GetBufferSize() const {return bufferSize;}
 		double GetSampleRate() const {return sampleRate;}	
 	};
 
+    class AudioCallbackDelegate{
+	public:
+		/**
+		 * Process is the audio callback. Expect it to be called from a realtime thread
+		 */
+        virtual void Process(uint64_t timestamp, const float* input, float *output, unsigned int frames) = 0;
+
+		/**
+		 * Utility setup calls that are called from the thread that controls the AudioDevice 
+		 */
+		virtual void AboutToBeginStream(const AudioStreamConfiguration&, AudioDevice*) {}
+		virtual void AboutToEndStream(AudioDevice*) {}
+		virtual void StreamDidEnd(AudioDevice*) {}
+	};
+
 	class AudioDevice;
+	class AudioDeviceIterator {
+		friend class AudioDeviceCollection;
+		AudioDevice** ptr;
+		AudioDeviceIterator(AudioDevice** fromPtr):ptr(fromPtr) {}
+	public:
+		bool operator==(const AudioDeviceIterator& rhs) const {return ptr==rhs.ptr;}
+		bool operator!=(const AudioDeviceIterator& rhs) const {return !(*this==rhs);}
+		AudioDevice& operator*() {return **ptr;}
+		AudioDeviceIterator& operator++() {ptr++;return *this;}
+		AudioDeviceIterator operator++(int) {auto tmp(*this);ptr++;return tmp;}
+	};
 	class AudioDeviceCollection {
 		AudioDevice **b, **e;
 	public:
 		AudioDeviceCollection(AudioDevice **b, AudioDevice **e):b(b),e(e){}
-		AudioDevice** begin() {return b;}
-		AudioDevice** end() {return e;}
+		AudioDeviceIterator begin() {return b;}
+		AudioDeviceIterator end() {return e;}
 	};
 
 	class AudioDevice {	
@@ -61,6 +102,13 @@ namespace PAD{
 		virtual void Close() = 0;
 
 		static AudioDeviceCollection Enumerate();
+	};
+
+	class Initializer {
+	public:
+		/* initialize all host apis */
+		Initializer();
+		void InitializeHostAPI(const char *hostApiName);
 	};
 };
 
