@@ -7,6 +7,6 @@ int main()
 
 	for(auto& dev : AudioDevice::Enumerate())
 	{
-		std::cout << "[" << dev->GetHostAPI() << "] " << dev->GetName() << " : " << dev->GetNumOutputs() << "/" << dev->GetNumInputs() << "\n";
+		std::cout << "[" << dev.GetHostAPI() << "] " << dev.GetName() << " : " << dev.GetNumOutputs() << "/" << dev.GetNumInputs() << "\n";
 	}
 }

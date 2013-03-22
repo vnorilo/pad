@@ -1,4 +1,5 @@
 #include <string>
+#include <set>
 
 #include "HostAPI.h"
 #include "PAD.h"
@@ -21,6 +22,28 @@ namespace {
 		unsigned maxSize;
 		unsigned preferredSize;
 		unsigned index;
+
+		set<double> knownGoodSampleRates;
+
+		bool SetAsCurrentDriver(bool stopActiveStream)
+		{
+		}
+
+		bool SupportsSampleRate(double rate)
+		{
+			if (knownGoodSampleRates.find(rate) != knownGoodSampleRates.end()) return true;			
+			if (SetAsCurrentDriver(false))
+			{
+				if (ASIOCanSampleRate(rate) == ASE_OK)
+				{
+					knownGoodSampleRates.insert(rate);
+					return true;
+				}
+				else return false;
+			}
+			else return false;
+		}
+
 	public:
 		AsioDevice(unsigned i,const string& name, unsigned inputs, unsigned outputs):
 			deviceName(name),numInputs(inputs),numOutputs(outputs),index(i) {}
@@ -31,8 +54,10 @@ namespace {
 		unsigned GetNumInputs() const {return numInputs;}
 		unsigned GetNumOutputs() const {return numOutputs;}
 
-		virtual bool Supports(const AudioStreamConfiguration&) const
+		virtual bool Supports(const AudioStreamConfiguration& conf) const
 		{
+			if (conf.GetNumInputs() > GetNumInputs() ||
+				conf.GetNumOutputs() > GetNumOutputs()) return false;
 			return false;
 		}
 
@@ -46,8 +71,6 @@ namespace {
 		virtual void Suspend() {}
 
 		virtual void Close() {}
-
-		static AudioDeviceCollection Enumerate();
 	};
 
 	struct AsioPublisher{		
@@ -67,14 +90,14 @@ namespace {
 				ASIOGetChannels(&numInputs,&numOutputs);
 				drivers.removeCurrentDriver();
 
-				devices.push_back(AsioDevice(i,buffer,numInputs,numOutputs));
-				Publish(devices.back());
+				Publish(AsioDevice(i,buffer,numInputs,numOutputs));
 			}
 		}
 
 		void Publish(AsioDevice& dev)
 		{
-			__RegisterDevice(&dev);
+			devices.push_back(dev);
+			__RegisterDevice(&devices.back());
 		}
 	} publisher;
 
