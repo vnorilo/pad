@@ -154,7 +154,9 @@
     <ClCompile Include="..\..\PAD.cpp" />
     <ClCompile Include="..\..\pad_asio.cpp" />
     <ClCompile Include="..\..\test1.cpp" />
-    <ClCompile Include="..\..\wasapi.cpp" />
+    <ClCompile Include="..\..\pad_wasapi.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\ASIOSDK2\host\ASIOConvertSamples.h" />

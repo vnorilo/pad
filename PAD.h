@@ -11,18 +11,21 @@ namespace PAD{
 		InternalError,
 	};
 
-	class ErrorBase : public std::runtime_error {
-		const std::string message;
+	class Error : public std::runtime_error {
 		ErrorCode code;
-		ErrorBase(ErrorCode c,const std::string& message):code(c),message(message){}
+	public:
+		Error(ErrorCode c,const std::string& message):code(c),runtime_error(message.c_str()) {}
+		ErrorCode GetCode() const {return code;}
 	};
 
-	class SoftError : public std::runtime_error {
+	class SoftError : public Error {
 	public:
-		static Error Soft(ErrorCode c, const std::string& msg) {return Error(SoftFailure,c,msg);}
-		static Error Hard(ErrorCode c, const std::string& msg) {return Error(HardFailure,c,msg);}
-		static Error Internal(const std::string& msg) {return Error(InternalFailure,Internal,msg);}
-		const char *what() const;
+		SoftError(ErrorCode c, const std::string& message):Error(c,message){}
+	};
+
+	class HardError : public Error {
+	public:
+		HardError(ErrorCode c, const std::string& message):Error(c,message){}
 	};
 
 	class AudioStreamConfiguration {
