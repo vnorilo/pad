@@ -7,6 +7,7 @@
 #include "asiosys.h"
 #include "asio.h"
 #include "asiodrivers.h"
+#include <iostream>
 
 namespace {
 	using namespace std;
@@ -79,18 +80,22 @@ namespace {
 		{
 			const unsigned MaxNameLength = 64;
 			unsigned numDrivers = drivers.asioGetNumDev();
-			for(unsigned i(0);i<numDrivers;++i)
+            for(unsigned i(0);i<numDrivers;++i)
 			{
 				char buffer[MaxNameLength];
 				drivers.asioGetDriverName(i,buffer,MaxNameLength);
-				long numInputs = 0;
+                long numInputs = 0;
 				long numOutputs = 0;
 
-				drivers.loadDriver(buffer);
-				ASIOGetChannels(&numInputs,&numOutputs);
-				drivers.removeCurrentDriver();
+                if (drivers.loadDriver(buffer)==true)
+                {
+                    ASIOError err=ASIOGetChannels(&numInputs,&numOutputs);
+                    if (err!=ASE_OK)
+                        cerr << "getting channel counts didn't work" << i << err << "\n";
+                    drivers.removeCurrentDriver();
 
-				Publish(AsioDevice(i,buffer,numInputs,numOutputs));
+					Publish(AsioDevice(i,buffer,numInputs,numOutputs));
+                } else cerr << "loading driver didn't work\n";
 			}
 		}
 
@@ -101,4 +106,4 @@ namespace {
 		}
 	} publisher;
 
-};
+}
