@@ -1,12 +1,13 @@
 #include "PAD.h"
 #include <functional>
 #include <numeric>
+#include <ostream>
 
 namespace PAD {
 	using namespace std;
 	const char* VersionString() { return "0.0.0"; }
 
-	AudioStreamConfiguration::AudioStreamConfiguration(double samplerate):sampleRate(samplerate)
+	AudioStreamConfiguration::AudioStreamConfiguration(double samplerate, bool valid):sampleRate(samplerate),valid(valid)
 	{
 	}
 
@@ -75,15 +76,28 @@ namespace PAD {
 		return count;
 	}
 
-
-	unsigned AudioStreamConfiguration::GetNumInputs() const
+	unsigned AudioStreamConfiguration::GetNumStreamInputs() const
 	{
 		return GetNumChannels(inputRanges);
 	}
 
-	unsigned AudioStreamConfiguration::GetNumOutputs() const
+	unsigned AudioStreamConfiguration::GetNumStreamOutputs() const
 	{
 		return GetNumChannels(outputRanges);
+	}
+
+	unsigned AudioStreamConfiguration::GetNumDeviceInputs() const
+	{
+		unsigned max(0);
+		for(auto r : inputRanges) if (r.end() > max) max = r.end();
+		return max;
+	}
+
+	unsigned AudioStreamConfiguration::GetNumDeviceOutputs() const
+	{
+		unsigned max(0);
+		for(auto r : outputRanges) if (r.end() > max) max = r.end();
+		return max;
 	}
 
 	bool AudioStreamConfiguration::IsInputEnabled(unsigned ch) const
@@ -96,13 +110,52 @@ namespace PAD {
 		return IsChannelInRangeSet(ch,outputRanges) == In;
 	}
 
-	void AudioStreamConfiguration::AddInputs(ChannelRange channels)
+	void AudioStreamConfiguration::AddDeviceInputs(ChannelRange channels)
 	{
 		AddChannels(channels,inputRanges);
 	}
 
-	void AudioStreamConfiguration::AddOutputs(ChannelRange channels)
+	void AudioStreamConfiguration::AddDeviceOutputs(ChannelRange channels)
 	{
 		AddChannels(channels,outputRanges);
 	}
+}
+
+std::ostream& operator<<(std::ostream& stream, const PAD::AudioDevice& dev)
+{
+	stream << "[" << dev.GetHostAPI() << "] " << dev.GetName() << " [" << dev.GetNumInputs() << "x"<<dev.GetNumInputs()<<"]";
+	return stream;
+}
+
+std::ostream& operator<<(std::ostream& stream, const PAD::AudioStreamConfiguration& cfg)
+{
+	if (cfg.IsValid() == false)
+	{
+		stream << "n/a";
+		return stream;
+	}
+
+	stream << cfg.GetSampleRate() / 1000.0 << "kHz ";
+	unsigned devIns(cfg.GetNumDeviceInputs());
+	unsigned devOuts(cfg.GetNumDeviceOutputs());
+
+	if (devIns < 32 && devOuts < 32 && (devIns > 0 || devOuts > 0))
+	{
+		stream << "Device[";
+		for(unsigned i(0);i<devIns;++i)
+		{
+			if (cfg.IsInputEnabled(i)) stream << "<"<<i+1<<">";
+		}
+
+		stream << " x ";
+
+		for(unsigned i(0);i<devOuts;++i)
+		{
+			if (cfg.IsOutputEnabled(i)) stream << "<"<<i+1<<">";
+		}
+		stream << "]";
+	}
+	else stream << "["<<devIns<<"x"<<devOuts<<"]";
+
+	return stream;
 }
