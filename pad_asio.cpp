@@ -75,9 +75,17 @@ namespace {
 		virtual void Close() {}
 	};
 
-	struct AsioPublisher{		
+	struct AsioPublisher : public HostAPIPublisher {		
 		list<AsioDevice> devices;
-		AsioPublisher()
+		void RegisterDevice(Session& PADInstance, AsioDevice dev)
+		{
+			devices.push_back(dev);
+			PADInstance.Register(&devices.back());
+		}
+
+		const char* GetName() const {return "ASIO";}
+
+		void Publish(Session& PADInstance)
 		{
 			const unsigned MaxNameLength = 64;
 			unsigned numDrivers = drivers.asioGetNumDev();
@@ -95,15 +103,9 @@ namespace {
                         cerr << "getting channel counts didn't work." << i << err << "\n";
                     drivers.removeCurrentDriver();
 
-					Publish(AsioDevice(i,buffer,numInputs,numOutputs));
+					RegisterDevice(PADInstance,AsioDevice(i,buffer,numInputs,numOutputs));
                 } else cerr << "loading driver didn't work\n";
 			}
-		}
-
-		void Publish(AsioDevice& dev)
-		{
-			devices.push_back(dev);
-			__RegisterDevice(&devices.back());
 		}
 	} publisher;
 

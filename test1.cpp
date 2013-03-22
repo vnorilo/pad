@@ -4,14 +4,10 @@
 int main()
 {
 	using namespace PAD;
+	Session myAudioSession;
 
-	for(auto& dev : AudioDevice::Enumerate())
+	for(auto& dev : myAudioSession)
 	{
 		std::cout << "[" << dev.GetHostAPI() << "] " << dev.GetName() << " : " << dev.GetNumOutputs() << "/" << dev.GetNumInputs() << "\n";
-
-		AudioStreamConfiguration conf(44100);
-
-		ChannelRange inputs[] = {ChannelRange(0,2), ChannelRange(3,4)};
-		conf.AddInputs(inputs);
 	}
 }

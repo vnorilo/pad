@@ -55,21 +55,21 @@ private:
     unsigned numOutputs;
     unsigned index;
 };
-struct WasapiPublisher
+
+struct WasapiPublisher : public HostAPIPublisher
 {
     list<WasapiDevice> devices;
-    WasapiPublisher()
+
+	const char *GetName() const {return "WASAPI";}
+
+    void RegisterDevice(Session& PADInstance, WasapiDevice dev)
     {
-        EnumerateDevices();
+		devices.push_back(dev);
+		PADInstance.Register(&devices.back());
     }
 
-    void Publish(WasapiDevice& dev)
-    {
-        __RegisterDevice(&dev);
-    }
-
-    void EnumerateDevices()
-    {
+	void Publish(Session& PADInstance)
+	{
         HRESULT hr = S_OK;
         IMMDeviceEnumerator *pEnumerator = NULL;
         IMMDeviceCollection *pCollection = NULL;
@@ -123,13 +123,12 @@ struct WasapiPublisher
                 if (size>0)
                 {
                     //cerr << "wasapi name conversion needed "<<sizeNeeded<<" bytes"<<", used "<<size<<" bytes "<<buf<<"\n";
-                    devices.push_back(WasapiDevice(i,string(buf),numInputs,numOutputs));
+                    RegisterDevice(PADInstance,WasapiDevice(i,string(buf),numInputs,numOutputs));
                 } else
                 {
                     cerr << "could not convert wasasi device name properly, using bogus name\n";
-                    devices.push_back(WasapiDevice(i,"Trolldevice",numInputs,numOutputs));
+                    RegisterDevice(PADInstance,WasapiDevice(i,"Trolldevice",numInputs,numOutputs));
                 }
-                Publish(devices.back());
                 delete[] buf;
             } else cerr << "wasapi device name too broken, will not use this device\n";
             CoTaskMemFree(pwszID);
