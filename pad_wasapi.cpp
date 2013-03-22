@@ -1,10 +1,13 @@
-#include <string>
-#include "HostAPI.h"
-#include "PAD.h"
 #include <iostream>
+#include <string>
+#include <list>
+
 #include "winerror.h"
 #include "Mmdeviceapi.h"
 #include "Functiondiscoverykeys_devpkey.h"
+
+#include "HostAPI.h"
+#include "PAD.h"
 
 #define EXIT_ON_ERROR(hres)  \
     if (FAILED(hres)) { goto Exit; }
@@ -54,7 +57,7 @@ private:
 };
 struct WasapiPublisher
 {
-    vector<WasapiDevice> devices;
+    list<WasapiDevice> devices;
     WasapiPublisher()
     {
         EnumerateDevices();

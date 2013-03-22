@@ -155,7 +155,7 @@
     <ClCompile Include="..\..\pad_asio.cpp" />
     <ClCompile Include="..\..\test1.cpp" />
     <ClCompile Include="..\..\pad_wasapi.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

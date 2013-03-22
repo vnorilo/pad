@@ -18,22 +18,67 @@ namespace PAD {
 	{
 	}
 
-	static unsigned GetNumChannels(const vector<pair<unsigned,unsigned>>& ranges)
+	enum RangeFindResult {
+		In,
+		Below,
+		Between,
+		Above
+	};
+
+	bool ChannelRange::Overlaps(ChannelRange r)
+	{
+		return r.begin() < end() && r.end() > begin();
+	}
+
+	static void AddChannels(ChannelRange channels, vector<ChannelRange>& ranges)
+	{
+		/* check for valid range */
+		for(auto r : ranges)
+		{
+			if (r.Overlaps(channels)) throw SoftError(ChannelRangeOverlap,"Channel ranges must not overlap");
+		}
+
+		/* merge into another range if continuous */
+		for(auto& r : ranges)
+		{
+			if (channels.end() == r.begin())
+			{
+				r = ChannelRange(channels.begin(),r.end());
+				return;
+			}
+		}
+
+		ranges.push_back(channels);
+	}
+
+	static RangeFindResult IsChannelInRangeSet(unsigned idx, const vector<ChannelRange>& ranges)
+	{
+		bool aboveAllRanges(true);
+		bool belowAllRanges(true);
+		for(auto p : ranges)
+		{
+			if (idx < p.end())
+			{
+				aboveAllRanges = false;
+				if (idx >= p.begin()) return In;
+			}
+			else if (idx >= p.begin()) belowAllRanges = false;			
+		}
+
+		if (aboveAllRanges) return Above;
+		else if (belowAllRanges) return Below;
+		else return Between;
+	}
+
+	static unsigned GetNumChannels(const vector<ChannelRange>& ranges)
 	{
 		unsigned idx(0);
 		unsigned count(0);
-		bool aboveAllRanges(false);
-		while(aboveAllRanges == false)
+
+		RangeFindResult r;
+		while((r = IsChannelInRangeSet(idx,ranges)) != Above)
 		{
-			aboveAllRanges = true;
-			for(auto p : ranges)
-			{
-				if (idx < p.second)
-				{
-					aboveAllRanges = false;
-					if (idx >= p.first) {++count;break;}
-				}
-			}
+			if (r == In) count++;
 		}
 		return count;
 	}
@@ -47,5 +92,25 @@ namespace PAD {
 	unsigned AudioStreamConfiguration::GetNumOutputs() const
 	{
 		return GetNumChannels(outputRanges);
+	}
+
+	bool AudioStreamConfiguration::IsInputEnabled(unsigned ch) const
+	{
+		return IsChannelInRangeSet(ch,inputRanges) == In;
+	}
+
+	bool AudioStreamConfiguration::IsOutputEnabled(unsigned ch) const
+	{
+		return IsChannelInRangeSet(ch,outputRanges) == In;
+	}
+
+	void AudioStreamConfiguration::AddInputs(ChannelRange channels)
+	{
+		AddChannels(channels,inputRanges);
+	}
+
+	void AudioStreamConfiguration::AddOutputs(ChannelRange channels)
+	{
+		AddChannels(channels,outputRanges);
 	}
 }

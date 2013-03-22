@@ -1,5 +1,6 @@
 #include <string>
 #include <set>
+#include <list>
 
 #include "HostAPI.h"
 #include "PAD.h"
@@ -75,7 +76,7 @@ namespace {
 	};
 
 	struct AsioPublisher{		
-		vector<AsioDevice> devices;
+		list<AsioDevice> devices;
 		AsioPublisher()
 		{
 			const unsigned MaxNameLength = 64;
@@ -91,7 +92,7 @@ namespace {
                 {
                     ASIOError err=ASIOGetChannels(&numInputs,&numOutputs);
                     if (err!=ASE_OK)
-                        cerr << "getting channel counts didn't work" << i << err << "\n";
+                        cerr << "getting channel counts didn't work." << i << err << "\n";
                     drivers.removeCurrentDriver();
 
 					Publish(AsioDevice(i,buffer,numInputs,numOutputs));

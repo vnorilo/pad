@@ -9,15 +9,21 @@ namespace PAD{
 	enum ErrorCode {
 		NoError,
 		InternalError,
+		ChannelRangeInvalid,
+		ChannelRangeOverlap
 	};
 
 	class Error : public std::runtime_error {
 		ErrorCode code;
-	public:
+	protected:
 		Error(ErrorCode c,const std::string& message):code(c),runtime_error(message.c_str()) {}
+	public:
 		ErrorCode GetCode() const {return code;}
 	};
 
+	/**
+	* throw only SoftError and HardError 
+	***/
 	class SoftError : public Error {
 	public:
 		SoftError(ErrorCode c, const std::string& message):Error(c,message){}
@@ -28,18 +34,33 @@ namespace PAD{
 		HardError(ErrorCode c, const std::string& message):Error(c,message){}
 	};
 
+	class ChannelRange{
+		unsigned b, e;
+	public:
+		ChannelRange(unsigned b = 0, unsigned e = -1):b(b),e(e) {if(e<=b) throw SoftError(ChannelRangeInvalid,"Invalid channel range");}
+		unsigned begin() const {return b;}
+		unsigned end() const {return e;}
+		bool Overlaps(ChannelRange);
+		bool Contains(unsigned);
+	};
+
 	class AudioStreamConfiguration {
 		friend class AudioDevice;
 		double sampleRate;
-		std::vector<std::pair<unsigned,unsigned>> inputRanges;
-		std::vector<std::pair<unsigned,unsigned>> outputRanges;
+		std::vector<ChannelRange> inputRanges;
+		std::vector<ChannelRange> outputRanges;
 		unsigned bufferSize;
 		bool valid;
 	public:
 		AudioStreamConfiguration(double sampleRate = 44100.0);
 		void SetSampleRate(double sampleRate) {this->sampleRate = sampleRate;}	
-		void AddInputs(unsigned first = 0, unsigned last = -1);
-		void AddOutputs(unsigned first = 0, unsigned last = -1);
+
+		void AddInputs(ChannelRange);
+		void AddOutputs(ChannelRange);
+
+		template <int N> void AddInputs(const ChannelRange (&ranges)[N]) {for(auto r : ranges) AddInputs(r);} 
+		template <int N> void AddOutputs(const ChannelRange (&ranges)[N]) {for(auto r : ranges) AddOutputs(r);} 
+
 		void SetPreferredBufferSize(unsigned frames) {bufferSize = frames;}
 
 		bool IsInputEnabled(unsigned index) const;
@@ -110,7 +131,7 @@ namespace PAD{
 	class Initializer {
 	public:
 		/* initialize all host apis */
-		Initializer();
+		Initializer(bool loadAllAPIs = true);
 		void InitializeHostAPI(const char *hostApiName);
 	};
 };
