@@ -68,12 +68,12 @@ namespace {
                 {
                     ASIOError err=ASIOGetChannels(&numInputs,&numOutputs);
                     if (err!=ASE_OK)
-                        cout << "getting channel counts didn't work" << i << err << std::endl;
+                        cout << "getting channel counts didn't work" << i << err << "\n";
                     drivers.removeCurrentDriver();
 
                     devices.push_back(AsioDevice(i,buffer,numInputs,numOutputs));
                     Publish(devices.back());
-                } else cout << "loading driver didn't work" << std::endl;
+                } else cout << "loading driver didn't work\n";
 			}
 		}
 
