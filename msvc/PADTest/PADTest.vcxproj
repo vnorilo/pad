@@ -151,6 +151,7 @@
     <ClCompile Include="..\..\ASIOSDK2\host\ASIOConvertSamples.cpp" />
     <ClCompile Include="..\..\ASIOSDK2\host\asiodrivers.cpp" />
     <ClCompile Include="..\..\ASIOSDK2\host\pc\asiolist.cpp" />
+    <ClCompile Include="..\..\HostAPI.cpp" />
     <ClCompile Include="..\..\PAD.cpp" />
     <ClCompile Include="..\..\pad_asio.cpp" />
     <ClCompile Include="..\..\test1.cpp" />

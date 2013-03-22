@@ -10,7 +10,8 @@ namespace PAD{
 		NoError,
 		InternalError,
 		ChannelRangeInvalid,
-		ChannelRangeOverlap
+		ChannelRangeOverlap,
+		UnknownApiIdentifier
 	};
 
 	class Error : public std::runtime_error {
@@ -89,26 +90,6 @@ namespace PAD{
 		virtual void StreamDidEnd(AudioDevice*) {}
 	};
 
-	class AudioDevice;
-	class AudioDeviceIterator {
-		friend class AudioDeviceCollection;
-		AudioDevice** ptr;
-		AudioDeviceIterator(AudioDevice** fromPtr):ptr(fromPtr) {}
-	public:
-		bool operator==(const AudioDeviceIterator& rhs) const {return ptr==rhs.ptr;}
-		bool operator!=(const AudioDeviceIterator& rhs) const {return !(*this==rhs);}
-		AudioDevice& operator*() {return **ptr;}
-		AudioDeviceIterator& operator++() {ptr++;return *this;}
-		AudioDeviceIterator operator++(int) {auto tmp(*this);ptr++;return tmp;}
-	};
-	class AudioDeviceCollection {
-		AudioDevice **b, **e;
-	public:
-		AudioDeviceCollection(AudioDevice **b, AudioDevice **e):b(b),e(e){}
-		AudioDeviceIterator begin() {return b;}
-		AudioDeviceIterator end() {return e;}
-	};
-
 	class AudioDevice {	
 	public:
 		virtual unsigned GetNumInputs() const = 0;
@@ -125,14 +106,38 @@ namespace PAD{
 
 		virtual void Close() = 0;
 
-		static AudioDeviceCollection Enumerate();
 	};
 
-	class Initializer {
+	class HostAPIPublisher;
+
+	class AudioDeviceIterator {
+		friend class Session;
+		AudioDevice** ptr;
+		AudioDeviceIterator(AudioDevice** fromPtr):ptr(fromPtr) {}
+	public:
+		bool operator==(const AudioDeviceIterator& rhs) const {return ptr==rhs.ptr;}
+		bool operator!=(const AudioDeviceIterator& rhs) const {return !(*this==rhs);}
+		AudioDevice& operator*() {return **ptr;}
+		AudioDeviceIterator& operator++() {ptr++;return *this;}
+		AudioDeviceIterator operator++(int) {auto tmp(*this);ptr++;return tmp;}
+	};
+
+	class Session {
+		std::vector<AudioDevice*> devices;
+		std::vector<HostAPIPublisher*> heldAPIProviders;
+		void InitializeApi(HostAPIPublisher*);
 	public:
 		/* initialize all host apis */
-		Initializer(bool loadAllAPIs = true);
+		Session(bool loadAllAPIs = true);
+		~Session();
+
+		std::vector<const char*> GetAvailableHostAPIs();
 		void InitializeHostAPI(const char *hostApiName);
+
+		AudioDeviceIterator begin();
+		AudioDeviceIterator end();
+
+		void Register(AudioDevice*);
 	};
 };
 

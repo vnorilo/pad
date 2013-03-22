@@ -6,14 +6,6 @@ namespace PAD {
 	using namespace std;
 	const char* VersionString() { return "0.0.0"; }
 
-	vector<AudioDevice*> __devices;
-	void __RegisterDevice(AudioDevice *d) { __devices.push_back(d); }
-
-	AudioDeviceCollection AudioDevice::Enumerate() 
-	{
-		return AudioDeviceCollection(__devices.data(),__devices.data()+__devices.size());
-	}
-
 	AudioStreamConfiguration::AudioStreamConfiguration(double samplerate):sampleRate(samplerate)
 	{
 	}
