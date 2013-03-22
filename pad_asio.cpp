@@ -123,9 +123,9 @@ namespace {
 		}
 
 		static ASIODriverInfo driverInfo;
-		static ASIOBufferInfo bufferInfo;
 		static AudioStreamConfiguration currentConfiguration;
 		static AudioCallbackDelegate* currentDelegate;
+		static vector<ASIOBufferInfo> bufferInfos;
 
 		static void BufferSwitch(long doubleBufferIndex, ASIOBool directProcess)
 		{
@@ -195,7 +195,26 @@ namespace {
 				long minBuf, maxBuf, prefBuf, bufGran;
 				ASIOCallbacks asioCb = {BufferSwitch,SampleRateDidChange,AsioMessage,BufferSwitchTimeInfo};
 				THROW_ERROR(DeviceOpenStreamFailure,ASIOGetBufferSize(&minBuf,&maxBuf,&prefBuf,&bufGran));
-				THROW_ERROR(DeviceOpenStreamFailure,ASIOCreateBuffers(&bufferInfo,currentConfiguration.GetNumDeviceOutputs(),prefBuf,&asioCb));
+//				THROW_ERROR(DeviceOpenStreamFailure,ASIOCreateBuffers(&bufferInfo,currentConfiguration.GetNumDeviceOutputs(),prefBuf,&asioCb));
+
+				bufferInfos.clear();
+				for(unsigned i(0);i<GetNumInputs();++i)
+				{
+					if (currentConfiguration.IsInputEnabled(i))
+					{
+						ASIOBufferInfo buf = {ASIOTrue,i,{0,0}};
+						bufferInfos.push_back(buf);
+					}
+				}
+
+				for(unsigned i(0);i<GetNumOutputs();++i)
+				{
+					if (currentConfiguration.IsOutputEnabled(i))
+					{
+						ASIOBufferInfo buf = {ASIOFalse,i,{0,0}};
+					}
+				}
+
 			}
 		}
 
@@ -207,10 +226,6 @@ namespace {
 			}
 		}
 
-		void ApplyStreamConfiguration(AudioStreamConfiguration& cfg)
-		{
-
-		}
 
 		virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration& conf, AudioCallbackDelegate& cb, bool startSuspended = false)
 		{
@@ -228,7 +243,6 @@ namespace {
 
 			Load();
 			Init();
-			ApplyStreamConfiguration(currentConfiguration);
 			Prepare();
 
 			if (startSuspended == false) Run();
@@ -301,5 +315,5 @@ namespace {
 	AudioCallbackDelegate* AsioDevice::currentDelegate = NULL;
 	AudioStreamConfiguration AsioDevice::currentConfiguration;
 	ASIODriverInfo AsioDevice::driverInfo;
-	ASIOBufferInfo AsioDevice::bufferInfo;
+	vector<ASIOBufferInfo> AsioDevice::bufferInfos;
 }

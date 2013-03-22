@@ -6,7 +6,13 @@
 
 namespace PAD{
 	using namespace std;
-	static list<HostAPIPublisher*> __availablePublishers;
+
+	static list<HostAPIPublisher*>& AvailablePublishers()
+	{
+		static list<HostAPIPublisher*> __availablePublishers;
+		return __availablePublishers;
+	}
+
 
 	class AlwaysPropagateErrors : public DeviceErrorDelegate{
 	public:
@@ -17,12 +23,12 @@ namespace PAD{
 	HostAPIPublisher::HostAPIPublisher()
 	{
 		/* todo: lock thread access */
-		__availablePublishers.push_back(this);
+		AvailablePublishers().push_back(this);
 	}
 
 	void Session::InitializeApi(HostAPIPublisher* api, DeviceErrorDelegate &errHandler)
 	{
-		__availablePublishers.remove(api);
+		AvailablePublishers().remove(api);
 		heldAPIProviders.push_back(api);
 		api->Publish(*this, errHandler);
 	}
@@ -33,13 +39,13 @@ namespace PAD{
 		if (del == NULL) del = &p;
 		if (loadAll)
 		{
-			while(__availablePublishers.size()) InitializeApi(__availablePublishers.front(),*del);
+			while(AvailablePublishers().size()) InitializeApi(AvailablePublishers().front(),*del);
 		}
 	}
 
 	Session::~Session()
 	{
-		__availablePublishers.insert(__availablePublishers.begin(),heldAPIProviders.begin(),heldAPIProviders.end());
+		AvailablePublishers().insert(AvailablePublishers().begin(),heldAPIProviders.begin(),heldAPIProviders.end());
 		for(auto api : heldAPIProviders) api->Cleanup(*this);
 	}
 
@@ -49,7 +55,7 @@ namespace PAD{
 		AlwaysPropagateErrors p;
 		if (del == NULL) del = &p;
 
-		for(auto api : __availablePublishers)
+		for(auto api : AvailablePublishers())
 		{
 			if (n == api->GetName())
 			{
