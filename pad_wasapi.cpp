@@ -24,6 +24,10 @@ using namespace std;
 using namespace PAD;
 class WasapiDevice : public AudioDevice
 {
+	AudioStreamConfiguration defaultMono, defaultStereo, defaultAll;
+	AudioStreamConfiguration DefaultMono() const { return defaultMono; }
+	AudioStreamConfiguration DefaultStereo() const { return defaultStereo; }
+	AudioStreamConfiguration DefaultAllChannels() const { return defaultAll; }
 public:
     WasapiDevice(unsigned i,const string& name, unsigned inputs, unsigned outputs):
         deviceName(name),numInputs(inputs),numOutputs(outputs),index(i) {}
@@ -39,7 +43,7 @@ public:
         return false;
     }
 
-    virtual const AudioStreamConfiguration& Open(AudioCallbackDelegate&, bool startSuspended = false)
+    virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration&, AudioCallbackDelegate&, bool startSuspended = false)
     {
         static AudioStreamConfiguration kludge(44100);
         return kludge;
@@ -59,7 +63,6 @@ private:
 struct WasapiPublisher : public HostAPIPublisher
 {
     list<WasapiDevice> devices;
-
 	const char *GetName() const {return "WASAPI";}
 
     void RegisterDevice(Session& PADInstance, WasapiDevice dev)
@@ -68,7 +71,7 @@ struct WasapiPublisher : public HostAPIPublisher
 		PADInstance.Register(&devices.back());
     }
 
-	void Publish(Session& PADInstance)
+	void Publish(Session& PADInstance, DeviceErrorDelegate& errorHandler)
 	{
         HRESULT hr = S_OK;
         IMMDeviceEnumerator *pEnumerator = NULL;

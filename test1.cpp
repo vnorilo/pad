@@ -3,11 +3,11 @@
 
 int main()
 {
-	using namespace PAD;
-	Session myAudioSession;
+	PAD::Session myAudioSession;
 
 	for(auto& dev : myAudioSession)
 	{
-		std::cout << "[" << dev.GetHostAPI() << "] " << dev.GetName() << " : " << dev.GetNumOutputs() << "/" << dev.GetNumInputs() << "\n";
+		std::cout << dev << "\n  * Stereo : " << dev.DefaultStereo() 
+						 << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
 	}
 }
