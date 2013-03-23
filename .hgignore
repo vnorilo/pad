@@ -9,3 +9,4 @@ ASIOSDK2
 msvc/PADTest/x64
 ipch
 *.user
+test/minimaltest/build-minimaltest-vs_2012_x86-Release
