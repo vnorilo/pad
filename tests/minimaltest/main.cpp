@@ -35,6 +35,12 @@ unsigned PAD::AudioStreamConfiguration::GetNumOutputs()
 int main()
 {
     cout << "Hello from PAD "<<PAD::VersionString()<<"!"<<endl;
+    PAD::Session myAudioSession;
+    for(auto& dev : myAudioSession)
+    {
+        std::cout << dev << "\n  * Stereo : " << dev.DefaultStereo()
+                  << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
+    }
     return 0;
 }
 
