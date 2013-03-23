@@ -13,6 +13,9 @@
 
 #include "HostAPI.h"
 #include "PAD.h"
+#include "pad_samples.h"
+//#include "pad_samples_sse2.h"
+#include "pad_channels.h"
 
 #include <iostream>
 
@@ -29,15 +32,21 @@ static std::string utostr(unsigned code)
 	return std::string(ptr,buf+32);
 }
 
-#define THROW_ERROR(code,expr) {ASIOError err = (expr); if (err != ASE_OK) throw PAD::SoftError(code,std::string(#expr " failed with ASIO error ") + utostr(err) );}
+#define THROW_ERROR(code,expr) {ASIOError err = (expr); if (err != ASE_OK) throw PAD::SoftError(code,std::string(#expr " failed with ASIO error ") + utostr(err) + driverInfo.errorMessage );}
 #define THROW_FALSE(code,expr) {if (expr == false) throw PAD::SoftError(code,#expr " failed");}
 #define THROW_TRUE(code,expr) {if (expr == true) throw PAD::SoftError(code,#expr " failed");}
 
 namespace {
 	using namespace std;
 	using namespace PAD;
+
+	ASIODriverInfo driverInfo;
 	
-	AsioDrivers drivers;
+	AsioDrivers& GetDrivers()
+	{
+		static AsioDrivers drivers;
+		return drivers;
+	}
 
 	enum AsioState{
 		Idle,
@@ -52,17 +61,20 @@ namespace {
 		switch(State)
 		{
 		case Running:
-			if (to == Running) return;
+			if (to == Running) break;
 			THROW_ERROR(DeviceStopStreamFailure,ASIOStop());
 		case Prepared:
-			if (to == Prepared) return;
+			State = Prepared;
+			if (to == Prepared) break;
 			THROW_ERROR(DeviceCloseStreamFailure,ASIODisposeBuffers());
 		case Initialized:
-			if (to == Initialized) return;
-			THROW_ERROR(DeviceDeinitializationFailure,ASIOExit());
+			State = Initialized;
+			if (to == Initialized) break;
 		case Loaded:
-			if (to == Loaded) return;
-			drivers.removeCurrentDriver();
+			State = Loaded;
+			if (to == Loaded) break;
+			THROW_ERROR(DeviceDeinitializationFailure,ASIOExit());
+			//drivers.removeCurrentDriver();
 		case Idle: break;
 		}
 	}
@@ -107,7 +119,7 @@ namespace {
 
 		~AsioDevice()
 		{
-			AsioUnwind(Idle);
+			AsioUnwind(Initialized);
 		}
 
 		const char *GetName() const { return deviceName.c_str(); }
@@ -123,7 +135,6 @@ namespace {
 			return false;
 		}
 
-		static ASIODriverInfo driverInfo;
 		static AudioStreamConfiguration currentConfiguration;
 		static AudioCallbackDelegate* currentDelegate;
 		static vector<ASIOBufferInfo> bufferInfos;
@@ -131,7 +142,7 @@ namespace {
 		static vector<float> delegateBufferInput, delegateBufferOutput;
 		static unsigned callbackBufferFrames, streamNumInputs, streamNumOutputs;
 
-		static void BufferSwitch(long doubleBufferIndex, ASIOBool directProcess)
+		static cdecl void BufferSwitch(long doubleBufferIndex, ASIOBool directProcess)
 		{
 			ASIOTime tmp;
 			BufferSwitchTimeInfo(&tmp,doubleBufferIndex,directProcess);
@@ -173,8 +184,8 @@ namespace {
 			if (State < Loaded)
 			{
 				std::vector<char> space(64);
-				THROW_ERROR(DeviceDriverFailure,drivers.asioGetDriverName(index,space.data(),space.size()));
-				THROW_TRUE(DeviceDriverFailure,drivers.loadDriver(space.data()));
+				THROW_ERROR(DeviceDriverFailure,GetDrivers().asioGetDriverName(index,space.data(),space.size()));
+				THROW_FALSE(DeviceDriverFailure,GetDrivers().loadDriver(space.data()));
 				State = Loaded;
 			}
 		}
@@ -184,15 +195,19 @@ namespace {
 			if (State < Initialized)
 			{
 				THROW_ERROR(DeviceInitializationFailure,ASIOInit(&driverInfo));
+				State = Initialized;
 			}
 		}
+
+		ASIOCallbacks asioCb;
 
 		void Prepare()
 		{
 			if (State < Prepared)
 			{
 				long minBuf, maxBuf, prefBuf, bufGran;
-				ASIOCallbacks asioCb = {BufferSwitch,SampleRateDidChange,AsioMessage,BufferSwitchTimeInfo};
+				ASIOCallbacks tmp = {BufferSwitch,SampleRateDidChange,AsioMessage,BufferSwitchTimeInfo};
+				asioCb = tmp;
 				THROW_ERROR(DeviceOpenStreamFailure,ASIOGetBufferSize(&minBuf,&maxBuf,&prefBuf,&bufGran));
 				callbackBufferFrames = prefBuf;
 
@@ -232,6 +247,7 @@ namespace {
 					THROW_ERROR(DeviceOpenStreamFailure,ASIOGetChannelInfo(&channelInfos[i]));
 				}
 
+				State = Prepared;
 			}
 		}
 
@@ -240,13 +256,118 @@ namespace {
 			if (State < Running)
 			{
 				ASIOStart();
+				State = Running;
 			}
 		}
 
-		static ASIOTime* BufferSwitchTimeInfo(ASIOTime* params, long doubleBufferIndex, ASIOBool directProcess)
+
+		static void FormatOutput(ASIOSampleType type, const float* interleaved, void** blocks, unsigned frames, unsigned channels, unsigned stride)
+		{
+			switch(type)
+			{
+			case ASIOSTInt16MSB: 
+				{
+					typedef HostSample<int16_t,float,0x8000,0x7fff,true> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32MSB: 
+				{
+					typedef HostSample<int32_t,float,0x80000000,0x7fffffff,true> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32MSB16: 
+				{
+					typedef HostSample<int32_t,float,-(1<<15),(1<<15)-1,true> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32MSB18: 
+				{
+					typedef HostSample<int32_t,float,-(1<<17),(1<<17)-1,true> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32MSB20: 
+				{
+					typedef HostSample<int32_t,float,-(1<<19),(1<<19)-1,true> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32MSB24: 
+				{
+					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,true> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+/*			case ASIOSTFloat32MSB: 
+				{
+					typedef HostSample<float,float,-1,1,true> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTFloat64MSB: 
+				{
+					typedef HostSample<double,float,-1,1,true> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}*/
+			case ASIOSTInt16LSB: 
+				{
+					typedef HostSample<int16_t,float,0x8000,0x7fff,false> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32LSB: 
+				{
+					typedef HostSample<int32_t,float,0x80000000,0x7fffffff,false> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32LSB16: 
+				{
+					typedef HostSample<int32_t,float,-(1<<15),(1<<15)-1,false> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32LSB18: 
+				{
+					typedef HostSample<int32_t,float,-(1<<17),(1<<17)-1,false> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32LSB20: 
+				{
+					typedef HostSample<int32_t,float,-(1<<19),(1<<19)-1,false> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32LSB24: 
+				{
+					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,false> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+/*			case ASIOSTFloat32LSB: 
+				{
+					typedef HostSample<float,float,-1,1,false> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTFloat64LSB: 
+				{
+					typedef HostSample<double,float,-1,1,false> AsioSmp;
+					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}*/
+			}
+		}
+
+		static cdecl ASIOTime* BufferSwitchTimeInfo(ASIOTime* params, long doubleBufferIndex, ASIOBool directProcess)
 		{
 			/* convert ASIO format to canonical format */
-			void *blockBuffer[4];
+			void *bufferPtr[64];
 			unsigned block(0);
 			ASIOSampleType blockType(-1);
 			unsigned strideInCanonicalBuffer = streamNumInputs;
@@ -260,18 +381,27 @@ namespace {
 			/* convert canonical format to ASIO format */
 			if (streamNumOutputs)
 			{
-				blockType = channelInfos[bufferInfos[0].channelNum].type;
-				for(unsigned i(0);i<streamNumOutputs;++i)
+				unsigned beg(0);
+				blockType = channelInfos[bufferInfos[beg].channelNum].type;
+
+				unsigned idx(1);
+				while(idx<streamNumOutputs)
 				{
-					if (channelInfos[bufferInfos[i].channelNum].type == blockType)
+					if (channelInfos[bufferInfos[idx+streamNumInputs].channelNum].type != blockType || (idx - beg) >= 64)
 					{
-						blockBuffer[block++] = bufferInfos[i].buffers[doubleBufferIndex];
-						if (block == 4)
-						{
+						for(unsigned j(beg);j!=idx;++j) bufferPtr[j] = bufferInfos[j+streamNumInputs].buffers[doubleBufferIndex];
+						FormatOutput(blockType,delegateBufferOutput.data()+beg,bufferPtr,callbackBufferFrames,idx-beg,streamNumOutputs);
 
-						}
+						beg = idx;
+						blockType = channelInfos[bufferInfos[beg].channelNum].type;
 					}
+					idx++;
+				}
 
+				if (beg<streamNumOutputs)
+				{
+					for(unsigned j(beg);j!=streamNumOutputs;++j) bufferPtr[j] = bufferInfos[j+streamNumInputs].buffers[doubleBufferIndex];
+					FormatOutput(blockType, delegateBufferOutput.data()+beg,bufferPtr,callbackBufferFrames,streamNumOutputs-beg,streamNumOutputs);
 				}
 			}
 			
@@ -280,7 +410,7 @@ namespace {
 
 		virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration& conf, AudioCallbackDelegate& cb, bool startSuspended = false)
 		{
-			if (drivers.getCurrentDriverIndex() != index)
+			if (GetDrivers().getCurrentDriverIndex() != index)
 			{
 				AsioUnwind(Idle);
 			}
@@ -330,25 +460,25 @@ namespace {
 		void Publish(Session& PADInstance, DeviceErrorDelegate& handler)
 		{
 			const unsigned MaxNameLength = 64;
-			unsigned numDrivers = drivers.asioGetNumDev();
+			unsigned numDrivers = GetDrivers().asioGetNumDev();
 
             for(unsigned i(0);i<numDrivers;++i)
 			{
 				try
 				{
 					char buffer[MaxNameLength];
-					drivers.asioGetDriverName(i,buffer,MaxNameLength);
+					GetDrivers().asioGetDriverName(i,buffer,MaxNameLength);
 					long numInputs = 0;
 					long numOutputs = 0;
 
-					drivers.loadDriver(buffer);
+					GetDrivers().loadDriver(buffer);
 					ASIODriverInfo driverInfo;
 					ASIOSampleRate currentSampleRate;
 					THROW_ERROR(DeviceInitializationFailure,ASIOInit(&driverInfo));
 					THROW_ERROR(DeviceInitializationFailure,ASIOGetChannels(&numInputs,&numOutputs));
 					THROW_ERROR(DeviceInitializationFailure,ASIOGetSampleRate(&currentSampleRate));
 
-					drivers.removeCurrentDriver();
+					GetDrivers().removeCurrentDriver();
 					RegisterDevice(PADInstance,AsioDevice(i,currentSampleRate,buffer,numInputs,numOutputs));
 				}
 				catch(SoftError s)
@@ -365,7 +495,6 @@ namespace {
 
 	AudioCallbackDelegate* AsioDevice::currentDelegate = NULL;
 	AudioStreamConfiguration AsioDevice::currentConfiguration;
-	ASIODriverInfo AsioDevice::driverInfo;
 	vector<ASIOBufferInfo> AsioDevice::bufferInfos;
 	vector<ASIOChannelInfo> AsioDevice::channelInfos;
 	vector<float> AsioDevice::delegateBufferInput, AsioDevice::delegateBufferOutput;
