@@ -4,6 +4,11 @@
 #error SSE2 and big endian probably shouldn't coexist in a build :)
 #endif
 
+#define PAD_SAMPLES_SSE2
+#ifdef PAD_SAMPLES_AVX
+#error Include sse2 header before avx
+#endif
+
 namespace PAD{
 	namespace Converter{
 		template <> struct SampleVector<int32_t,4>{
