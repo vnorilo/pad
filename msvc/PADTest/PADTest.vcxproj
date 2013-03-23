@@ -134,7 +134,10 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>../../</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../../;../../ASIOSDK2/common;../../ASIOSDK2/host/pc;../../ASIOSDK2/host;</AdditionalIncludeDirectories>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Fast</FloatingPointModel>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -154,7 +157,9 @@
     <ClCompile Include="..\..\HostAPI.cpp" />
     <ClCompile Include="..\..\PAD.cpp" />
     <ClCompile Include="..\..\pad_asio.cpp" />
-    <ClCompile Include="..\..\test1.cpp" />
+    <ClCompile Include="..\..\test1.cpp">
+      <AssemblerOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">AssemblyAndSourceCode</AssemblerOutput>
+    </ClCompile>
     <ClCompile Include="..\..\pad_wasapi.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
@@ -166,6 +171,8 @@
     <ClInclude Include="..\..\ASIOSDK2\host\pc\asiolist.h" />
     <ClInclude Include="..\..\HostAPI.h" />
     <ClInclude Include="..\..\PAD.h" />
+    <ClInclude Include="..\..\pad_samples.h" />
+    <ClInclude Include="..\..\pad_samples_sse2.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
