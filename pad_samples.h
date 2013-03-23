@@ -144,8 +144,9 @@ namespace PAD{
 		};
 
 		template <typename E, int N> struct Bytes<SampleVector<E,N>> {
-			static SampleVector<E,N> Swap(SampleVector<E,N> x)
+			static SampleVector<E,N> Swap(const SampleVector<E,N>& _x)
 			{
+				SampleVector<E,N> x;
 				for(unsigned i(0);i<N;++i) x[i] = Bytes<E>::Swap(x[i]);
 				return x;
 			}
@@ -157,7 +158,7 @@ namespace PAD{
 			HOST_FORMAT data;
 			HostSample(){}
 
-			HostSample(HOST_FORMAT constructFrom):data(constructFrom)
+			HostSample(const HOST_FORMAT& constructFrom):data(constructFrom)
 			{
 				if (BIGENDIAN != SYSTEM_BIGENDIAN)
 				{
@@ -165,12 +166,12 @@ namespace PAD{
 				}
 			}
 
-			HostSample(CANONICAL_FORMAT convertFrom)
+			HostSample(const CANONICAL_FORMAT& convertFrom)
 			{
 				*this = convertFrom;
 			}
 
-			HostSample& operator=(CANONICAL_FORMAT convertFrom)
+			HostSample& operator=(const CANONICAL_FORMAT& convertFrom)
 			{
 				/* float -> int */
 				SampleToHost<HOST_FORMAT,CANONICAL_FORMAT>::RoundAndClip(
@@ -212,6 +213,7 @@ namespace PAD{
 				return tmp;
 			}
 		};
+
 		template <int N, typename SMP>
 		static void Transpose(SampleVector<SMP,N> *v)
 		{
@@ -220,223 +222,4 @@ namespace PAD{
 					swap(v[i][j],v[j][i]);
 		}
 	}
-
-	using namespace Converter;
-
-	template <typename SAMPLE> class ChannelConverter{
-		static void DeInterleave4(const float *interleavedBuffer, SAMPLE **blockBuffers, unsigned frames, unsigned stride)
-		{
-			unsigned i(0);
-			SAMPLE::smp_t *bb1((SAMPLE::smp_t*)blockBuffers[0]);
-			SAMPLE::smp_t *bb2((SAMPLE::smp_t*)blockBuffers[1]);
-			SAMPLE::smp_t *bb3((SAMPLE::smp_t*)blockBuffers[2]);
-			SAMPLE::smp_t *bb4((SAMPLE::smp_t*)blockBuffers[3]);
-			for(;i+4<=frames;i+=4)
-			{
-				SampleVector<float,4> mtx[4] = {
-					interleavedBuffer + i * stride,
-					interleavedBuffer + (i+1) * stride,
-					interleavedBuffer + (i+2) * stride,
-					interleavedBuffer + (i+3) * stride
-				};
-
-				Transpose(mtx);
-
-				auto out1(SAMPLE::ConstructVector<4>());
-				auto out2(SAMPLE::ConstructVector<4>());
-				auto out3(SAMPLE::ConstructVector<4>());
-				auto out4(SAMPLE::ConstructVector<4>());
-
-				out1 = mtx[0];
-				out2 = mtx[1];
-				out3 = mtx[2];
-				out4 = mtx[3];
-
-				out1.data.Write(bb1 + i);
-				out2.data.Write(bb2 + i);
-				out3.data.Write(bb3 + i);
-				out4.data.Write(bb4 + i);			
-			}
-
-			if (i < frames)
-			{
-				/* loop remainder */
-				SAMPLE *offset1[2] = {blockBuffers[0] + i, blockBuffers[1] + i};
-				DeInterleave2(interleavedBuffer + i * stride,offset1,frames-i,stride);
-				SAMPLE *offset2[2] = {blockBuffers[2] + i, blockBuffers[3] + i};
-				DeInterleave2(interleavedBuffer + i * stride + 2,offset2,frames-i,stride);
-			}
-		}
-
-		static void DeInterleave2(const float *interleavedBuffer, SAMPLE **blockBuffers, unsigned frames, unsigned stride)
-		{
-			unsigned i(0);
-			SAMPLE::smp_t *bb1((SAMPLE::smp_t*)blockBuffers[0]);
-			SAMPLE::smp_t *bb2((SAMPLE::smp_t*)blockBuffers[1]);
-
-			for(;i+2<=frames;i+=2)
-			{
-
-				SampleVector<float,2> mtx[2] = {
-					interleavedBuffer + i * stride,
-					interleavedBuffer + (i+1) * stride,
-				};
-
-				Transpose(mtx);
-
-				auto out1(SAMPLE::ConstructVector<2>());
-				auto out2(SAMPLE::ConstructVector<2>());
-
-				out1 = mtx[0];
-				out2 = mtx[1];
-
-				out1.data.Write(bb1 + i);
-				out2.data.Write(bb2 + i);
-			}
-
-			if (i < frames)
-			{
-				/* loop remainder */
-				DeInterleave1(interleavedBuffer + i * stride, blockBuffers[0]+i, frames - i, stride);
-				DeInterleave1(interleavedBuffer + i * stride + 1, blockBuffers[1]+i, frames - i, stride);
-			}
-		}
-
-		static void DeInterleave1(const float *interleavedBuffer,SAMPLE* blockBuffer,unsigned frames, unsigned stride)
-		{
-			/* interleave 1 channel from bundle into destination */
-			for(unsigned i(0);i<frames;++i)
-			{
-				blockBuffer[i] = interleavedBuffer[i*stride];
-			}
-		}
-
-		static void Interleave4(float *interleavedBuffer, const SAMPLE **blockBuffers, unsigned frames, unsigned stride)
-		{
-			unsigned i(0);
-			const SAMPLE* const bb1(blockBuffers[0]);
-			const SAMPLE* const bb2(blockBuffers[1]);
-			const SAMPLE* const bb3(blockBuffers[2]);
-			const SAMPLE* const bb4(blockBuffers[3]);
-			for(;i+4<=frames;i+=4)
-			{
-				SampleVector<float,4> mtx[4] = {
-					SAMPLE::LoadVector<4>(bb1 + i),
-					SAMPLE::LoadVector<4>(bb2 + i),
-					SAMPLE::LoadVector<4>(bb3 + i),
-					SAMPLE::LoadVector<4>(bb4 + i),
-				};
-
-				Transpose(mtx);
-
-				mtx[0].Write(interleavedBuffer + i * stride);
-				mtx[1].Write(interleavedBuffer + (i+1) * stride);
-				mtx[2].Write(interleavedBuffer + (i+2) * stride);
-				mtx[3].Write(interleavedBuffer + (i+3) * stride);
-			}
-
-			if (i < frames)
-			{
-				/* loop remainder */
-				unsigned rem = frames - i;
-				const SAMPLE *offset1[2] = {bb1 + i, bb2 + i};
-				Interleave2(interleavedBuffer + i * stride,offset1,rem,stride);
-				const SAMPLE *offset2[2] = {bb3 + i, bb4 + i};
-				Interleave2(interleavedBuffer + i * stride + 2,offset2,rem,stride);
-			}
-		}
-
-		static void Interleave2(float *interleavedBuffer, const SAMPLE **blockBuffers, unsigned frames, unsigned stride)
-		{
-			unsigned i(0);
-			const SAMPLE* const bb1(blockBuffers[0]);
-			const SAMPLE* const bb2(blockBuffers[1]);
-			for(;i+2<=frames;i+=2)
-			{
-				SampleVector<float,2> mtx[2] = {
-					SAMPLE::LoadVector<2>(bb1 + i),
-					SAMPLE::LoadVector<2>(bb2 + i),
-				};
-
-				Transpose(mtx);
-
-				mtx[0].Write(interleavedBuffer + i * stride);
-				mtx[1].Write(interleavedBuffer + (i+1) * stride);
-			}
-
-			if (i < frames)
-			{
-				Interleave1(interleavedBuffer + i * stride, bb1+i, frames - i, stride);
-				Interleave1(interleavedBuffer + i * stride + 1, bb2+i, frames - i, stride);
-			}
-		}
-
-		static void Interleave1(float *interleavedBuffer, const SAMPLE* blockBuffer, unsigned frames, unsigned stride)
-		{
-			/* interleave 1 channel from bundle into destination */
-			for(unsigned i(0);i<frames;++i)
-			{
-				interleavedBuffer[i*stride] = blockBuffer[i];
-			}
-		}
-
-		public:
-		static void DeInterleaveFallback(const float *interleavedBuffer, SAMPLE **blockBuffers, unsigned frames, unsigned channels, unsigned stride)
-		{
-			for(unsigned k(0);k<channels;++k)
-				for(unsigned i(0);i<frames;++i)
-					blockBuffers[k][i]=interleavedBuffer[i*stride+k];
-		}
-
-		static void InterleaveFallback(float *interleavedBuffer, const SAMPLE **blockBuffers, unsigned frames, unsigned channels, unsigned stride)
-		{
-			for(unsigned k(0);k<channels;++k)
-				for(unsigned i(0);i<frames;++i)
-					interleavedBuffer[i*stride+k]=blockBuffers[k][i];
-		}
-
-		static void DeInterleaveVectored(const float *interleavedBuffer, SAMPLE **blockBuffers, unsigned frames, unsigned channels, unsigned stride)
-		{
-			if (channels == 0) return;
-			else if (channels >= 4)
-			{
-				/* interleave 4 channels from bundle into destination */
-				DeInterleave4(interleavedBuffer,blockBuffers,frames,stride);
-				DeInterleaveVectored(interleavedBuffer + 4, blockBuffers + 4, frames, channels - 4, stride);
-			}
-			else if (channels >= 2)
-			{
-				/* interleave 2 channels from bundle into destination */
-				DeInterleave2(interleavedBuffer,blockBuffers,frames,stride);
-				DeInterleaveVectored(interleavedBuffer + 2, blockBuffers + 2, frames, channels - 2, stride);
-			}
-			else
-			{
-				DeInterleave1(interleavedBuffer,blockBuffers[0],frames,stride);
-			}
-		}
-
-		static void InterleaveVectored(float *interleavedBuffer, const SAMPLE **blockBuffers, unsigned frames, unsigned channels, unsigned stride)
-		{
-			if (channels == 0) return;
-			else if (channels >= 4)
-			{
-				/* interleave 4 channels from bundle into destination */
-				Interleave4(interleavedBuffer,blockBuffers,frames,stride);
-				InterleaveVectored(interleavedBuffer + 4, blockBuffers + 4, frames, channels - 4, stride);
-			}
-			else if (channels >= 2)
-			{
-				/* interleave 2 channels from bundle into destination */
-				Interleave2(interleavedBuffer,blockBuffers,frames,stride);
-				InterleaveVectored(interleavedBuffer + 2, blockBuffers + 2, frames, channels - 2, stride);
-			}
-			else
-			{
-				Interleave1(interleavedBuffer,blockBuffers[0],frames,stride);
-			}
-		}
-
-
-	};
 }

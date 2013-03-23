@@ -2,7 +2,9 @@
 #include <iomanip>
 #include "PAD.h"
 #include "pad_samples.h"
-#include "pad_samples_sse2.h"
+//#include "pad_samples_sse2.h"
+#include "pad_samples_avx.h"
+#include "pad_channels.h"
 
 #include <numeric>
 

@@ -100,6 +100,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>../../;../../ASIOSDK2/common;../../ASIOSDK2/host/pc;../../ASIOSDK2/host;</AdditionalIncludeDirectories>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -136,7 +137,7 @@
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>../../;../../ASIOSDK2/common;../../ASIOSDK2/host/pc;../../ASIOSDK2/host;</AdditionalIncludeDirectories>
       <BufferSecurityCheck>false</BufferSecurityCheck>
-      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
       <FloatingPointModel>Fast</FloatingPointModel>
     </ClCompile>
     <Link>
@@ -171,7 +172,9 @@
     <ClInclude Include="..\..\ASIOSDK2\host\pc\asiolist.h" />
     <ClInclude Include="..\..\HostAPI.h" />
     <ClInclude Include="..\..\PAD.h" />
+    <ClInclude Include="..\..\pad_channels.h" />
     <ClInclude Include="..\..\pad_samples.h" />
+    <ClInclude Include="..\..\pad_samples_avx.h" />
     <ClInclude Include="..\..\pad_samples_sse2.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
