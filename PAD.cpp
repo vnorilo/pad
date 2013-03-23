@@ -123,7 +123,7 @@ namespace PAD {
 
 std::ostream& operator<<(std::ostream& stream, const PAD::AudioDevice& dev)
 {
-	stream << "[" << dev.GetHostAPI() << "] " << dev.GetName() << " [" << dev.GetNumInputs() << "x"<<dev.GetNumInputs()<<"]";
+	stream << "[" << dev.GetHostAPI() << "] " << dev.GetName() << " [" << dev.GetNumInputs() << "x"<<dev.GetNumOutputs()<<"]";
 	return stream;
 }
 

@@ -1,5 +1,6 @@
 #include <string>
 #include <list>
+#include <regex>
 
 #include "HostAPI.h"
 #include "PAD.h"
@@ -41,6 +42,16 @@ namespace PAD{
 		{
 			while(AvailablePublishers().size()) InitializeApi(AvailablePublishers().front(),*del);
 		}
+	}
+
+	AudioDevice *Session::operator()(const char *match)
+	{
+		regex filter(match,regex::icase);
+		for(auto i(begin());i!=end();++i)
+		{
+			if (regex_search((*i).GetName(),filter)) return &(*i);
+		}
+		return NULL;
 	}
 
 	Session::~Session()
