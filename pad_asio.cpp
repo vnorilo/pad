@@ -9,6 +9,7 @@
 #include <set>
 #include <list>
 #include <algorithm>
+#include <unordered_map>
 
 #include "HostAPI.h"
 #include "PAD.h"
@@ -126,16 +127,14 @@ namespace {
 		static AudioStreamConfiguration currentConfiguration;
 		static AudioCallbackDelegate* currentDelegate;
 		static vector<ASIOBufferInfo> bufferInfos;
+		static vector<ASIOChannelInfo> channelInfos;
+		static vector<float> delegateBufferInput, delegateBufferOutput;
+		static unsigned callbackBufferFrames, streamNumInputs, streamNumOutputs;
 
 		static void BufferSwitch(long doubleBufferIndex, ASIOBool directProcess)
 		{
 			ASIOTime tmp;
 			BufferSwitchTimeInfo(&tmp,doubleBufferIndex,directProcess);
-		}
-
-		static ASIOTime* BufferSwitchTimeInfo(ASIOTime* params, long doubleBufferIndex, ASIOBool directProcess)
-		{
-			return params;
 		}
 
 		static void SampleRateDidChange(ASIOSampleRate sRate)
@@ -174,7 +173,7 @@ namespace {
 			if (State < Loaded)
 			{
 				std::vector<char> space(64);
-				THROW_TRUE(DeviceDriverFailure,drivers.asioGetDriverName(index,space.data(),space.size()));
+				THROW_ERROR(DeviceDriverFailure,drivers.asioGetDriverName(index,space.data(),space.size()));
 				THROW_TRUE(DeviceDriverFailure,drivers.loadDriver(space.data()));
 				State = Loaded;
 			}
@@ -195,7 +194,7 @@ namespace {
 				long minBuf, maxBuf, prefBuf, bufGran;
 				ASIOCallbacks asioCb = {BufferSwitch,SampleRateDidChange,AsioMessage,BufferSwitchTimeInfo};
 				THROW_ERROR(DeviceOpenStreamFailure,ASIOGetBufferSize(&minBuf,&maxBuf,&prefBuf,&bufGran));
-//				THROW_ERROR(DeviceOpenStreamFailure,ASIOCreateBuffers(&bufferInfo,currentConfiguration.GetNumDeviceOutputs(),prefBuf,&asioCb));
+				callbackBufferFrames = prefBuf;
 
 				bufferInfos.clear();
 				for(unsigned i(0);i<GetNumInputs();++i)
@@ -207,12 +206,30 @@ namespace {
 					}
 				}
 
+				streamNumInputs = bufferInfos.size();
+				delegateBufferInput.resize(callbackBufferFrames * streamNumInputs);
+
 				for(unsigned i(0);i<GetNumOutputs();++i)
 				{
 					if (currentConfiguration.IsOutputEnabled(i))
 					{
-						ASIOBufferInfo buf = {ASIOFalse,i,{0,0}};
+						ASIOBufferInfo buf = {ASIOFalse,i,{0,0}};						
+						bufferInfos.push_back(buf);
 					}
+				}
+
+				streamNumOutputs = bufferInfos.size() - streamNumInputs;
+				delegateBufferOutput.resize(callbackBufferFrames * streamNumOutputs);
+
+				THROW_ERROR(DeviceOpenStreamFailure,ASIOCreateBuffers(bufferInfos.data(),bufferInfos.size(),callbackBufferFrames,&asioCb));
+
+				channelInfos.clear();
+				channelInfos.resize(bufferInfos.size());
+				for(unsigned i(0);i<bufferInfos.size();++i)
+				{
+					channelInfos[i].channel = bufferInfos[i].channelNum;
+					channelInfos[i].isInput = bufferInfos[i].isInput;
+					THROW_ERROR(DeviceOpenStreamFailure,ASIOGetChannelInfo(&channelInfos[i]));
 				}
 
 			}
@@ -226,6 +243,40 @@ namespace {
 			}
 		}
 
+		static ASIOTime* BufferSwitchTimeInfo(ASIOTime* params, long doubleBufferIndex, ASIOBool directProcess)
+		{
+			/* convert ASIO format to canonical format */
+			void *blockBuffer[4];
+			unsigned block(0);
+			ASIOSampleType blockType(-1);
+			unsigned strideInCanonicalBuffer = streamNumInputs;
+						
+
+			currentDelegate->Process(0ll,currentConfiguration,
+									 delegateBufferInput.data(),
+									 delegateBufferOutput.data(),
+									 callbackBufferFrames);
+
+			/* convert canonical format to ASIO format */
+			if (streamNumOutputs)
+			{
+				blockType = channelInfos[bufferInfos[0].channelNum].type;
+				for(unsigned i(0);i<streamNumOutputs;++i)
+				{
+					if (channelInfos[bufferInfos[i].channelNum].type == blockType)
+					{
+						blockBuffer[block++] = bufferInfos[i].buffers[doubleBufferIndex];
+						if (block == 4)
+						{
+
+						}
+					}
+
+				}
+			}
+			
+			return params;
+		}
 
 		virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration& conf, AudioCallbackDelegate& cb, bool startSuspended = false)
 		{
@@ -316,4 +367,7 @@ namespace {
 	AudioStreamConfiguration AsioDevice::currentConfiguration;
 	ASIODriverInfo AsioDevice::driverInfo;
 	vector<ASIOBufferInfo> AsioDevice::bufferInfos;
+	vector<ASIOChannelInfo> AsioDevice::channelInfos;
+	vector<float> AsioDevice::delegateBufferInput, AsioDevice::delegateBufferOutput;
+	unsigned AsioDevice::callbackBufferFrames, AsioDevice::streamNumInputs, AsioDevice::streamNumOutputs;
 }
