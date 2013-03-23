@@ -90,7 +90,23 @@ namespace PAD{
 		double GetSampleRate() const {return sampleRate;}	
 
 		void SetValid(bool v) {valid = v;}
+
+		struct InputRangeProperty { ChannelRange cr; };
+		struct OutputRangeProperty { ChannelRange cr; };
+		AudioStreamConfiguration operator+(const InputRangeProperty& crp) { AudioStreamConfiguration tmp(*this);tmp.AddDeviceInputs(crp.cr);return tmp; }
+		AudioStreamConfiguration operator+(const OutputRangeProperty& crp) { AudioStreamConfiguration tmp(*this);tmp.AddDeviceOutputs(crp.cr);return tmp; }
+
+		struct SampleRateProperty 
+		{ 
+			double sr; 
+			AudioStreamConfiguration operator+(InputRangeProperty i) { AudioStreamConfiguration cfg(sr);cfg.AddDeviceInputs(i.cr); return cfg; }
+			AudioStreamConfiguration operator+(OutputRangeProperty o) { AudioStreamConfiguration cfg(sr);cfg.AddDeviceOutputs(o.cr); return cfg; }
+		};
 	};
+
+	static AudioStreamConfiguration::SampleRateProperty SampleRate(double rate) {AudioStreamConfiguration::SampleRateProperty tmp = {rate}; return tmp;}
+	static AudioStreamConfiguration::InputRangeProperty Inputs(unsigned begin, unsigned end) {AudioStreamConfiguration::InputRangeProperty tmp = {ChannelRange(begin,end)}; return tmp;}
+	static AudioStreamConfiguration::OutputRangeProperty Outputs(unsigned begin, unsigned end) {AudioStreamConfiguration::OutputRangeProperty tmp = {ChannelRange(begin,end)}; return tmp;}
 
     class AudioCallbackDelegate{
 	public:

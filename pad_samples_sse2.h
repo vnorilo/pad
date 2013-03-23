@@ -62,7 +62,7 @@ namespace PAD{
 		};
 
 		template <> struct SampleToHost<SampleVector<int32_t,4>,SampleVector<float,4>>{
-			static void RoundAndClip(SampleVector<int32_t,4>& dst, SampleVector<float,4> src, SampleVector<float,4> hi, SampleVector<float,4> lo)
+			static void RoundAndClip(SampleVector<int32_t,4>& dst, const SampleVector<float,4> &src, const SampleVector<float,4> &hi, const SampleVector<float,4> &lo)
 			{
 				dst.data = _mm_cvttps_epi32(
 					_mm_max_ps(
@@ -74,7 +74,7 @@ namespace PAD{
 		};
 
 		template <> struct SampleToHost<SampleVector<int16_t,4>,SampleVector<float,4>>{
-			static void RoundAndClip(SampleVector<int16_t,4>& dst, SampleVector<float,4> src, SampleVector<float,4> hi, SampleVector<float,4> lo)
+			static void RoundAndClip(SampleVector<int16_t,4>& dst, const SampleVector<float,4> &src, const SampleVector<float,4> &hi, const SampleVector<float,4> &lo)
 			{
 				/* todo: check rounding mode in outer scope */
 				dst.data = _mm_cvttps_epi32(
