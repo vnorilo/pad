@@ -19,6 +19,51 @@ void copyWavFormat (WAVEFORMATEXTENSIBLE& dest, const WAVEFORMATEX* const src)
                                                                   : sizeof (WAVEFORMATEX));
 }
 
+class MyPropVariant
+{
+public:
+    MyPropVariant()
+    {
+        PropVariantInit(&m_variant);
+    }
+    ~MyPropVariant()
+    {
+        //std::cerr << "MyPropVariant dtor\n";
+        PropVariantClear(&m_variant);
+    }
+    MyPropVariant(const MyPropVariant& other)
+    {
+        //std::cerr << "MyPropVariant copy ctor\n";
+        PropVariantCopy(&m_variant,&other.m_variant);
+    }
+    /* For completeness these probably should be implemented, but "meh" for now...
+    bool operator==(const MyPropVariant & other) const
+    {
+        //obviously very bogus
+        return true;
+    }
+    bool operator!=(const MyPropVariant & other)
+    {
+        return !(*this==other);
+    }
+    */
+    MyPropVariant & operator= (const MyPropVariant & other)
+    {
+        //std::cerr << "MyPropVariant =\n";
+        if (&this->m_variant!=&other.m_variant)
+        {
+            PropVariantClear(&m_variant);
+            PropVariantCopy(&m_variant,&other.m_variant);
+        }
+        return *this;
+    }
+    PROPVARIANT* operator ()()
+    {
+        return &m_variant;
+    }
+private:
+    PROPVARIANT m_variant;
+};
 
 namespace
 {
@@ -116,7 +161,7 @@ struct WasapiPublisher : public HostAPIPublisher
             cerr << "pad : wasapi : could not enumerate audio endpoints\n";
             return;
         }
-        UINT  count;
+        UINT count;
         hr = collection->GetCount(&count);
         if (hr<0)
         {
@@ -126,33 +171,30 @@ struct WasapiPublisher : public HostAPIPublisher
         if (count == 0)
         {
             cerr << "pad : wasapi : No endpoints found\n";
-        } else cerr << count << " WASAPI endpoints found\n";
+        } //else cerr << count << " WASAPI endpoints found\n";
         for (unsigned i=0; i < count; i++)
         {
             hr = collection->Item(i, endpoint.resetAndGetPointerAddress());
             if (hr<0)
-                return;
+                continue;
             // Get the endpoint ID string.
             hr = endpoint->GetId(&pwszID);
             if (hr<0)
-                return;
+                continue;
             hr = endpoint->OpenPropertyStore(STGM_READ, props.resetAndGetPointerAddress());
             if (hr<0)
-                return;
-            PROPVARIANT endPointName;
-            PROPVARIANT adapterName;
-            PropVariantInit(&endPointName);
-            PropVariantInit(&adapterName);
-            hr = props->GetValue(PKEY_Device_FriendlyName, &endPointName);
+                continue;
+            MyPropVariant endPointName;
+            MyPropVariant adapterName;
+            hr = props->GetValue(PKEY_Device_FriendlyName, endPointName());
             if (hr<0)
-                return;
-            hr = props->GetValue(PKEY_DeviceInterface_FriendlyName, &adapterName);
+                continue;
+            hr = props->GetValue(PKEY_DeviceInterface_FriendlyName, adapterName());
             if (hr<0)
             {
-                cerr << "could not get adapter name for "<<i<<"\n";
-
-            } else
-                wcerr << "adapter name of device " << i << " is " << adapterName.pwszVal << "\n";
+                cerr << "pad : wasapi : could not get adapter name for "<<i<<"\n";
+                continue;
+            }
             unsigned numInputs=0; unsigned numOutputs=0;
             PadComSmartPointer<IAudioClient> tempClient;
             hr = endpoint->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)tempClient.resetAndGetPointerAddress());
@@ -166,18 +208,17 @@ struct WasapiPublisher : public HostAPIPublisher
             if (hr<0)
             {
                 cerr << "could not get mix format\n";
-                return;
+                continue;
             }
             WAVEFORMATEXTENSIBLE format;
             copyWavFormat (format, mixFormat);
-            //cerr << "paska " << format.Format.nChannels << " " << mixFormat->nChannels << "\n";
             CoTaskMemFree (mixFormat);
             numOutputs = format.Format.nChannels;
-            int sizeNeeded=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,endPointName.pwszVal,-1,0,0,NULL,NULL);
+            int sizeNeeded=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,endPointName()->pwszVal,-1,0,0,NULL,NULL);
             if (sizeNeeded>0)
             {
                 std::vector<char> buf(sizeNeeded,0);
-                int size=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,endPointName.pwszVal,-1,buf.data(),sizeNeeded,NULL,NULL);
+                int size=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,endPointName()->pwszVal,-1,buf.data(),sizeNeeded,NULL,NULL);
                 if (size>0)
                 {
                     //cerr << "wasapi name conversion needed "<<sizeNeeded<<" bytes"<<", used "<<size<<" bytes "<<buf<<"\n";
@@ -190,7 +231,6 @@ struct WasapiPublisher : public HostAPIPublisher
             } else cerr << "wasapi device name too broken, will not use this device\n";
             CoTaskMemFree(pwszID);
             pwszID = NULL;
-            PropVariantClear(&endPointName);
         }
     }
 } publisher;
