@@ -14,7 +14,7 @@
 #include "HostAPI.h"
 #include "PAD.h"
 #include "pad_samples.h"
-//#include "pad_samples_sse2.h"
+#include "pad_samples_sse2.h"
 #include "pad_channels.h"
 
 #include <iostream>
@@ -73,7 +73,7 @@ namespace {
 		case Loaded:
 			State = Loaded;
 			if (to == Loaded) break;
-			THROW_ERROR(DeviceDeinitializationFailure,ASIOExit());
+//			THROW_ERROR(DeviceDeinitializationFailure,ASIOExit());
 			//drivers.removeCurrentDriver();
 		case Idle: break;
 		}
@@ -267,37 +267,37 @@ namespace {
 			{
 			case ASIOSTInt16MSB: 
 				{
-					typedef HostSample<int16_t,float,0x8000,0x7fff,true> AsioSmp;
+					typedef HostSample<int16_t,float,-(1<<15),(1<<15)-1,0,true> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIOSTInt32MSB: 
 				{
-					typedef HostSample<int32_t,float,0x80000000,0x7fffffff,true> AsioSmp;
+					typedef HostSample<int32_t,float,-(1<<24),(1<<23)-1,8,true> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIOSTInt32MSB16: 
 				{
-					typedef HostSample<int32_t,float,-(1<<15),(1<<15)-1,true> AsioSmp;
+					typedef HostSample<int32_t,float,-(1<<15),(1<<15)-1,0,true> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIOSTInt32MSB18: 
 				{
-					typedef HostSample<int32_t,float,-(1<<17),(1<<17)-1,true> AsioSmp;
+					typedef HostSample<int32_t,float,-(1<<17),(1<<17)-1,0,true> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIOSTInt32MSB20: 
 				{
-					typedef HostSample<int32_t,float,-(1<<19),(1<<19)-1,true> AsioSmp;
+					typedef HostSample<int32_t,float,-(1<<19),(1<<19)-1,0,true> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIOSTInt32MSB24: 
 				{
-					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,true> AsioSmp;
+					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,0,true> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
@@ -315,37 +315,37 @@ namespace {
 				}*/
 			case ASIOSTInt16LSB: 
 				{
-					typedef HostSample<int16_t,float,0x8000,0x7fff,false> AsioSmp;
+					typedef HostSample<int16_t,float,-(1<<16),(1<<16)-1,0,false> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIOSTInt32LSB: 
 				{
-					typedef HostSample<int32_t,float,0x80000000,0x7fffffff,false> AsioSmp;
+					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,8,false> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIOSTInt32LSB16: 
 				{
-					typedef HostSample<int32_t,float,-(1<<15),(1<<15)-1,false> AsioSmp;
+					typedef HostSample<int32_t,float,-(1<<15),(1<<15)-1,0,false> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIOSTInt32LSB18: 
 				{
-					typedef HostSample<int32_t,float,-(1<<17),(1<<17)-1,false> AsioSmp;
+					typedef HostSample<int32_t,float,-(1<<17),(1<<17)-1,0,false> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIOSTInt32LSB20: 
 				{
-					typedef HostSample<int32_t,float,-(1<<19),(1<<19)-1,false> AsioSmp;
+					typedef HostSample<int32_t,float,-(1<<19),(1<<19)-1,0,false> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIOSTInt32LSB24: 
 				{
-					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,false> AsioSmp;
+					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,0,false> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
@@ -478,7 +478,7 @@ namespace {
 					THROW_ERROR(DeviceInitializationFailure,ASIOGetChannels(&numInputs,&numOutputs));
 					THROW_ERROR(DeviceInitializationFailure,ASIOGetSampleRate(&currentSampleRate));
 
-					GetDrivers().removeCurrentDriver();
+//					GetDrivers().removeCurrentDriver();
 					RegisterDevice(PADInstance,AsioDevice(i,currentSampleRate,buffer,numInputs,numOutputs));
 				}
 				catch(SoftError s)
@@ -492,6 +492,11 @@ namespace {
 			}
 		}
 	} publisher;
+
+	void Cleanup()
+	{
+		ASIOExit();
+	}
 
 	AudioCallbackDelegate* AsioDevice::currentDelegate = NULL;
 	AudioStreamConfiguration AsioDevice::currentConfiguration;

@@ -177,6 +177,7 @@ namespace PAD{
 
 		AudioDeviceIterator begin();
 		AudioDeviceIterator end();
+		AudioDevice* operator()(const char *match);
 
 		void Register(AudioDevice*);
 
