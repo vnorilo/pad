@@ -3,7 +3,7 @@
 
 using namespace std;
 using namespace PAD;
-
+/*
 class TrollersonDelegate : public PAD::AudioCallbackDelegate
 {
 public:
@@ -31,16 +31,10 @@ unsigned PAD::AudioStreamConfiguration::GetNumOutputs()
 {
     return 1;
 }
-
+*/
 int main()
 {
-    cout << "Hello from PAD "<<PAD::versionString()<<"!"<<endl;
-    //PAD::AudioStreamConfiguration conf;
-    //TrollersonDelegate delegate(conf);
-    for(auto& dev : PAD::AudioDevice::Enumerate())
-    {
-        std::cout << "[" << dev->GetHostAPI() << "] " << dev->GetName() << " : " << dev->GetNumOutputs() << "/" << dev->GetNumInputs() << "\n";
-    }
+    cout << "Hello from PAD "<<PAD::VersionString()<<"!"<<endl;
     return 0;
 }
 
