@@ -91,6 +91,11 @@ namespace PAD{
 				for(unsigned i(0);i<N;++i) b[i]*=data[i];
 				return b;
 			}
+
+			SampleVector<S,N> operator<<(int amt) const
+			{
+				return *this * SampleVector<S,N>(1 << amt);
+			}
 		};
 
 		/* generic clip & round */
@@ -152,8 +157,8 @@ namespace PAD{
 			}
 		};
 
-		template <typename HOST_FORMAT, typename CANONICAL_FORMAT, int NOMINAL_MINUS, int NOMINAL_PLUS, bool BIGENDIAN> struct HostSample {
-			typedef HostSample<HOST_FORMAT,CANONICAL_FORMAT,NOMINAL_MINUS,NOMINAL_PLUS,BIGENDIAN> _myt;
+		template <typename HOST_FORMAT, typename CANONICAL_FORMAT, int NOMINAL_MINUS, int NOMINAL_PLUS, int SHIFT_LEFT, bool BIGENDIAN> struct HostSample {
+			typedef HostSample<HOST_FORMAT,CANONICAL_FORMAT,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN> _myt;
 			typedef HOST_FORMAT smp_t;
 			HOST_FORMAT data;
 			HostSample(){}
@@ -177,6 +182,11 @@ namespace PAD{
 				SampleToHost<HOST_FORMAT,CANONICAL_FORMAT>::RoundAndClip(
 					data, convertFrom * CANONICAL_FORMAT(-NOMINAL_MINUS), CANONICAL_FORMAT(NOMINAL_PLUS), CANONICAL_FORMAT(NOMINAL_MINUS));
 
+				if (SHIFT_LEFT)
+				{
+					data = data << SHIFT_LEFT;
+				}
+
 				if (BIGENDIAN != SYSTEM_BIGENDIAN)
 				{
 					data = Bytes<HOST_FORMAT>::Swap(data);
@@ -197,15 +207,15 @@ namespace PAD{
 			}
 
 			template <int N> static
-				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,BIGENDIAN> ConstructVector()
+				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN> ConstructVector()
 			{
-				return HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,BIGENDIAN>();
+				return HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN>();
 			}
 
 			template <int N> static
-				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,BIGENDIAN> LoadVector(const _myt* ptr)
+				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN> LoadVector(const _myt* ptr)
 			{
-				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,BIGENDIAN> tmp;
+				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN> tmp;
 				const void *ptr1 = &ptr->data;
 				const void *ptr2 = ptr;
 				assert((const void*)&ptr->data == (const void*)ptr);

@@ -20,24 +20,26 @@ namespace PAD{
 			void Write(int32_t* mem) {_mm_store_si128((__m128i*)mem,data);}
 			int32_t& operator[](unsigned i) {return data.m128i_i32[i];}
 			int32_t operator[](unsigned i) const {return data.m128i_i32[i];}
+			SampleVector<int32_t,4> operator<<(int32_t amt) {return _mm_shl_epi32(data,SampleVector<int32_t,4>(amt).data);}
 		};
 
 		template <> struct SampleVector<int16_t,4>{
-			__m64 data;
+			__m128i data;
 			SampleVector(){}
-			SampleVector(__m64 d):data(d){}
-			SampleVector(const int16_t* mem) {data = _mm_set_pi16(mem[3],mem[2],mem[1],mem[0]);}
-			SampleVector(int16_t b) {data = _mm_set_pi16(b,b,b,b);}
-			void Write(int16_t *mem) {memcpy(mem,&data,sizeof(__m64));}
-			int16_t& operator[](unsigned i) {return data.m64_i16[i];}
-			int16_t operator[](unsigned i) const {return data.m64_i16[i];}
+			SampleVector(__m128i d):data(d){}
+			SampleVector(const int16_t* mem) {_mm_loadl_epi64((const __m128i*)mem);}
+			SampleVector(int16_t b) {data = _mm_set_epi16(0,0,0,0,b,b,b,b);}
+			void Write(int16_t *mem) {_mm_storel_epi64((__m128i*)mem,data);}
+			int16_t& operator[](unsigned i) {return data.m128i_i16[i];}
+			int16_t operator[](unsigned i) const {return data.m128i_i16[i];}
+			SampleVector<int16_t,4> operator<<(int16_t amt) {return _mm_shl_epi16(data,SampleVector<int16_t,4>(amt).data);}
 		};
 
 		template <> struct SampleVector<float,4>{
 			SampleVector(){}
 			SampleVector(__m128 d):data(d){}
 			SampleVector(const SampleVector<int32_t,4>& d):data(_mm_cvtepi32_ps(d.data)){}
-			SampleVector(const SampleVector<int16_t,4>& d):data(_mm_cvtpi16_ps(d.data)){}
+			SampleVector(const SampleVector<int16_t,4>& d):data(_mm_set_ps(d[3],d[2],d[1],d[0])) {}
 			__m128 data;
 			SampleVector(float b) {data = _mm_set_ps(b,b,b,b);}
 			SampleVector(const float* mem):data(_mm_load_ps(mem)){}
@@ -52,7 +54,7 @@ namespace PAD{
 			SampleVector<float,4> operator/(const SampleVector<float,4>& b) const { return _mm_div_ps(data,b.data); }
 
 			operator SampleVector<int32_t,4>() { return _mm_cvtps_epi32(data); }
-			operator SampleVector<int16_t,4>() { return _mm_cvtps_pi16(data); }
+			operator SampleVector<int16_t,4>() { return _mm_cvtps_epi32(data); }
 
 			float& operator[](unsigned i) {return data.m128_f32[i];}
 			float operator[](unsigned i) const {return data.m128_f32[i];}
@@ -75,8 +77,8 @@ namespace PAD{
 			static void RoundAndClip(SampleVector<int16_t,4>& dst, SampleVector<float,4> src, SampleVector<float,4> hi, SampleVector<float,4> lo)
 			{
 				/* todo: check rounding mode in outer scope */
-				dst.data = _mm_cvtps_pi16(
-					_mm_max_ps(_mm_min_ps(src.data,hi.data),
+				dst.data = _mm_cvttps_epi32(
+					_mm_max_ps(_mm_min_ps(_mm_add_ps(src.data,_mm_set_ps(0.5f,0.5f,0.5f,0.5f)),hi.data),
 					lo.data));
 			}
 		};
