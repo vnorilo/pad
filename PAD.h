@@ -1,51 +1,17 @@
 #pragma once
 #include <vector>
 #include <cstdint>
-#include <stdexcept>
 #include <iosfwd>
+
+#include "PADErrors.h"
 
 namespace PAD{
     const char* VersionString();
 
-	enum ErrorCode {
-		NoError,
-		InternalError,
-		ChannelRangeInvalid,
-		ChannelRangeOverlap,
-		UnknownApiIdentifier,
-		DeviceStartStreamFailure,
-		DeviceOpenStreamFailure,
-		DeviceInitializationFailure,
-		DeviceDriverFailure,
-		DeviceDeinitializationFailure,
-		DeviceCloseStreamFailure,
-		DeviceStopStreamFailure
-	};
-
-	class Error : public std::runtime_error {
-		ErrorCode code;
-	protected:
-		Error(ErrorCode c,const std::string& message):code(c),runtime_error(message.c_str()) {}
-	public:
-		ErrorCode GetCode() const {return code;}
-	};
-
-	/**
-	* throw only SoftError and HardError 
-	***/
-	class SoftError : public Error {
-	public:
-		SoftError(ErrorCode c, const std::string& message):Error(c,message){}
-	};
-
-	class HardError : public Error {
-	public:
-		HardError(ErrorCode c, const std::string& message):Error(c,message){}
-	};
-
 	class ChannelRange{
 		unsigned b, e;
 	public:
+		
 		ChannelRange(unsigned b = 0, unsigned e = -1):b(b),e(e) {if(e<=b) throw SoftError(ChannelRangeInvalid,"Invalid channel range");}
 		unsigned begin() const {return b;}
 		unsigned end() const {return e;}
@@ -57,16 +23,23 @@ namespace PAD{
 		Channel(unsigned c):ChannelRange(c,c+1){}
 	};
 
+	class AudioCallbackDelegate;
 	class AudioStreamConfiguration {
 		friend class AudioDevice;
 		double sampleRate;
+		AudioCallbackDelegate* audioDelegate;
 		std::vector<ChannelRange> inputRanges;
 		std::vector<ChannelRange> outputRanges;
+		unsigned numStreamIns;
+		unsigned numStreamOuts;
 		unsigned bufferSize;
+		bool startSuspended;
 		bool valid;
 	public:
 		AudioStreamConfiguration(double sampleRate = 44100.0, bool valid = true);
 		void SetSampleRate(double sampleRate) {this->sampleRate = sampleRate;}	
+
+		void SetValid(bool v) {valid = v;}
 
 		void AddDeviceInputs(ChannelRange);
 		void AddDeviceOutputs(ChannelRange);
@@ -76,51 +49,57 @@ namespace PAD{
 
 		void SetPreferredBufferSize(unsigned frames) {bufferSize = frames;}
 
+		void SetAudioDelegate(AudioCallbackDelegate& d) {audioDelegate = &d;}
+
+		void SetSuspendOnStartup(bool suspend) {startSuspended = suspend;}
+
 		bool IsInputEnabled(unsigned index) const;
 		bool IsOutputEnabled(unsigned index) const;
+	
 		bool IsValid() const {return valid;}
 
 		unsigned GetNumDeviceInputs() const;
 		unsigned GetNumDeviceOutputs() const;
 
-		unsigned GetNumStreamInputs() const;
-		unsigned GetNumStreamOutputs() const;
+		unsigned GetNumStreamInputs() const {return numStreamIns;}
+		unsigned GetNumStreamOutputs() const {return numStreamOuts;}
 
 		unsigned GetBufferSize() const {return bufferSize;}
 		double GetSampleRate() const {return sampleRate;}	
 
-		void SetValid(bool v) {valid = v;}
+		bool HasAudioDelegate() const {return audioDelegate != NULL; }
+		AudioCallbackDelegate& GetAudioDelegate() const {return *audioDelegate;}
 
-		struct InputRangeProperty { ChannelRange cr; };
-		struct OutputRangeProperty { ChannelRange cr; };
-		AudioStreamConfiguration operator+(const InputRangeProperty& crp) { AudioStreamConfiguration tmp(*this);tmp.AddDeviceInputs(crp.cr);return tmp; }
-		AudioStreamConfiguration operator+(const OutputRangeProperty& crp) { AudioStreamConfiguration tmp(*this);tmp.AddDeviceOutputs(crp.cr);return tmp; }
+		bool HasSuspendOnStartup() const {return startSuspended;}
 
-		struct SampleRateProperty 
-		{ 
-			double sr; 
-			AudioStreamConfiguration operator+(InputRangeProperty i) { AudioStreamConfiguration cfg(sr);cfg.AddDeviceInputs(i.cr); return cfg; }
-			AudioStreamConfiguration operator+(OutputRangeProperty o) { AudioStreamConfiguration cfg(sr);cfg.AddDeviceOutputs(o.cr); return cfg; }
-		};
+		void SetDeviceChannelLimits(unsigned maximumDeviceInputChannel, unsigned maximumDeviceOutputChannel);
+
+		/* Monad constructors for named parameter idion */
+		AudioStreamConfiguration Input(unsigned ch) const;
+		AudioStreamConfiguration Output(unsigned ch) const;
+		AudioStreamConfiguration Inputs(ChannelRange) const;
+		AudioStreamConfiguration Outputs(ChannelRange) const;
+		AudioStreamConfiguration StereoInput(unsigned index) const;
+		AudioStreamConfiguration StereoOutput(unsigned index) const;
+		AudioStreamConfiguration Delegate(AudioCallbackDelegate& del) const;
+		AudioStreamConfiguration SampleRate(double rate) const;
 	};
 
-	static AudioStreamConfiguration::SampleRateProperty SampleRate(double rate) {AudioStreamConfiguration::SampleRateProperty tmp = {rate}; return tmp;}
-	static AudioStreamConfiguration::InputRangeProperty Inputs(unsigned begin, unsigned end) {AudioStreamConfiguration::InputRangeProperty tmp = {ChannelRange(begin,end)}; return tmp;}
-	static AudioStreamConfiguration::OutputRangeProperty Outputs(unsigned begin, unsigned end) {AudioStreamConfiguration::OutputRangeProperty tmp = {ChannelRange(begin,end)}; return tmp;}
+	static AudioStreamConfiguration Stream() {return AudioStreamConfiguration();}
 
     class AudioCallbackDelegate{
 	public:
 		/**
 		 * Process is the audio callback. Expect it to be called from a realtime thread
 		 */
-        virtual void Process(uint64_t timestamp, const AudioStreamConfiguration&, const float* input, float *output, unsigned int frames) = 0;
+		virtual void Process(uint64_t timestamp, const AudioStreamConfiguration&, const float* input, float *output, unsigned int frames) = 0;
 
 		/**
 		 * Utility setup calls that are called from the thread that controls the AudioDevice 
 		 */
-		virtual void AboutToBeginStream(const AudioStreamConfiguration&, AudioDevice*) {}
-		virtual void AboutToEndStream(AudioDevice*) {}
-		virtual void StreamDidEnd(AudioDevice*) {}
+		virtual void AboutToBeginStream(const AudioStreamConfiguration&, AudioDevice&) {}
+		virtual void AboutToEndStream(AudioDevice&) {}
+		virtual void StreamDidEnd(AudioDevice&) {}
 	};
 
 	template <typename FUNCTOR> class AudioClosure : public AudioCallbackDelegate{
@@ -149,14 +128,12 @@ namespace PAD{
 		virtual AudioStreamConfiguration DefaultStereo() const = 0;
 		virtual AudioStreamConfiguration DefaultAllChannels() const = 0;
 
-		virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration&, AudioCallbackDelegate&, bool startSuspended = false) = 0;
-
+		virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration&) = 0;
 
 		virtual void Resume() = 0;
 		virtual void Suspend() = 0;
 
 		virtual void Close() = 0;
-
 	};
 
 	class HostAPIPublisher;
@@ -169,6 +146,7 @@ namespace PAD{
 		bool operator==(const AudioDeviceIterator& rhs) const {return ptr==rhs.ptr;}
 		bool operator!=(const AudioDeviceIterator& rhs) const {return !(*this==rhs);}
 		AudioDevice& operator*() {return **ptr;}
+		AudioDevice* operator->() {return *ptr;}
 		AudioDeviceIterator& operator++() {ptr++;return *this;}
 		AudioDeviceIterator operator++(int) {auto tmp(*this);ptr++;return tmp;}
 	};
@@ -193,7 +171,8 @@ namespace PAD{
 
 		AudioDeviceIterator begin();
 		AudioDeviceIterator end();
-		AudioDevice* operator()(const char *match);
+		AudioDeviceIterator FindDevice(const char *deviceNameRegexFilter);
+		AudioDeviceIterator FindDevice(const char *hostApiRegexFilter, const char *deviceNameRegexFilter);
 
 		void Register(AudioDevice*);
 

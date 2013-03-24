@@ -15,9 +15,12 @@ namespace PAD{
 			__m128i data;
 			SampleVector(){}
 			SampleVector(__m128i d):data(d){}
-			SampleVector(const int32_t* mem):data(_mm_load_si128((__m128i*)(mem))){}
+//			SampleVector(const int32_t* mem):data(_mm_load_si128((__m128i*)(mem))){}
 			SampleVector(int32_t b) {data = _mm_set_epi32(b,b,b,b);}
-			void Write(int32_t* mem) {_mm_store_si128((__m128i*)mem,data);}
+
+			template <bool ALIGNED> void Write(int32_t* mem) {if (ALIGNED) _mm_store_si128((__m128i*)mem,data); else _mm_storeu_si128((__m128i*)mem,data);}
+			template <bool ALIGNED> void Load(const int32_t* mem) { data = ALIGNED?_mm_load_si128((__m128i*)mem):_mm_loadu_si128((__m128i*)mem);}
+
 			int32_t& operator[](unsigned i) {return data.m128i_i32[i];}
 			int32_t operator[](unsigned i) const {return data.m128i_i32[i];}
 			SampleVector<int32_t,4> operator<<(int32_t amt) {return _mm_shl_epi32(data,SampleVector<int32_t,4>(amt).data);}
@@ -27,9 +30,11 @@ namespace PAD{
 			__m128i data;
 			SampleVector(){}
 			SampleVector(__m128i d):data(d){}
-			SampleVector(const int16_t* mem) {_mm_loadl_epi64((const __m128i*)mem);}
 			SampleVector(int16_t b) {data = _mm_set_epi16(0,0,0,0,b,b,b,b);}
-			void Write(int16_t *mem) {_mm_storel_epi64((__m128i*)mem,data);}
+
+			template <bool ALIGNED> void Write(int16_t* mem) {_mm_storel_epi64((__m128i*)mem,data);}
+			template <bool ALIGNED> void Load(const int16_t* mem) { data = _mm_loadl_epi64((const __m128i*)mem);}
+
 			int16_t& operator[](unsigned i) {return data.m128i_i16[i];}
 			int16_t operator[](unsigned i) const {return data.m128i_i16[i];}
 			SampleVector<int16_t,4> operator<<(int16_t amt) {return _mm_shl_epi16(data,SampleVector<int16_t,4>(amt).data);}
@@ -42,7 +47,7 @@ namespace PAD{
 			SampleVector(const SampleVector<int16_t,4>& d):data(_mm_set_ps(d[3],d[2],d[1],d[0])) {}
 			__m128 data;
 			SampleVector(float b) {data = _mm_set_ps(b,b,b,b);}
-			SampleVector(const float* mem):data(_mm_load_ps(mem)){}
+//			SampleVector(const float* mem):data(_mm_load_ps(mem)){}
 			template <typename CVT> operator SampleVector<CVT,4>()
 			{
 				SampleVector<CVT,4> tmp;
@@ -58,7 +63,8 @@ namespace PAD{
 
 			float& operator[](unsigned i) {return data.m128_f32[i];}
 			float operator[](unsigned i) const {return data.m128_f32[i];}
-			void Write(float* mem) {_mm_store_ps(mem,data);}
+			template <bool ALIGNED> void Write(float* mem) {if (ALIGNED) _mm_store_ps(mem,data); else _mm_storeu_ps(mem,data);}
+			template <bool ALIGNED> void Load(const float* mem) { data = ALIGNED?_mm_load_ps(mem):_mm_loadu_ps(mem);}
 		};
 
 		template <> struct SampleToHost<SampleVector<int32_t,4>,SampleVector<float,4>>{
