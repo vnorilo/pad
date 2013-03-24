@@ -83,6 +83,25 @@ private:
     unsigned index;
 };
 
+EDataFlow getAudioDirection (const PadComSmartPointer<IMMDevice>& device)
+{
+    EDataFlow flowDirection = eRender;
+    PadComSmartPointer <IMMEndpoint> endPoint;
+    HRESULT hr=device.QueryInterface(endPoint);
+    if (hr<0)
+    {
+        cerr << "pad : wasapi : failure getting endpoint audio flow direction interface\n";
+        return flowDirection;
+    }
+    hr=endPoint->GetDataFlow(&flowDirection);
+    if (hr<0)
+    {
+        cerr << "pad : wasapi : failure getting endpoint audio flow direction\n";
+    }
+    return flowDirection;
+}
+
+
 struct WasapiPublisher : public HostAPIPublisher
 {
     list<WasapiDevice> devices;
@@ -149,6 +168,15 @@ struct WasapiPublisher : public HostAPIPublisher
                 cerr << "pad : wasapi : could not get adapter name for "<<i<<"\n";
                 continue;
             }
+            EDataFlow audioDirection=getAudioDirection(endpoint);
+            if (audioDirection==eCapture)
+            {
+                wcerr << "device " << endPointName()->pwszVal << " is an input\n";
+            } else if (audioDirection==eRender)
+            {
+                wcerr << "device " << endPointName()->pwszVal << " is an output\n";
+            } else
+                wcerr << "device " << endPointName()->pwszVal << " is a hilavitkutin\n";
             unsigned numInputs=0; unsigned numOutputs=0;
             PadComSmartPointer<IAudioClient> tempClient;
             hr = endpoint->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)tempClient.resetAndGetPointerAddress());
