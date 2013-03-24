@@ -74,7 +74,8 @@ namespace PAD{
 		template <typename S, int N> struct SampleVector{
 			S data[N];
 			SampleVector(){}
-			SampleVector(const S* memory) {for(unsigned i(0);i<N;++i) data[i]=memory[i];}
+
+//			SampleVector(const S* memory) {for(unsigned i(0);i<N;++i) data[i]=memory[i];}
 			SampleVector(S broadcast) {for(unsigned i(0);i<N;++i) data[i]=broadcast;}
 
 			template <typename FMT> SampleVector(const SampleVector<FMT,N>& src)
@@ -84,7 +85,9 @@ namespace PAD{
 
 			S& operator[](unsigned i) {return data[i];}
 			S operator[](unsigned i) const {return data[i];}
-			void Write(S* dest) {memcpy(dest,data,sizeof(S)*N);}
+	
+			template <bool ALIGNED> void Write(S* dest) {memcpy(dest,data,sizeof(S)*N);}
+			template <bool ALIGNED> void Load(const S* from) {memcpy(data,from,sizeof(S)*N);}
 
 			SampleVector<S,N> operator*(SampleVector<S,N> b) const
 			{
@@ -203,7 +206,7 @@ namespace PAD{
 					Bytes<HOST_FORMAT>::Swap(tmp);
 				}
 
-				return CANONICAL_FORMAT(tmp) * CANONICAL_FORMAT(-1.0/(double)NOMINAL_MINUS);
+				return CANONICAL_FORMAT(tmp) * CANONICAL_FORMAT(-1.0/(double)(NOMINAL_MINUS * double(1<<SHIFT_LEFT)));
 			}
 
 			template <int N> static
@@ -212,14 +215,14 @@ namespace PAD{
 				return HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN>();
 			}
 
-			template <int N> static
+			template <int N, bool ALIGNED> static
 				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN> LoadVector(const _myt* ptr)
 			{
 				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN> tmp;
 				const void *ptr1 = &ptr->data;
 				const void *ptr2 = ptr;
 				assert((const void*)&ptr->data == (const void*)ptr);
-				tmp.data = &ptr->data;
+				tmp.data.Load<ALIGNED>(&ptr->data);
 				return tmp;
 			}
 		};
