@@ -37,32 +37,57 @@ int main()
 {
     cout << "Hello from PAD "<<PAD::VersionString()<<"!"<<endl;
     using namespace PAD;
-    Session myAudioSession;
+
+    class ErrorLogger : public DeviceErrorDelegate {
+    public:
+        void Catch(SoftError e) {std::cerr << "*Soft "<<e.GetCode()<<"* :" << e.what() << "\n";}
+        void Catch(HardError e) {std::cerr << "*Hard "<<e.GetCode()<<"* :" << e.what() << "\n";}
+    };
+
+    Session myAudioSession(true,&ErrorLogger());
+
+
     for(auto& dev : myAudioSession)
     {
         std::cout << dev << "\n  * Stereo : " << dev.DefaultStereo()
                   << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
     }
     return 0;
-    /*
-    auto rme(myAudioSession("ASIO Fireface"));
-    if (rme)
+    auto asioDevice = myAudioSession.FindDevice("E-MU asio");
+
+    if (asioDevice != myAudioSession.end())
     {
         double phase = 0;
-        auto audioProcess = Closure(([&](uint64_t time, const PAD::AudioStreamConfiguration&, const float *input, float *output, unsigned frames)
+        auto myAudioProcess = Closure(([&](uint64_t time, const PAD::AudioStreamConfiguration& cfg, const float *input, float *output, unsigned frames)
         {
-                                        for(unsigned i(0);i<frames;++i)
-                                        {
-                                            output[i] = sin(phase);
-                                            phase = phase + 0.01 * M_PI;
-                                        }
-                                    }));
+                                          static int cnt=0;
+                                          //if (cnt<100)
+                                          //{
+                                          cerr << "callback "<<phase<<"\n";
+                                              //cnt++;
+                                          //}
+                                          unsigned numOuts(cfg.GetNumStreamOutputs());
+                                          unsigned numIns(cfg.GetNumStreamInputs());
+                                          for(unsigned i(0);i<frames;++i)
+                                          {
+                                              for(unsigned j(0);j<numOuts;++j)
+                                              {
+                                                  output[i*numOuts+j] = (float)sin(phase * (1.0 + double(j)/numOuts));
+                                                  //if (j<numIns) output[i*numOuts+j] = input[i*numIns+j];
+                                                  phase = phase + 0.01 * M_PI;
+                                              }
+                                          }
+                                      }));
 
-        rme->Open(SampleRate(44100) + Outputs(0,4),audioProcess);
+        std::cout << "Actual stream parameters: " <<
+                     asioDevice->Open(Stream().SampleRate(44100)
+                                      .StereoInput(0).StereoOutput(0)
+                                      .Delegate(myAudioProcess)) << "\n";
+        std::cout << "device name is " << asioDevice->GetName() << "\n";
         getchar();
-        rme->Close();
+        asioDevice->Close();
     }
-    */
+
     return 0;
 }
 

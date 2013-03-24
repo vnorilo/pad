@@ -30,8 +30,8 @@ class WasapiDevice : public AudioDevice
 	AudioStreamConfiguration DefaultStereo() const { return defaultStereo; }
 	AudioStreamConfiguration DefaultAllChannels() const { return defaultAll; }
 public:
-    WasapiDevice(unsigned i,double defaultRate,const string& name, unsigned inputs, unsigned outputs):
-        deviceName(name),numInputs(inputs),numOutputs(outputs),index(i)
+    WasapiDevice(unsigned i,double defaultRate,const string& name, unsigned inputs, unsigned outputs, int indIn,int indOut):
+        deviceName(name),numInputs(inputs),numOutputs(outputs),index(i), indexOfInput(indIn), indexOfOutput(indOut)
     {
         if (numOutputs >= 1)
         {
@@ -81,6 +81,8 @@ private:
     unsigned numInputs;
     unsigned numOutputs;
     unsigned index;
+    int indexOfInput;
+    int indexOfOutput;
 };
 
 EDataFlow getAudioDirection (const PadComSmartPointer<IMMDevice>& device)
@@ -170,11 +172,11 @@ struct WasapiPublisher : public HostAPIPublisher
             std::string name=iter->first;
             std::vector<int> indexes=iter->second;
             //cerr << "adapter " << name << " has end points\n";
-            unsigned numInputs=0; unsigned numOutputs=0;
+            unsigned numInputs=0; unsigned numOutputs=0; int inputIndex=-1; int outputIndex=-1;
             for (unsigned i=0;i<indexes.size();i++)
             {
                 //cerr << "\t" << indexes.at(i) << "\n";
-                hr = collection->Item(i, endpoint.resetAndGetPointerAddress());
+                hr = collection->Item(indexes.at(i), endpoint.resetAndGetPointerAddress());
                 if (hr<0)
                     continue;
                 hr = endpoint->OpenPropertyStore(STGM_READ, props.resetAndGetPointerAddress());
@@ -203,15 +205,21 @@ struct WasapiPublisher : public HostAPIPublisher
                 CopyWavFormat (format, mixFormat);
                 CoTaskMemFree (mixFormat);
                 if (audioDirection==eRender)
+                {
                     numOutputs = format.Format.nChannels;
+                    outputIndex=indexes.at(i);
+                }
                 else if (audioDirection==eCapture)
+                {
                     numInputs= format.Format.nChannels;
+                    inputIndex=indexes.at(i);
+                }
                 //std::string endPointNameString=WideCharToStdString(endPointName()->pwszVal);
 
             }
             if (numInputs>0 || numOutputs>0)
             {
-                RegisterDevice(PADInstance,WasapiDevice(wasapiDeviceCount,44100.0,name,numInputs,numOutputs));
+                RegisterDevice(PADInstance,WasapiDevice(wasapiDeviceCount,44100.0,name,numInputs,numOutputs,inputIndex,outputIndex));
             }
             wasapiDeviceCount++;
         }
