@@ -552,7 +552,7 @@ namespace {
 				AsioUnwind(Initialized);
 			}
 
-			ASIOSetSampleRate(conf.GetSampleRate());
+            ASIOSetSampleRate(conf.GetSampleRate());
 
 			/* canonicalize passed format */
 			currentDelegate = &conf.GetAudioDelegate();
