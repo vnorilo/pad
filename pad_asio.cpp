@@ -364,6 +364,109 @@ namespace {
 			}
 		}
 
+		static void FormatInput(ASIOSampleType type, float* interleaved, const void** blocks, unsigned frames, unsigned channels, unsigned stride)
+		{
+			switch(type)
+			{
+			case ASIOSTInt16MSB: 
+				{
+					typedef HostSample<int16_t,float,-(1<<15),(1<<15)-1,0,true> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32MSB: 
+				{
+					typedef HostSample<int32_t,float,-(1<<24),(1<<23)-1,8,true> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32MSB16: 
+				{
+					typedef HostSample<int32_t,float,-(1<<15),(1<<15)-1,0,true> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32MSB18: 
+				{
+					typedef HostSample<int32_t,float,-(1<<17),(1<<17)-1,0,true> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32MSB20: 
+				{
+					typedef HostSample<int32_t,float,-(1<<19),(1<<19)-1,0,true> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32MSB24: 
+				{
+					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,0,true> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+/*			case ASIOSTFloat32MSB: 
+				{
+					typedef HostSample<float,float,-1,1,true> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTFloat64MSB: 
+				{
+					typedef HostSample<double,float,-1,1,true> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}*/
+			case ASIOSTInt16LSB: 
+				{
+					typedef HostSample<int16_t,float,-(1<<16),(1<<16)-1,0,false> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32LSB: 
+				{
+					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,8,false> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32LSB16: 
+				{
+					typedef HostSample<int32_t,float,-(1<<15),(1<<15)-1,0,false> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32LSB18: 
+				{
+					typedef HostSample<int32_t,float,-(1<<17),(1<<17)-1,0,false> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32LSB20: 
+				{
+					typedef HostSample<int32_t,float,-(1<<19),(1<<19)-1,0,false> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTInt32LSB24: 
+				{
+					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,0,false> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+/*			case ASIOSTFloat32LSB: 
+				{
+					typedef HostSample<float,float,-1,1,false> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}
+			case ASIOSTFloat64LSB: 
+				{
+					typedef HostSample<double,float,-1,1,false> AsioSmp;
+					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break;
+				}*/
+			}
+		}
+
 		static cdecl ASIOTime* BufferSwitchTimeInfo(ASIOTime* params, long doubleBufferIndex, ASIOBool directProcess)
 		{
 			/* convert ASIO format to canonical format */
@@ -373,6 +476,34 @@ namespace {
 			unsigned strideInCanonicalBuffer = streamNumInputs;
 						
 
+			/* convert ASIO format to canonical format */
+			if (streamNumInputs)
+			{
+				unsigned beg(0);
+				blockType = channelInfos[beg].type;
+
+				unsigned idx(1);
+				while(idx<streamNumInputs)
+				{
+					assert(bufferInfos[idx].isInput == true && channelInfos[idx].isInput == true);
+					if (channelInfos[idx].type != blockType || (idx - beg) >= 64)
+					{
+						for(unsigned j(beg);j!=idx;++j) bufferPtr[j-beg] = bufferInfos[j].buffers[doubleBufferIndex];
+						FormatInput(blockType,delegateBufferInput.data()+beg,(const void**)bufferPtr,callbackBufferFrames,idx-beg,streamNumInputs);
+
+						beg = idx;
+						blockType = channelInfos[beg].type;
+					}
+					idx++;
+				}
+
+				if (beg<streamNumInputs)
+				{
+					for(unsigned j(beg);j!=streamNumInputs;++j) bufferPtr[j-beg] = bufferInfos[j].buffers[doubleBufferIndex];
+					FormatInput(blockType, delegateBufferInput.data()+beg,(const void**)bufferPtr,callbackBufferFrames,streamNumInputs-beg,streamNumInputs);
+				}
+			}
+
 			currentDelegate->Process(0ll,currentConfiguration,
 									 delegateBufferInput.data(),
 									 delegateBufferOutput.data(),
@@ -381,34 +512,36 @@ namespace {
 			/* convert canonical format to ASIO format */
 			if (streamNumOutputs)
 			{
-				unsigned beg(0);
-				blockType = channelInfos[bufferInfos[beg].channelNum].type;
+				unsigned streamNumChannels = streamNumInputs + streamNumOutputs;
+				unsigned beg(streamNumInputs);
+				blockType = channelInfos[beg].type;
 
-				unsigned idx(1);
-				while(idx<streamNumOutputs)
+				unsigned idx(beg+1);
+				while(idx<streamNumChannels)
 				{
-					if (channelInfos[bufferInfos[idx+streamNumInputs].channelNum].type != blockType || (idx - beg) >= 64)
+					assert(bufferInfos[idx].isInput == false);
+					if (channelInfos[idx].type != blockType || (idx - beg) >= 64)
 					{
-						for(unsigned j(beg);j!=idx;++j) bufferPtr[j] = bufferInfos[j+streamNumInputs].buffers[doubleBufferIndex];
-						FormatOutput(blockType,delegateBufferOutput.data()+beg,bufferPtr,callbackBufferFrames,idx-beg,streamNumOutputs);
+						for(unsigned j(beg);j!=idx;++j) bufferPtr[j-beg] = bufferInfos[j].buffers[doubleBufferIndex];
+						FormatOutput(blockType,delegateBufferOutput.data()+beg-streamNumInputs,bufferPtr,callbackBufferFrames,idx-beg,streamNumOutputs);
 
 						beg = idx;
-						blockType = channelInfos[bufferInfos[beg].channelNum].type;
+						blockType = channelInfos[beg].type;
 					}
 					idx++;
 				}
 
-				if (beg<streamNumOutputs)
+				if (beg<streamNumChannels)
 				{
-					for(unsigned j(beg);j!=streamNumOutputs;++j) bufferPtr[j] = bufferInfos[j+streamNumInputs].buffers[doubleBufferIndex];
-					FormatOutput(blockType, delegateBufferOutput.data()+beg,bufferPtr,callbackBufferFrames,streamNumOutputs-beg,streamNumOutputs);
+					for(unsigned j(beg);j!=streamNumChannels;++j) bufferPtr[j-beg] = bufferInfos[j].buffers[doubleBufferIndex];
+					FormatOutput(blockType, delegateBufferOutput.data()+beg-streamNumInputs,bufferPtr,callbackBufferFrames,streamNumChannels-beg,streamNumOutputs);
 				}
 			}
 			
 			return params;
 		}
 
-		virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration& conf, AudioCallbackDelegate& cb, bool startSuspended = false)
+		virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration& conf)
 		{
 			if (GetDrivers().getCurrentDriverIndex() != index)
 			{
@@ -419,14 +552,23 @@ namespace {
 				AsioUnwind(Initialized);
 			}
 
-			currentDelegate = &cb;
+			ASIOSetSampleRate(conf.GetSampleRate());
+
+			/* canonicalize passed format */
+			currentDelegate = &conf.GetAudioDelegate();
 			currentConfiguration = conf;
+			ASIOSampleRate sr;
+			THROW_ERROR(DeviceOpenStreamFailure,ASIOGetSampleRate(&sr));
+			currentConfiguration.SetSampleRate(sr);
+			currentConfiguration.SetDeviceChannelLimits(GetNumInputs(),GetNumOutputs());
 
 			Load();
 			Init();
 			Prepare();
 
-			if (startSuspended == false) Run();
+			currentConfiguration.SetPreferredBufferSize(callbackBufferFrames);
+
+			if (conf.HasSuspendOnStartup() == false) Run();
 			return currentConfiguration;
 		}
 

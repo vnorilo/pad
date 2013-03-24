@@ -7,7 +7,8 @@ namespace PAD {
 	using namespace std;
 	const char* VersionString() { return "0.0.0"; }
 
-	AudioStreamConfiguration::AudioStreamConfiguration(double samplerate, bool valid):sampleRate(samplerate),valid(valid)
+	AudioStreamConfiguration::AudioStreamConfiguration(double samplerate, bool valid)
+		:sampleRate(samplerate),valid(valid),startSuspended(false),numStreamIns(0),numStreamOuts(0),audioDelegate(NULL)
 	{
 	}
 
@@ -69,21 +70,11 @@ namespace PAD {
 		unsigned count(0);
 
 		RangeFindResult r;
-		while((r = IsChannelInRangeSet(idx,ranges)) != Above)
+		while((r = IsChannelInRangeSet(idx++,ranges)) != Above)
 		{
 			if (r == In) count++;
 		}
 		return count;
-	}
-
-	unsigned AudioStreamConfiguration::GetNumStreamInputs() const
-	{
-		return GetNumChannels(inputRanges);
-	}
-
-	unsigned AudioStreamConfiguration::GetNumStreamOutputs() const
-	{
-		return GetNumChannels(outputRanges);
 	}
 
 	unsigned AudioStreamConfiguration::GetNumDeviceInputs() const
@@ -113,13 +104,71 @@ namespace PAD {
 	void AudioStreamConfiguration::AddDeviceInputs(ChannelRange channels)
 	{
 		AddChannels(channels,inputRanges);
+		numStreamIns = GetNumChannels(inputRanges);
 	}
 
 	void AudioStreamConfiguration::AddDeviceOutputs(ChannelRange channels)
 	{
 		AddChannels(channels,outputRanges);
+		numStreamOuts = GetNumChannels(outputRanges);
+	}
+
+	AudioStreamConfiguration AudioStreamConfiguration::SampleRate(double rate) const
+	{
+		auto tmp(*this);tmp.SetSampleRate(rate);return tmp;
+	}
+
+	AudioStreamConfiguration AudioStreamConfiguration::Input(unsigned ch) const
+	{
+		auto tmp(*this);tmp.AddDeviceInputs(ChannelRange(ch,ch+1));return tmp;
+	}
+
+	AudioStreamConfiguration AudioStreamConfiguration::Output(unsigned ch) const
+	{
+		auto tmp(*this);tmp.AddDeviceOutputs(ChannelRange(ch,ch+1));return tmp;
+	}
+
+	AudioStreamConfiguration AudioStreamConfiguration::StereoInput(unsigned index) const
+	{
+		auto tmp(*this);tmp.AddDeviceInputs(ChannelRange(index*2,index*2+2));return tmp;
+	}
+
+	AudioStreamConfiguration AudioStreamConfiguration::StereoOutput(unsigned index) const
+	{
+		auto tmp(*this);tmp.AddDeviceOutputs(ChannelRange(index*2,index*2+2));return tmp;
+	}
+
+	AudioStreamConfiguration AudioStreamConfiguration::Delegate(AudioCallbackDelegate& d) const
+	{
+		auto tmp(*this);tmp.SetAudioDelegate(d);return tmp;
+	}
+
+	AudioStreamConfiguration AudioStreamConfiguration::Inputs(ChannelRange cr) const
+	{
+		auto tmp(*this);tmp.AddDeviceInputs(cr);return tmp;
+	}
+
+	AudioStreamConfiguration AudioStreamConfiguration::Outputs(ChannelRange cr) const
+	{
+		auto tmp(*this);tmp.AddDeviceOutputs(cr);return tmp;
+	}
+
+	void AudioStreamConfiguration::SetDeviceChannelLimits(unsigned maxIn, unsigned maxOut)
+	{
+		for(auto i(inputRanges.begin());i!=inputRanges.end();)
+		{
+			if (i->begin() >= maxIn) inputRanges.erase(i++);
+			else *i++ = ChannelRange(i->begin(),min(maxIn,i->end()));
+		}
+
+		for(auto i(outputRanges.begin());i!=outputRanges.end();)
+		{
+			if (i->begin() >= maxIn) outputRanges.erase(i++);
+			else *i++ = ChannelRange(i->begin(),min(maxIn,i->end()));
+		}
 	}
 }
+
 
 std::ostream& operator<<(std::ostream& stream, const PAD::AudioDevice& dev)
 {

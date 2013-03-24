@@ -44,14 +44,22 @@ namespace PAD{
 		}
 	}
 
-	AudioDevice *Session::operator()(const char *match)
+	AudioDeviceIterator Session::FindDevice(const char *apiRegex, const char *devRegex)
 	{
-		regex filter(match,regex::icase);
+		regex devFilter(devRegex,regex::icase);
+		regex apiFilter(apiRegex,regex::icase);
 		for(auto i(begin());i!=end();++i)
 		{
-			if (regex_search((*i).GetName(),filter)) return &(*i);
+			if (regex_search((*i).GetHostAPI(),apiFilter) &&
+				regex_search((*i).GetName(),devFilter)) return i;
+
 		}
-		return NULL;
+		return end();
+	}
+
+	AudioDeviceIterator Session::FindDevice(const char *devRegex)
+	{
+		return FindDevice(".*",devRegex);
 	}
 
 	Session::~Session()

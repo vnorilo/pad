@@ -2,13 +2,13 @@ namespace PAD {
 
 	using namespace Converter;
 	template <typename SAMPLE> class ChannelConverter{
-		template <int VEC> static void DeInterleaveBundle(const float *interleavedBuffer, SAMPLE **blockBuffers, unsigned frames, unsigned stride)
+		template <int VEC, bool ALIGN_I, bool ALIGN_B> static void DeInterleaveBundle(const float *interleavedBuffer, SAMPLE **blockBuffers, unsigned frames, unsigned stride)
 		{
 			unsigned i(0);
 			for(;i+VEC<=frames;i+=VEC)
 			{
 				SampleVector<float,VEC> mtx[VEC];
-				for(unsigned j(0);j<VEC;++j) mtx[j] = interleavedBuffer + (i+j) * stride;
+				for(unsigned j(0);j<VEC;++j) mtx[j].Load<ALIGN_I>(interleavedBuffer + (i+j) * stride);
 				
 				Transpose(mtx);
 
@@ -16,7 +16,7 @@ namespace PAD {
 				{
 					auto out(SAMPLE::ConstructVector<VEC>());
 					out = mtx[j];
-					out.data.Write((SAMPLE::smp_t*)blockBuffers[j]+i);
+					out.data.Write<ALIGN_B>((SAMPLE::smp_t*)blockBuffers[j]+i);
 				}
 			}
 
@@ -26,12 +26,12 @@ namespace PAD {
 				SAMPLE *offset[VEC];
 				for(unsigned j(0);j<VEC;++j) offset[j] = blockBuffers[j]+i;
 				
-				DeInterleaveBundle<(VEC+1)/2>(interleavedBuffer + i * stride,offset,frames-i,stride);
-				DeInterleaveBundle<(VEC+1)/2>(interleavedBuffer + i * stride + VEC/2,offset+VEC/2,frames-i,stride);
+				DeInterleaveBundle<(VEC+1)/2,ALIGN_I,ALIGN_B>(interleavedBuffer + i * stride,offset,frames-i,stride);
+				DeInterleaveBundle<(VEC+1)/2,ALIGN_I,ALIGN_B>(interleavedBuffer + i * stride + VEC/2,offset+VEC/2,frames-i,stride);
 			}
 		}
 
-		template <int VEC> static void InterleaveBundle(float *interleavedBuffer, const SAMPLE **blockBuffers, unsigned frames, unsigned stride)
+		template <int VEC, bool ALIGN_I, bool ALIGN_B> static void InterleaveBundle(float *interleavedBuffer, const SAMPLE **blockBuffers, unsigned frames, unsigned stride)
 		{
 			unsigned i(0);
 			const SAMPLE* bb[VEC];//={blockBuffers[0],blockBuffers[1],blockBuffers[2],blockBuffers[3]};
@@ -40,12 +40,12 @@ namespace PAD {
 			{
 				SampleVector<float,VEC> mtx[VEC];
 				for(unsigned j(0);j<VEC;++j) 
-					mtx[j] = SAMPLE::LoadVector<VEC>(bb[j] + i);
+					mtx[j] = SAMPLE::LoadVector<VEC,ALIGN_B>(bb[j] + i);
 
 				Transpose(mtx);
 
 				for(unsigned j(0);j<VEC;++j) 
-					mtx[j].Write(interleavedBuffer + (i+j) * stride);
+					mtx[j].Write<ALIGN_I>(interleavedBuffer + (i+j) * stride);
 			}
 
 			if (i < frames)
@@ -54,8 +54,8 @@ namespace PAD {
 				unsigned rem = frames - i;
 				const SAMPLE *offset[VEC];
 				for(unsigned j(0);j<VEC;++j) offset[j] = bb[j] + i;				
-				InterleaveBundle<(VEC+1)/2>(interleavedBuffer + i * stride,offset,rem,stride);
-				InterleaveBundle<(VEC+1)/2>(interleavedBuffer + i * stride + VEC/2,offset+VEC/2,rem,stride);
+				InterleaveBundle<(VEC+1)/2,ALIGN_I,ALIGN_B>(interleavedBuffer + i * stride,offset,rem,stride);
+				InterleaveBundle<(VEC+1)/2,ALIGN_I,ALIGN_B>(interleavedBuffer + i * stride + VEC/2,offset+VEC/2,rem,stride);
 			}
 		}
 
@@ -73,65 +73,108 @@ namespace PAD {
 					interleavedBuffer[i*stride+k]=blockBuffers[k][i];
 		}
 
+		template <bool AI, bool AB>
 		static void DeInterleaveVectored(const float *interleavedBuffer, SAMPLE **blockBuffers, unsigned frames, unsigned channels, unsigned stride)
 		{
 			if (channels == 0) return;
-			//if (channels >= 8)
-			//{
-			//	DeInterleave<8>(interleavedBuffer,blockBuffers,frames,stride);
-			//	DeInterleaveVectored(interleavedBuffer + 8, blockBuffers + 8, frames, channels - 8, stride);
-			//}
 			else if (channels >= 4)
 			{
 				/* interleave 4 channels from bundle into destination */
-				DeInterleaveBundle<4>(interleavedBuffer,blockBuffers,frames,stride);
-				DeInterleaveVectored(interleavedBuffer + 4, blockBuffers + 4, frames, channels - 4, stride);
+				DeInterleaveBundle<4,AI,AB>(interleavedBuffer,blockBuffers,frames,stride);
+				DeInterleaveVectored<AI,AB>(interleavedBuffer + 4, blockBuffers + 4, frames, channels - 4, stride);
 			}
 			else if (channels >= 2)
 			{
 				/* interleave 2 channels from bundle into destination */
-				DeInterleaveBundle<2>(interleavedBuffer,blockBuffers,frames,stride);
-				DeInterleaveVectored(interleavedBuffer + 2, blockBuffers + 2, frames, channels - 2, stride);
+				DeInterleaveBundle<2,false,false>(interleavedBuffer,blockBuffers,frames,stride);
+				DeInterleaveVectored<AI,AB>(interleavedBuffer + 2, blockBuffers + 2, frames, channels - 2, stride);
 			}
 			else
 			{
-				DeInterleaveBundle<1>(interleavedBuffer,blockBuffers,frames,stride);
+				DeInterleaveBundle<1,false,false>(interleavedBuffer,blockBuffers,frames,stride);
 			}
 		}
 
+		template <bool AI, bool AB>
 		static void InterleaveVectored(float *interleavedBuffer, const SAMPLE **blockBuffers, unsigned frames, unsigned channels, unsigned stride)
 		{
 			if (channels == 0) return;
-			//if (channels >= 8)
-			//{
-			//	Interleave<8>(interleavedBuffer,blockBuffers,frames,stride);
-			//	InterleaveVectored(interleavedBuffer + 8, blockBuffers + 8, frames, channels - 8, stride);
-			//}
 			if (channels >= 4)
 			{
 				/* interleave 4 channels from bundle into destination */
-				InterleaveBundle<4>(interleavedBuffer,blockBuffers,frames,stride);
-				InterleaveVectored(interleavedBuffer + 4, blockBuffers + 4, frames, channels - 4, stride);
+				InterleaveBundle<4,AI,AB>(interleavedBuffer,blockBuffers,frames,stride);
+				InterleaveVectored<AI,AB>(interleavedBuffer + 4, blockBuffers + 4, frames, channels - 4, stride);
 			}
 			else if (channels >= 2)
 			{
 				/* interleave 2 channels from bundle into destination */
-				InterleaveBundle<2>(interleavedBuffer,blockBuffers,frames,stride);
-				InterleaveVectored(interleavedBuffer + 2, blockBuffers + 2, frames, channels - 2, stride);
+				InterleaveBundle<2,false,false>(interleavedBuffer,blockBuffers,frames,stride);
+				InterleaveVectored<AI,AB>(interleavedBuffer + 2, blockBuffers + 2, frames, channels - 2, stride);
 			}
 			else
 			{
-				InterleaveBundle<1>(interleavedBuffer,blockBuffers,frames,stride);
+				InterleaveBundle<1,false,false>(interleavedBuffer,blockBuffers,frames,stride);
 			}
 		}
 	public:
 		static void Interleave(float *interleavedBuffer, const SAMPLE **blockBuffers, unsigned frames, unsigned channels, unsigned stride)
 		{
-			InterleaveVectored(interleavedBuffer,blockBuffers,frames,channels,stride);
+			/* are all block buffers aligned to 16 byte boundaries? */
+			bool ai(true),ab(true);
+			for(unsigned i(0);i<channels;++i)
+			{
+				intptr_t align = intptr_t(blockBuffers[i]);
+				if ((align&15) != 0) 
+				{
+					ab = false;break;
+				}
+			}
+
+			/* is the interleaved buffer and the stride 16-byte aligned? */
+			intptr_t align = intptr_t(interleavedBuffer);
+			ai = (align&15) == 0 && (stride % 4) == 0;
+
+			/* specialize according to alignment properties of interleaved and block buffers */
+			if (ai)
+			{
+				if (ab) InterleaveVectored<true,true>(interleavedBuffer,blockBuffers,frames,channels,stride);
+				else InterleaveVectored<true,false>(interleavedBuffer,blockBuffers,frames,channels,stride);
+			}
+			else
+			{
+				if (ab) InterleaveVectored<false,true>(interleavedBuffer,blockBuffers,frames,channels,stride);
+				else InterleaveVectored<false,false>(interleavedBuffer,blockBuffers,frames,channels,stride);
+			}
 		}
 		static void DeInterleave(const float *interleavedBuffer, SAMPLE **blockBuffers, unsigned frames, unsigned channels, unsigned stride)
 		{
-			DeInterleaveVectored(interleavedBuffer,blockBuffers,frames,channels,stride);
+			/* are all block buffers aligned to 16 byte boundaries? */
+			bool ai(true),ab(true);
+			for(unsigned i(0);i<channels;++i)
+			{
+				intptr_t align = intptr_t(blockBuffers[i]);
+				if ((align&15) != 0) 
+				{
+					ab = false;
+					break;
+				}
+			}
+
+			/* is the interleaved buffer and the stride 16-byte aligned? */
+			intptr_t align = intptr_t(interleavedBuffer);
+			ai = (align&15) == 0 && (stride % 4) == 0;
+
+			/* specialize according to alignment properties of interleaved and block buffers */
+			if (ai)
+			{
+				if (ab) DeInterleaveVectored<true,true>(interleavedBuffer,blockBuffers,frames,channels,stride);
+				else DeInterleaveVectored<true,false>(interleavedBuffer,blockBuffers,frames,channels,stride);
+			}
+			else
+			{
+				if (ab) DeInterleaveVectored<false,true>(interleavedBuffer,blockBuffers,frames,channels,stride);
+				else DeInterleaveVectored<false,false>(interleavedBuffer,blockBuffers,frames,channels,stride);
+			}
 		}
 	};
 }

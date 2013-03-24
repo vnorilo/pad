@@ -66,7 +66,7 @@ public:
         return false;
     }
 
-    virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration&, AudioCallbackDelegate&, bool startSuspended = false)
+    virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration&)
     {
         static AudioStreamConfiguration kludge(44100);
         return kludge;

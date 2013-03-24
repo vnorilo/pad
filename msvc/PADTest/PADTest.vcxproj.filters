@@ -89,5 +89,8 @@
     <ClInclude Include="..\..\pad_samples_avx.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\PADErrors.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
