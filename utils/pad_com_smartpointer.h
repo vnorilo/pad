@@ -1,5 +1,7 @@
 #pragma once
 
+// Helper stuff to deal with Microsoft's COM crap
+
 #include "Objbase.h"
 
 template <class COMClass>
@@ -84,3 +86,76 @@ private:
     }
     COMClass** operator&() throw(); // to prevent ;D
 };
+
+class MyPropVariant
+{
+public:
+    MyPropVariant()
+    {
+        PropVariantInit(&m_variant);
+    }
+    ~MyPropVariant()
+    {
+        //std::cerr << "MyPropVariant dtor\n";
+        PropVariantClear(&m_variant);
+    }
+    MyPropVariant(const MyPropVariant& other)
+    {
+        //std::cerr << "MyPropVariant copy ctor\n";
+        PropVariantCopy(&m_variant,&other.m_variant);
+    }
+    /* For completeness these probably should be implemented, but "meh" for now...
+    bool operator==(const MyPropVariant & other) const
+    {
+        //obviously very bogus
+        return true;
+    }
+    bool operator!=(const MyPropVariant & other)
+    {
+        return !(*this==other);
+    }
+    */
+    MyPropVariant & operator= (const MyPropVariant & other)
+    {
+        //std::cerr << "MyPropVariant =\n";
+        if (&this->m_variant!=&other.m_variant)
+        {
+            PropVariantClear(&m_variant);
+            PropVariantCopy(&m_variant,&other.m_variant);
+        }
+        return *this;
+    }
+    PROPVARIANT* operator ()()
+    {
+        return &m_variant;
+    }
+private:
+    PROPVARIANT m_variant;
+};
+
+/* not really useful yet...this should wrap crap that needs to be deallocated with CoTaskMemFree etc
+template <class T>
+class COMPointer
+{
+public:
+    COMPointer()
+    {
+        m_p=nullptr;
+    }
+    COMPointer(T* ptr)
+    {
+        m_p=ptr;
+    }
+    ~COMPointer()
+    {
+        if (m_p)
+            CoTaskMemFree((LPVOID)m_p);
+    }
+    T* operator ()()
+    {
+        return &m_p;
+    }
+private:
+    T* m_p;
+};
+*/

@@ -13,57 +13,11 @@
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
 
-void copyWavFormat (WAVEFORMATEXTENSIBLE& dest, const WAVEFORMATEX* const src)
+void CopyWavFormat(WAVEFORMATEXTENSIBLE& dest, const WAVEFORMATEX* const src)
 {
-    memcpy (&dest, src, src->wFormatTag == WAVE_FORMAT_EXTENSIBLE ? sizeof (WAVEFORMATEXTENSIBLE)
+    memcpy(&dest,src,src->wFormatTag==WAVE_FORMAT_EXTENSIBLE ? sizeof (WAVEFORMATEXTENSIBLE)
                                                                   : sizeof (WAVEFORMATEX));
 }
-
-class MyPropVariant
-{
-public:
-    MyPropVariant()
-    {
-        PropVariantInit(&m_variant);
-    }
-    ~MyPropVariant()
-    {
-        //std::cerr << "MyPropVariant dtor\n";
-        PropVariantClear(&m_variant);
-    }
-    MyPropVariant(const MyPropVariant& other)
-    {
-        //std::cerr << "MyPropVariant copy ctor\n";
-        PropVariantCopy(&m_variant,&other.m_variant);
-    }
-    /* For completeness these probably should be implemented, but "meh" for now...
-    bool operator==(const MyPropVariant & other) const
-    {
-        //obviously very bogus
-        return true;
-    }
-    bool operator!=(const MyPropVariant & other)
-    {
-        return !(*this==other);
-    }
-    */
-    MyPropVariant & operator= (const MyPropVariant & other)
-    {
-        //std::cerr << "MyPropVariant =\n";
-        if (&this->m_variant!=&other.m_variant)
-        {
-            PropVariantClear(&m_variant);
-            PropVariantCopy(&m_variant,&other.m_variant);
-        }
-        return *this;
-    }
-    PROPVARIANT* operator ()()
-    {
-        return &m_variant;
-    }
-private:
-    PROPVARIANT m_variant;
-};
 
 namespace
 {
@@ -211,7 +165,7 @@ struct WasapiPublisher : public HostAPIPublisher
                 continue;
             }
             WAVEFORMATEXTENSIBLE format;
-            copyWavFormat (format, mixFormat);
+            CopyWavFormat (format, mixFormat);
             CoTaskMemFree (mixFormat);
             numOutputs = format.Format.nChannels;
             int sizeNeeded=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,endPointName()->pwszVal,-1,0,0,NULL,NULL);
