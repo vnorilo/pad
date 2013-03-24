@@ -3,6 +3,8 @@
 // Helper stuff to deal with Microsoft's COM crap
 
 #include "Objbase.h"
+#include <string>
+#include <vector>
 
 template <class COMClass>
 class PadComSmartPointer
@@ -132,6 +134,22 @@ public:
 private:
     PROPVARIANT m_variant;
 };
+
+// this might be slow, so before it is benchmarked, should avoid using in tight loops
+std::string WideCharToStdString(LPWSTR input)
+{
+    int sizeNeeded=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,input,-1,0,0,NULL,NULL);
+    if (sizeNeeded>0)
+    {
+        std::vector<char> buf(sizeNeeded,0);
+        int size=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,input,-1,buf.data(),sizeNeeded,NULL,NULL);
+        if (size>0)
+        {
+            return std::string(buf.data());
+        }
+    }
+    return std::string();
+}
 
 /* not really useful yet...this should wrap crap that needs to be deallocated with CoTaskMemFree etc
 template <class T>
