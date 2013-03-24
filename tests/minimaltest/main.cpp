@@ -44,6 +44,7 @@ int main()
                   << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
     }
     return 0;
+    /*
     auto rme(myAudioSession("ASIO Fireface"));
     if (rme)
     {
@@ -61,7 +62,7 @@ int main()
         getchar();
         rme->Close();
     }
-
+    */
     return 0;
 }
 
