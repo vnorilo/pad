@@ -8,7 +8,7 @@
 #include "Audioclient.h"
 #include "HostAPI.h"
 #include "PAD.h"
-
+#include <map>
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
@@ -115,6 +115,7 @@ struct WasapiPublisher : public HostAPIPublisher
 
 	void Publish(Session& PADInstance, DeviceErrorDelegate& errorHandler)
 	{
+        std::map<std::string,std::vector<int>> adaptersMap; // string is adapter name, vector contains indexes of end points
         CoInitialize(0);
         HRESULT hr = S_OK;
         PadComSmartPointer<IMMDeviceEnumerator> enumerator;
@@ -127,7 +128,7 @@ struct WasapiPublisher : public HostAPIPublisher
         PadComSmartPointer<IMMDeviceCollection> collection;
         PadComSmartPointer<IMMDevice> endpoint;
         PadComSmartPointer<IPropertyStore> props;
-        LPWSTR pwszID = NULL;
+        //LPWSTR pwszID = NULL;
         hr=enumerator->EnumAudioEndpoints(eAll,DEVICE_STATE_ACTIVE,collection.resetAndGetPointerAddress());
         if (hr<0)
         {
@@ -145,75 +146,76 @@ struct WasapiPublisher : public HostAPIPublisher
         {
             cerr << "pad : wasapi : No endpoints found\n";
         } //else cerr << count << " WASAPI endpoints found\n";
-        for (unsigned i=0; i < count; i++)
+        for (unsigned i=0;i<count;i++)
         {
             hr = collection->Item(i, endpoint.resetAndGetPointerAddress());
-            if (hr<0)
-                continue;
-            // Get the endpoint ID string.
-            hr = endpoint->GetId(&pwszID);
             if (hr<0)
                 continue;
             hr = endpoint->OpenPropertyStore(STGM_READ, props.resetAndGetPointerAddress());
             if (hr<0)
                 continue;
-            MyPropVariant endPointName;
             MyPropVariant adapterName;
-            hr = props->GetValue(PKEY_Device_FriendlyName, endPointName());
-            if (hr<0)
-                continue;
             hr = props->GetValue(PKEY_DeviceInterface_FriendlyName, adapterName());
             if (hr<0)
             {
                 cerr << "pad : wasapi : could not get adapter name for "<<i<<"\n";
                 continue;
             }
-            EDataFlow audioDirection=getAudioDirection(endpoint);
-            if (audioDirection==eCapture)
-            {
-                wcerr << "device " << endPointName()->pwszVal << " is an input\n";
-            } else if (audioDirection==eRender)
-            {
-                wcerr << "device " << endPointName()->pwszVal << " is an output\n";
-            } else
-                wcerr << "device " << endPointName()->pwszVal << " is a hilavitkutin\n";
-            unsigned numInputs=0; unsigned numOutputs=0;
-            PadComSmartPointer<IAudioClient> tempClient;
-            hr = endpoint->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)tempClient.resetAndGetPointerAddress());
-            if (tempClient==nullptr)
-            {
-                cerr << "pad : wasapi : could not create temp client for " << i << " to get channel counts and shit\n";
-                continue;
-            }
-            WAVEFORMATEX* mixFormat = nullptr;
-            hr=tempClient->GetMixFormat(&mixFormat);
-            if (hr<0)
-            {
-                cerr << "could not get mix format\n";
-                continue;
-            }
-            WAVEFORMATEXTENSIBLE format;
-            CopyWavFormat (format, mixFormat);
-            CoTaskMemFree (mixFormat);
-            numOutputs = format.Format.nChannels;
-            int sizeNeeded=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,endPointName()->pwszVal,-1,0,0,NULL,NULL);
-            if (sizeNeeded>0)
-            {
-                std::vector<char> buf(sizeNeeded,0);
-                int size=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,endPointName()->pwszVal,-1,buf.data(),sizeNeeded,NULL,NULL);
-                if (size>0)
-                {
-                    //cerr << "wasapi name conversion needed "<<sizeNeeded<<" bytes"<<", used "<<size<<" bytes "<<buf<<"\n";
-                    RegisterDevice(PADInstance,WasapiDevice(i,44100.0,string(buf.data()),numInputs,numOutputs));
-                } else
-                {
-                    cerr << "could not convert wasapi device name properly, using bogus name\n";
-                    RegisterDevice(PADInstance,WasapiDevice(i,44100.0,"Trolldevice",numInputs,numOutputs));
-                }
-            } else cerr << "wasapi device name too broken, will not use this device\n";
-            CoTaskMemFree(pwszID);
-            pwszID = NULL;
+            std::string adapterNameString=WideCharToStdString(adapterName()->pwszVal);
+            adaptersMap[adapterNameString].push_back(i);
         }
+        int wasapiDeviceCount=0;
+        for( std::map<std::string,std::vector<int>>::iterator iter=adaptersMap.begin(); iter!=adaptersMap.end(); ++iter)
+        {
+            std::string name=iter->first;
+            std::vector<int> indexes=iter->second;
+            //cerr << "adapter " << name << " has end points\n";
+            unsigned numInputs=0; unsigned numOutputs=0;
+            for (unsigned i=0;i<indexes.size();i++)
+            {
+                //cerr << "\t" << indexes.at(i) << "\n";
+                hr = collection->Item(i, endpoint.resetAndGetPointerAddress());
+                if (hr<0)
+                    continue;
+                hr = endpoint->OpenPropertyStore(STGM_READ, props.resetAndGetPointerAddress());
+                if (hr<0)
+                    continue;
+                MyPropVariant endPointName;
+                hr = props->GetValue(PKEY_Device_FriendlyName, endPointName());
+                if (hr<0)
+                    continue;
+                EDataFlow audioDirection=getAudioDirection(endpoint);
+                PadComSmartPointer<IAudioClient> tempClient;
+                hr = endpoint->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)tempClient.resetAndGetPointerAddress());
+                if (tempClient==nullptr)
+                {
+                    cerr << "pad : wasapi : could not create temp client for " << i << " to get channel counts and shit\n";
+                    continue;
+                }
+                WAVEFORMATEX* mixFormat = nullptr;
+                hr=tempClient->GetMixFormat(&mixFormat);
+                if (hr<0)
+                {
+                    cerr << "could not get mix format\n";
+                    continue;
+                }
+                WAVEFORMATEXTENSIBLE format;
+                CopyWavFormat (format, mixFormat);
+                CoTaskMemFree (mixFormat);
+                if (audioDirection==eRender)
+                    numOutputs = format.Format.nChannels;
+                else if (audioDirection==eCapture)
+                    numInputs= format.Format.nChannels;
+                //std::string endPointNameString=WideCharToStdString(endPointName()->pwszVal);
+
+            }
+            if (numInputs>0 || numOutputs>0)
+            {
+                RegisterDevice(PADInstance,WasapiDevice(wasapiDeviceCount,44100.0,name,numInputs,numOutputs));
+            }
+            wasapiDeviceCount++;
+        }
+
     }
 } publisher;
 }
