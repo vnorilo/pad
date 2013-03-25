@@ -94,11 +94,6 @@ namespace PAD{
 				for(unsigned i(0);i<N;++i) b[i]*=data[i];
 				return b;
 			}
-
-			SampleVector<S,N> operator<<(int amt) const
-			{
-				return *this * SampleVector<S,N>(1 << amt);
-			}
 		};
 
 		/* generic clip & round */
@@ -126,7 +121,7 @@ namespace PAD{
 		};
 
 		template <typename HOST, int VEC> struct SampleToHost<SampleVector<HOST,VEC>,SampleVector<float,VEC>> {
-			static void RoundAndClip(SampleVector<HOST,VEC>& dst, SampleVector<float,VEC> src, SampleVector<float,VEC> hi, SampleVector<float,VEC> lo)
+			static void RoundAndClip(SampleVector<HOST,VEC>& dst, const SampleVector<float,VEC>& src, const SampleVector<float,VEC>& hi, const SampleVector<float,VEC>& lo)
 			{
 				for(unsigned i(0);i<VEC;++i)
 				{
@@ -166,11 +161,13 @@ namespace PAD{
 			HOST_FORMAT data;
 			HostSample(){}
 
-			HostSample(const HOST_FORMAT& constructFrom):data(constructFrom)
+			static HostSample ToMachineFormat(const HOST_FORMAT& constructFrom)
 			{
+				HostSample tmp;
+				tmp.data = constructFrom;
 				if (BIGENDIAN != SYSTEM_BIGENDIAN)
 				{
-					data = Bytes<HOST_FORMAT>::Swap(data);
+					tmp.data = Bytes<HOST_FORMAT>::Swap(tmp.data);
 				}
 			}
 
@@ -187,7 +184,7 @@ namespace PAD{
 
 				if (SHIFT_LEFT)
 				{
-					data = data << SHIFT_LEFT;
+					data = data * HOST_FORMAT(1 << SHIFT_LEFT);
 				}
 
 				if (BIGENDIAN != SYSTEM_BIGENDIAN)
