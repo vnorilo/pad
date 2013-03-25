@@ -213,9 +213,9 @@ namespace
 			if (CheckHResult(hr,"PAD/WASAPI : Could not enumerate audio endpoints")==false) return;
 
 			/* get default multimedia endpoints if available */
-			IMMDevice *defaultMultimediaInput(0), *defaultMultimediaOutput(0);
-			if (enumerator->GetDefaultAudioEndpoint(eCapture,eMultimedia,&defaultMultimediaInput)<0) defaultMultimediaInput=0;
-			if (enumerator->GetDefaultAudioEndpoint(eRender,eMultimedia,&defaultMultimediaOutput)<0) defaultMultimediaOutput=0;
+			PadComSmartPointer<IMMDevice> defaultMultimediaInput, defaultMultimediaOutput;
+			if (enumerator->GetDefaultAudioEndpoint(eCapture,eMultimedia,defaultMultimediaInput.NullAndGetPtrAddress())<0) defaultMultimediaInput=0;
+			if (enumerator->GetDefaultAudioEndpoint(eRender,eMultimedia,defaultMultimediaOutput.NullAndGetPtrAddress())<0) defaultMultimediaOutput=0;
 
 			UINT count;
 			hr = collection->GetCount(&count);
