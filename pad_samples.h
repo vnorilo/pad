@@ -161,15 +161,15 @@ namespace PAD{
 			HOST_FORMAT data;
 			HostSample(){}
 
-			static HostSample ToMachineFormat(const HOST_FORMAT& constructFrom)
-			{
-				HostSample tmp;
-				tmp.data = constructFrom;
-				if (BIGENDIAN != SYSTEM_BIGENDIAN)
-				{
-					tmp.data = Bytes<HOST_FORMAT>::Swap(tmp.data);
-				}
-			}
+			//static HostSample ToMachineFormat(const HOST_FORMAT& constructFrom)
+			//{
+			//	HostSample tmp;
+			//	tmp.data = constructFrom;
+			//	if (BIGENDIAN != SYSTEM_BIGENDIAN)
+			//	{
+			//		tmp.data = Bytes<HOST_FORMAT>::Swap(tmp.data);
+			//	}
+			//}
 
 			HostSample(const CANONICAL_FORMAT& convertFrom)
 			{
@@ -200,7 +200,7 @@ namespace PAD{
 				HOST_FORMAT tmp(data);
 				if (BIGENDIAN != SYSTEM_BIGENDIAN)
 				{
-					Bytes<HOST_FORMAT>::Swap(tmp);
+					tmp = Bytes<HOST_FORMAT>::Swap(tmp);
 				}
 
 				return CANONICAL_FORMAT(tmp) * CANONICAL_FORMAT(-1.0/(double)(NOMINAL_MINUS * double(1<<SHIFT_LEFT)));
@@ -220,6 +220,10 @@ namespace PAD{
 				const void *ptr2 = ptr;
 				assert((const void*)&ptr->data == (const void*)ptr);
 				tmp.data.Load<ALIGNED>(&ptr->data);
+				if (BIGENDIAN != SYSTEM_BIGENDIAN)
+				{
+					tmp.data=Bytes<decltype(tmp.data)>::Swap(tmp.data);
+				}
 				return tmp;
 			}
 		};

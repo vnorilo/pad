@@ -178,6 +178,7 @@ namespace {
 			case kAsioEngineVersion:
 				return 2L;
 			case kAsioResetRequest:
+				AsioUnwind(Idle);
 			case kAsioResyncRequest:
 			case kAsioLatenciesChanged:
 			case kAsioSupportsTimeInfo:
@@ -315,21 +316,21 @@ namespace {
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
-/*			case ASIOSTFloat32MSB: 
+			case ASIOSTFloat32MSB: 
 				{
-					typedef HostSample<float,float,-1,1,true> AsioSmp;
+					typedef HostSample<float,float,-1,1,0,true> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
-			case ASIOSTFloat64MSB: 
-				{
-					typedef HostSample<double,float,-1,1,true> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}*/
+			//case ASIOSTFloat64MSB: 
+			//	{
+			//		typedef HostSample<double,float,-1,1,0,true> AsioSmp;
+			//		ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+			//		break;
+			//	}
 			case ASIOSTInt16LSB: 
 				{
-					typedef HostSample<int16_t,float,-(1<<16),(1<<16)-1,0,false> AsioSmp;
+					typedef HostSample<int16_t,float,-(1<<15),(1<<15)-1,0,false> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
@@ -363,18 +364,19 @@ namespace {
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
-/*			case ASIOSTFloat32LSB: 
+			case ASIOSTFloat32LSB: 
 				{
-					typedef HostSample<float,float,-1,1,false> AsioSmp;
+					typedef HostSample<float,float,-1,1,0,false> AsioSmp;
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
-			case ASIOSTFloat64LSB: 
-				{
-					typedef HostSample<double,float,-1,1,false> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}*/
+			//case ASIOSTFloat64LSB: 
+			//	{
+			//		typedef HostSample<double,float,-1,1,0,false> AsioSmp;
+			//		ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+			//		break;
+			//	}
+			default:break;
 			}
 		}
 
@@ -418,18 +420,18 @@ namespace {
 					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
-/*			case ASIOSTFloat32MSB: 
+			case ASIOSTFloat32MSB: 
 				{
-					typedef HostSample<float,float,-1,1,true> AsioSmp;
+					typedef HostSample<float,float,-1,1,0,true> AsioSmp;
 					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
-			case ASIOSTFloat64MSB: 
-				{
-					typedef HostSample<double,float,-1,1,true> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}*/
+			//case ASIOSTFloat64MSB: 
+			//	{
+			//		typedef HostSample<double,float,-1,1,0,true> AsioSmp;
+			//		ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+			//		break;
+			//	}
 			case ASIOSTInt16LSB: 
 				{
 					typedef HostSample<int16_t,float,-(1<<16),(1<<16)-1,0,false> AsioSmp;
@@ -466,18 +468,19 @@ namespace {
 					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
-/*			case ASIOSTFloat32LSB: 
+			case ASIOSTFloat32LSB: 
 				{
-					typedef HostSample<float,float,-1,1,false> AsioSmp;
+					typedef HostSample<float,float,-1,1,0,false> AsioSmp;
 					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
-			case ASIOSTFloat64LSB: 
-				{
-					typedef HostSample<double,float,-1,1,false> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}*/
+			//case ASIOSTFloat64LSB: 
+			//	{
+			//		typedef HostSample<double,float,-1,1,0,false> AsioSmp;
+			//		ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+			//		break;
+			//	}
+			default:break;
 			}
 		}
 
@@ -551,6 +554,8 @@ namespace {
 					for(unsigned j(beg);j!=streamNumChannels;++j) bufferPtr[j-beg] = bufferInfos[j].buffers[doubleBufferIndex];
 					FormatOutput(blockType, delegateBufferOutput.data()+beg-streamNumInputs,bufferPtr,callbackBufferFrames,streamNumChannels-beg,streamNumOutputs);
 				}
+
+				ASIOOutputReady();
 			}
             return params;
 		}
@@ -625,6 +630,8 @@ namespace {
 		{
 			const unsigned MaxNameLength = 64;
 			unsigned numDrivers = GetDrivers().asioGetNumDev();
+			static  set<string> BlackList;
+			BlackList.insert("JackRouter");
 
             for(unsigned i(0);i<numDrivers;++i)
 			{
@@ -632,23 +639,26 @@ namespace {
 				{
 					char buffer[MaxNameLength];
 					GetDrivers().asioGetDriverName(i,buffer,MaxNameLength);
-					long numInputs = 0;
-					long numOutputs = 0;
+					if (BlackList.find(buffer) == BlackList.end())
+					{
+						long numInputs = 0;
+						long numOutputs = 0;
 
-					GetDrivers().loadDriver(buffer);
-					ASIODriverInfo driverInfo;
-					memset(&driverInfo,0,sizeof(ASIODriverInfo));
-					driverInfo.asioVersion = 2;
-#if WIN32
-					driverInfo.sysRef = GetDesktopWindow();
-#endif
+						GetDrivers().loadDriver(buffer);
+						ASIODriverInfo driverInfo;
+						memset(&driverInfo,0,sizeof(ASIODriverInfo));
+						driverInfo.asioVersion = 2;
+	#if WIN32
+						driverInfo.sysRef = GetDesktopWindow();
+	#endif
 
-					ASIOSampleRate currentSampleRate;
-					THROW_ERROR(DeviceInitializationFailure,ASIOInit(&driverInfo));
-					THROW_ERROR(DeviceInitializationFailure,ASIOGetChannels(&numInputs,&numOutputs));
-					THROW_ERROR(DeviceInitializationFailure,ASIOGetSampleRate(&currentSampleRate));
+						ASIOSampleRate currentSampleRate;
+						THROW_ERROR(DeviceInitializationFailure,ASIOInit(&driverInfo));
+						THROW_ERROR(DeviceInitializationFailure,ASIOGetChannels(&numInputs,&numOutputs));
+						THROW_ERROR(DeviceInitializationFailure,ASIOGetSampleRate(&currentSampleRate));
 
-					RegisterDevice(PADInstance,AsioDevice(i,currentSampleRate,buffer,numInputs,numOutputs));
+						RegisterDevice(PADInstance,AsioDevice(i,currentSampleRate,buffer,numInputs,numOutputs));
+					}
 				}
 				catch(SoftError s)
 				{

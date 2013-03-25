@@ -86,7 +86,7 @@ namespace PAD{
 		AudioStreamConfiguration StartSuspended() const;
 	};
 
-	static AudioStreamConfiguration Stream() {return AudioStreamConfiguration();}
+	static AudioStreamConfiguration Stream(AudioCallbackDelegate& d) {return AudioStreamConfiguration().Delegate(d);}
 
     class AudioCallbackDelegate{
 	public:

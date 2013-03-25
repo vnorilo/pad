@@ -195,7 +195,7 @@ namespace{
 			{
 				const jack_smp_t *buffer[channelPackage];
 				unsigned now = min<unsigned>(todo,channelPackage);
-				for(unsigned i(0);i<now;++i) buffer[i] = (jack_smp_t*)jack_port_get_buffer(inputPorts[i],frames);
+				for(unsigned i(0);i<now;++i) buffer[i] = (const jack_smp_t*)jack_port_get_buffer(inputPorts[i],frames);
 				ChannelConverter<jack_smp_t>::Interleave(clientInputBuffer.data(),(const jack_smp_t**)buffer,frames,inputPorts.size(),inputPorts.size());
 				todo-=now;
 			}
