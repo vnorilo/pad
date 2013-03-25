@@ -36,7 +36,7 @@ unsigned PAD::AudioStreamConfiguration::GetNumOutputs()
 int main()
 {
     cout << "Hello from PAD "<<PAD::VersionString()<<"!"<<endl;
-    getchar();
+    //getchar();
     using namespace PAD;
 
     class ErrorLogger : public DeviceErrorDelegate {
@@ -74,7 +74,7 @@ int main()
                                               for(unsigned j(0);j<numOuts;++j)
                                               {
                                                   if (output)
-                                                    output[i*numOuts+j] = (float)sin(phase * (1.0 + double(j)/numOuts));
+                                                    output[i*numOuts+j] = 0.25*(float)sin(phase * (1.0 + double(j)/numOuts));
                                                   //if (j<numIns) output[i*numOuts+j] = input[i*numIns+j];
                                                   phase = phase + 0.01 * M_PI;
                                               }
@@ -82,7 +82,7 @@ int main()
                                       }));
 
         std::cout << "Actual stream parameters: " <<
-                     asioDevice->Open(Stream().SampleRate(44100)
+                     asioDevice->Open(Stream(myAudioProcess).SampleRate(44100)
                                       .StereoInput(0).StereoOutput(0)
                                       .Delegate(myAudioProcess)) << "\n";
         std::cout << "device name is " << asioDevice->GetName() << "\n";
