@@ -108,16 +108,10 @@ EDataFlow getAudioDirection (const PadComSmartPointer<IMMDevice>& device)
     EDataFlow flowDirection = eRender;
     PadComSmartPointer <IMMEndpoint> endPoint;
     HRESULT hr=device.QueryInterface(endPoint);
-    if (hr<0)
-    {
-        cerr << "pad : wasapi : failure getting endpoint audio flow direction interface\n";
+    if (CheckHResult(hr)==false)
         return flowDirection;
-    }
     hr=endPoint->GetDataFlow(&flowDirection);
-    if (hr<0)
-    {
-        cerr << "pad : wasapi : failure getting endpoint audio flow direction\n";
-    }
+    CheckHResult(hr);
     return flowDirection;
 }
 
@@ -132,53 +126,34 @@ struct WasapiPublisher : public HostAPIPublisher
         HRESULT hr = S_OK;
         PadComSmartPointer<IMMDeviceEnumerator> enumerator;
         hr=enumerator.CoCreateInstance(CLSID_MMDeviceEnumerator,CLSCTX_ALL);
-        if (hr<0)
-        {
-            cerr << "pad : wasapi : could not create device enumerator\n";
-            return;
-        }
+        if (CheckHResult(hr,"PAD/WASAPI : Could not create device enumerator")==false) return;
         PadComSmartPointer<IMMDeviceCollection> collection;
         PadComSmartPointer<IMMDevice> endpoint;
         PadComSmartPointer<IPropertyStore> props;
         //LPWSTR pwszID = NULL;
         hr=enumerator->EnumAudioEndpoints(eAll,DEVICE_STATE_ACTIVE,collection.NullAndGetPtrAddress());
-        if (hr<0)
-        {
-            cerr << "pad : wasapi : could not enumerate audio endpoints\n";
-            return;
-        }
+        if (CheckHResult(hr,"PAD/WASAPI : Could not enumerate audio endpoints")==false) return;
         UINT count;
         hr = collection->GetCount(&count);
-        if (hr<0)
-        {
-            cerr << "pad : wasapi : could not get endpoint count\n";
-            return;
-        }
+        if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint collection count")==false) return;
         if (count == 0)
         {
             cerr << "pad : wasapi : No endpoints found\n";
-        } //else cerr << count << " WASAPI endpoints found\n";
+        }
         for (unsigned i=0;i<count;i++)
         {
             hr = collection->Item(i, endpoint.NullAndGetPtrAddress());
-            if (hr<0)
-                continue;
+            if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint collection item")==false) continue;
             hr = endpoint->OpenPropertyStore(STGM_READ, props.NullAndGetPtrAddress());
-            if (hr<0)
-                continue;
+            if (CheckHResult(hr,"PAD/WASAPI : Could not open endpoint property store")==false) continue;
             MyPropVariant adapterName;
             hr = props->GetValue(PKEY_DeviceInterface_FriendlyName, adapterName());
-            if (hr<0)
-            {
-                cerr << "pad : wasapi : could not get adapter name for "<<i<<"\n";
-                continue;
-            }
+            if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint adapter name")==false) continue;
             std::string adapterNameString=WideCharToStdString(adapterName()->pwszVal);
             wasapiMap[adapterNameString].SetName(adapterNameString);
             MyPropVariant endPointName;
             hr = props->GetValue(PKEY_Device_FriendlyName, endPointName());
-            if (hr<0)
-                continue;
+            if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint name")==false) continue;
             EDataFlow audioDirection=getAudioDirection(endpoint);
             PadComSmartPointer<IAudioClient> tempClient;
             hr = endpoint->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)tempClient.NullAndGetPtrAddress());
@@ -189,11 +164,7 @@ struct WasapiPublisher : public HostAPIPublisher
             }
             WAVEFORMATEX* mixFormat = nullptr;
             hr=tempClient->GetMixFormat(&mixFormat);
-            if (hr<0)
-            {
-                cerr << "could not get mix format\n";
-                continue;
-            }
+            if (CheckHResult(hr,"PAD/WASAPI : Could not get mix format")==false) continue;
             WAVEFORMATEXTENSIBLE format;
             CopyWavFormat (format, mixFormat);
             CoTaskMemFree (mixFormat);
