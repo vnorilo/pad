@@ -14,7 +14,8 @@ int main()
 		void Catch(HardError e) {std::cerr << "*Hard "<<e.GetCode()<<"* :" << e.what() << "\n";}
 	};
 	
-	Session myAudioSession(true,&ErrorLogger());
+	Session myAudioSession(false,&ErrorLogger());
+	myAudioSession.InitializeHostAPI("WASAPI");
 
 	for(auto& dev : myAudioSession)
 	{
@@ -22,7 +23,7 @@ int main()
 						 << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
 	}
 
-	auto asioDevice = myAudioSession.FindDevice("jack",".*");
+	auto asioDevice = myAudioSession.FindDevice("wasapi","idt");
 
 	if (asioDevice != myAudioSession.end())
 	{
@@ -35,7 +36,7 @@ int main()
 			{
 				for(unsigned j(0);j<numOuts;++j)
 				{
-					output[i*numOuts+j] = (float)sin(phase * (1.0 + double(j)/numOuts));
+					output[i*numOuts+j] = (float)sin(phase * (1.0 + double(j)/numOuts)) * 0.8;
 					if (j<numIns) output[i*numOuts+j] = input[i*numIns+j];
 					phase = phase + 0.01 * M_PI;
 				}
@@ -43,7 +44,7 @@ int main()
 		}));
 
 		std::cout << "Actual stream parameters: " <<
-		asioDevice->Open(Stream().Outputs(ChannelRange(0,8)).Delegate(myAudioProcess));
+		asioDevice->Open(Stream(myAudioProcess).StereoOutput(0));
 		getchar();
 		asioDevice->Close();
 	}
