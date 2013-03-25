@@ -112,13 +112,14 @@ namespace {
 			}
 			else defaultStereo.SetValid(false);
 
-			defaultAll = AudioStreamConfiguration(44100,true);
+			defaultAll = AudioStreamConfiguration(defaultRate,true);
 			defaultAll.AddDeviceOutputs(ChannelRange(0,numOutputs));
 			defaultAll.AddDeviceInputs(ChannelRange(0,numInputs));
 		}
 
 		~AsioDevice()
 		{
+			Close();
 			AsioUnwind(Initialized);
 		}
 
@@ -144,12 +145,19 @@ namespace {
 
 		static cdecl void BufferSwitch(long doubleBufferIndex, ASIOBool directProcess)
 		{
-			ASIOTime tmp;
-			BufferSwitchTimeInfo(&tmp,doubleBufferIndex,directProcess);
+			ASIOTime time;
+			memset(&time,0,sizeof(ASIOTime));
+			time.timeInfo.flags = kSystemTimeValid | kSamplePositionValid | kSampleRateValid;
+			time.timeInfo.sampleRate = currentConfiguration.GetSampleRate();
+			BufferSwitchTimeInfo(&time,doubleBufferIndex,directProcess);
 		}
 
 		static void SampleRateDidChange(ASIOSampleRate sRate)
 		{
+			currentConfiguration.SetSampleRate(sRate);
+			if (currentDelegate) 
+				currentDelegate->StreamConfigurationDidChange(
+					AudioCallbackDelegate::SampleRateDidChange,currentConfiguration);
 		}
 
 		static long AsioMessage(long selector, long value, void* message, double* opt)
@@ -194,6 +202,12 @@ namespace {
 		{
 			if (State < Initialized)
 			{
+				memset(&driverInfo,0,sizeof(ASIODriverInfo));
+				driverInfo.asioVersion = 2;
+#ifdef WIN32
+				driverInfo.sysRef = GetDesktopWindow();
+#endif
+				
 				THROW_ERROR(DeviceInitializationFailure,ASIOInit(&driverInfo));
 				State = Initialized;
 			}
@@ -467,6 +481,7 @@ namespace {
 			}
 		}
 
+
 		static cdecl ASIOTime* BufferSwitchTimeInfo(ASIOTime* params, long doubleBufferIndex, ASIOBool directProcess)
 		{
 			/* convert ASIO format to canonical format */
@@ -485,7 +500,7 @@ namespace {
 				unsigned idx(1);
 				while(idx<streamNumInputs)
 				{
-					assert(bufferInfos[idx].isInput == true && channelInfos[idx].isInput == true);
+					assert(bufferInfos[idx].isInput && channelInfos[idx].isInput );
 					if (channelInfos[idx].type != blockType || (idx - beg) >= 64)
 					{
 						for(unsigned j(beg);j!=idx;++j) bufferPtr[j-beg] = bufferInfos[j].buffers[doubleBufferIndex];
@@ -552,21 +567,26 @@ namespace {
 				AsioUnwind(Initialized);
 			}
 
-            ASIOSetSampleRate(conf.GetSampleRate());
+			ASIOSampleRate sr(0);
+			ASIOGetSampleRate(&sr);
+
+			if (sr!=conf.GetSampleRate()) ASIOSetSampleRate(conf.GetSampleRate());
+
+			Load();
+			Init();
 
 			/* canonicalize passed format */
 			currentDelegate = &conf.GetAudioDelegate();
 			currentConfiguration = conf;
-			ASIOSampleRate sr;
-			THROW_ERROR(DeviceOpenStreamFailure,ASIOGetSampleRate(&sr));
+			ASIOGetSampleRate(&sr);
 			currentConfiguration.SetSampleRate(sr);
 			currentConfiguration.SetDeviceChannelLimits(GetNumInputs(),GetNumOutputs());
 
-			Load();
-			Init();
 			Prepare();
 
-			currentConfiguration.SetPreferredBufferSize(callbackBufferFrames);
+			currentConfiguration.SetBufferSize(callbackBufferFrames);
+
+			currentDelegate->AboutToBeginStream(currentConfiguration,*this);
 
 			if (conf.HasSuspendOnStartup() == false) Run();
 			return currentConfiguration;
@@ -581,11 +601,14 @@ namespace {
 		virtual void Suspend() 
 		{
 			AsioUnwind(Prepared);
+			if (currentDelegate) currentDelegate->StreamDidEnd(*this);
 		}
 
 		virtual void Close() 
 		{
+			bool didEnd(State == Running);
 			AsioUnwind(Loaded);
+			if (didEnd && currentDelegate) currentDelegate->StreamDidEnd(*this);
 		}
 	};
 
@@ -615,12 +638,17 @@ namespace {
 
 					GetDrivers().loadDriver(buffer);
 					ASIODriverInfo driverInfo;
+					memset(&driverInfo,0,sizeof(ASIODriverInfo));
+					driverInfo.asioVersion = 2;
+#if WIN32
+					driverInfo.sysRef = GetDesktopWindow();
+#endif
+
 					ASIOSampleRate currentSampleRate;
 					THROW_ERROR(DeviceInitializationFailure,ASIOInit(&driverInfo));
 					THROW_ERROR(DeviceInitializationFailure,ASIOGetChannels(&numInputs,&numOutputs));
 					THROW_ERROR(DeviceInitializationFailure,ASIOGetSampleRate(&currentSampleRate));
 
-//					GetDrivers().removeCurrentDriver();
 					RegisterDevice(PADInstance,AsioDevice(i,currentSampleRate,buffer,numInputs,numOutputs));
 				}
 				catch(SoftError s)

@@ -47,7 +47,7 @@ namespace PAD{
 		template <int N> void AddDeviceInputs(const ChannelRange (&ranges)[N]) {for(auto r : ranges) AddDeviceInputs(r);} 
 		template <int N> void AddDeviceOutputs(const ChannelRange (&ranges)[N]) {for(auto r : ranges) AddDeviceOutputs(r);} 
 
-		void SetPreferredBufferSize(unsigned frames) {bufferSize = frames;}
+		void SetBufferSize(unsigned frames) {bufferSize = frames;}
 
 		void SetAudioDelegate(AudioCallbackDelegate& d) {audioDelegate = &d;}
 
@@ -83,6 +83,7 @@ namespace PAD{
 		AudioStreamConfiguration StereoOutput(unsigned index) const;
 		AudioStreamConfiguration Delegate(AudioCallbackDelegate& del) const;
 		AudioStreamConfiguration SampleRate(double rate) const;
+		AudioStreamConfiguration StartSuspended() const;
 	};
 
 	static AudioStreamConfiguration Stream() {return AudioStreamConfiguration();}
@@ -94,11 +95,20 @@ namespace PAD{
 		 */
 		virtual void Process(uint64_t timestamp, const AudioStreamConfiguration&, const float* input, float *output, unsigned int frames) = 0;
 
+		/** 
+		 * Stream callbacks that may occur from any thread
+		 */
+		enum ConfigurationChangeFlags{
+			SampleRateDidChange = 0x0001,
+			BufferSizeDidChange = 0x0002
+		};
+
+		virtual void StreamConfigurationDidChange(ConfigurationChangeFlags whatDidChange, const AudioStreamConfiguration& newConfig) {}
+
 		/**
 		 * Utility setup calls that are called from the thread that controls the AudioDevice 
 		 */
 		virtual void AboutToBeginStream(const AudioStreamConfiguration&, AudioDevice&) {}
-		virtual void AboutToEndStream(AudioDevice&) {}
 		virtual void StreamDidEnd(AudioDevice&) {}
 	};
 

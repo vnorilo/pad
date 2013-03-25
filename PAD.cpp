@@ -153,19 +153,26 @@ namespace PAD {
 		auto tmp(*this);tmp.AddDeviceOutputs(cr);return tmp;
 	}
 
-	void AudioStreamConfiguration::SetDeviceChannelLimits(unsigned maxIn, unsigned maxOut)
+	static void SetChannelLimits(vector<ChannelRange>& channelRanges, unsigned maxCh)
 	{
-		for(auto i(inputRanges.begin());i!=inputRanges.end();)
+		vector<ChannelRange> newChannelRange;
+		for(auto cr : channelRanges)
 		{
-			if (i->begin() >= maxIn) inputRanges.erase(i++);
-			else *i++ = ChannelRange(i->begin(),min(maxIn,i->end()));
+			if (cr.begin() < maxCh) 
+			{
+				newChannelRange.push_back(ChannelRange(cr.begin(),min(cr.end(),maxCh)));
+			}			
 		}
 
-		for(auto i(outputRanges.begin());i!=outputRanges.end();)
-		{
-			if (i->begin() >= maxIn) outputRanges.erase(i++);
-			else *i++ = ChannelRange(i->begin(),min(maxIn,i->end()));
-		}
+		channelRanges = newChannelRange;
+	}
+
+	void AudioStreamConfiguration::SetDeviceChannelLimits(unsigned maxIn, unsigned maxOut)
+	{
+		SetChannelLimits(inputRanges,maxIn);
+		SetChannelLimits(outputRanges,maxOut);
+		numStreamIns = GetNumChannels(inputRanges);
+		numStreamOuts = GetNumChannels(outputRanges);
 	}
 }
 
