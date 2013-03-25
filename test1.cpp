@@ -23,7 +23,7 @@ int main()
 						 << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
 	}
 
-	auto asioDevice = myAudioSession.FindDevice("Fireface");
+	auto asioDevice = myAudioSession.FindDevice("ASIO4ALL");
 
 	if (asioDevice != myAudioSession.end())
 	{
@@ -44,9 +44,7 @@ int main()
 		}));
 
 		std::cout << "Actual stream parameters: " <<
-		asioDevice->Open(Stream().SampleRate(96000)
-								 .StereoInput(0)
-								 .StereoOutput(1)
+		asioDevice->Open(Stream().StereoOutput(0)
 								 .Delegate(myAudioProcess));
 		getchar();
 		asioDevice->Close();
