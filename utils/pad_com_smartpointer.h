@@ -152,7 +152,7 @@ static std::string WideCharToStdString(LPWSTR input)
     return std::string();
 }
 
-bool CheckHResult(HRESULT r,const std::string& context=std::string())
+static bool CheckHResult(HRESULT r,const std::string& context=std::string())
 {
     if (r<0)
     {
