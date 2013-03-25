@@ -137,7 +137,7 @@ private:
 };
 
 // this might be slow, so before it is benchmarked, should avoid using in tight loops
-std::string WideCharToStdString(LPWSTR input)
+static std::string WideCharToStdString(LPWSTR input)
 {
     int sizeNeeded=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,input,-1,0,0,NULL,NULL);
     if (sizeNeeded>0)
@@ -152,7 +152,7 @@ std::string WideCharToStdString(LPWSTR input)
     return std::string();
 }
 
-bool CheckHResult(HRESULT r,const std::string& context=std::string())
+static bool CheckHResult(HRESULT r,const std::string& context=std::string())
 {
     if (r<0)
     {

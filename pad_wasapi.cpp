@@ -21,6 +21,7 @@ void CopyWavFormat(WAVEFORMATEXTENSIBLE& dest, const WAVEFORMATEX* const src)
                                                                   : sizeof (WAVEFORMATEX));
 }
 
+
 namespace
 {
 using namespace std;
