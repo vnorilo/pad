@@ -36,6 +36,7 @@ unsigned PAD::AudioStreamConfiguration::GetNumOutputs()
 int main()
 {
     cout << "Hello from PAD "<<PAD::VersionString()<<"!"<<endl;
+    getchar();
     using namespace PAD;
 
     class ErrorLogger : public DeviceErrorDelegate {
@@ -53,7 +54,7 @@ int main()
                   << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
     }
     //return 0;
-    auto asioDevice = myAudioSession.FindDevice("E-MU ASIO");
+    auto asioDevice = myAudioSession.FindDevice("E-MU E-DSP");
 
     if (asioDevice != myAudioSession.end())
     {
@@ -72,7 +73,8 @@ int main()
                                           {
                                               for(unsigned j(0);j<numOuts;++j)
                                               {
-                                                  output[i*numOuts+j] = (float)sin(phase * (1.0 + double(j)/numOuts));
+                                                  if (output)
+                                                    output[i*numOuts+j] = (float)sin(phase * (1.0 + double(j)/numOuts));
                                                   //if (j<numIns) output[i*numOuts+j] = input[i*numIns+j];
                                                   phase = phase + 0.01 * M_PI;
                                               }
