@@ -16,14 +16,13 @@ int main()
 	
 	Session myAudioSession(true,&ErrorLogger());
 
-
 	for(auto& dev : myAudioSession)
 	{
 		std::cout << dev << "\n  * Stereo : " << dev.DefaultStereo() 
 						 << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
 	}
 
-	auto asioDevice = myAudioSession.FindDevice("ASIO4ALL");
+	auto asioDevice = myAudioSession.FindDevice("jack",".*");
 
 	if (asioDevice != myAudioSession.end())
 	{
@@ -44,8 +43,7 @@ int main()
 		}));
 
 		std::cout << "Actual stream parameters: " <<
-		asioDevice->Open(Stream().StereoOutput(0)
-								 .Delegate(myAudioProcess));
+		asioDevice->Open(Stream().Outputs(ChannelRange(0,8)).Delegate(myAudioProcess));
 		getchar();
 		asioDevice->Close();
 	}

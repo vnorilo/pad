@@ -23,7 +23,8 @@ namespace PAD{
 
 			int32_t& operator[](unsigned i) {return data.m128i_i32[i];}
 			int32_t operator[](unsigned i) const {return data.m128i_i32[i];}
-			SampleVector<int32_t,4> operator<<(int32_t amt) {return _mm_shl_epi32(data,SampleVector<int32_t,4>(amt).data);}
+
+			SampleVector<int32_t,4> operator*(const SampleVector<int32_t,4>& b) {return _mm_mul_epi32(data,b.data);}
 		};
 
 		template <> struct SampleVector<int16_t,4>{
@@ -37,7 +38,8 @@ namespace PAD{
 
 			int16_t& operator[](unsigned i) {return data.m128i_i16[i];}
 			int16_t operator[](unsigned i) const {return data.m128i_i16[i];}
-			SampleVector<int16_t,4> operator<<(int16_t amt) {return _mm_shl_epi16(data,SampleVector<int16_t,4>(amt).data);}
+
+			SampleVector<int16_t,4> operator*(const SampleVector<int16_t,4>& b) {return _mm_mullo_epi16(data,b.data);}
 		};
 
 		template <> struct SampleVector<float,4>{
@@ -56,7 +58,6 @@ namespace PAD{
 			}
 
 			SampleVector<float,4> operator*(const SampleVector<float,4>& b) const { return _mm_mul_ps(data,b.data); }
-			SampleVector<float,4> operator/(const SampleVector<float,4>& b) const { return _mm_div_ps(data,b.data); }
 
 			operator SampleVector<int32_t,4>() { return _mm_cvtps_epi32(data); }
 			operator SampleVector<int16_t,4>() { return _mm_cvtps_epi32(data); }
