@@ -52,8 +52,8 @@ int main()
         std::cout << dev << "\n  * Stereo : " << dev.DefaultStereo()
                   << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
     }
-    return 0;
-    auto asioDevice = myAudioSession.FindDevice("E-MU asio");
+    //return 0;
+    auto asioDevice = myAudioSession.FindDevice("E-MU ASIO");
 
     if (asioDevice != myAudioSession.end())
     {
@@ -63,7 +63,7 @@ int main()
                                           static int cnt=0;
                                           //if (cnt<100)
                                           //{
-                                          cerr << "callback "<<phase<<"\n";
+                                          //cerr << "callback "<<phase<<"\n";
                                               //cnt++;
                                           //}
                                           unsigned numOuts(cfg.GetNumStreamOutputs());

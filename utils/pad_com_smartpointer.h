@@ -53,11 +53,11 @@ public:
 
     HRESULT CoCreateInstance (REFCLSID classUUID, DWORD dwClsContext = CLSCTX_INPROC_SERVER)
     {
-        HRESULT hr = ::CoCreateInstance (classUUID, 0, dwClsContext, __uuidof (COMClass), (void**) resetAndGetPointerAddress());
+        HRESULT hr = ::CoCreateInstance (classUUID, 0, dwClsContext, __uuidof (COMClass), (void**) NullAndGetPtrAddress());
         return hr;
     }
 
-    COMClass** resetAndGetPointerAddress()
+    COMClass** NullAndGetPtrAddress()
     {
         release();
         m_ptr = 0;
@@ -70,7 +70,7 @@ public:
         if (m_ptr == 0)
             return E_POINTER;
 
-        return m_ptr->QueryInterface (classUUID, (void**) destObject.resetAndGetPointerAddress());
+        return m_ptr->QueryInterface (classUUID, (void**) destObject.NullAndGetPtrAddress());
     }
 
     template <class OtherCOMClass>
