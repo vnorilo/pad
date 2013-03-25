@@ -5,6 +5,7 @@
 #include "Objbase.h"
 #include <string>
 #include <vector>
+#include <iostream>
 
 template <class COMClass>
 class PadComSmartPointer
@@ -149,6 +150,17 @@ static std::string WideCharToStdString(LPWSTR input)
         }
     }
     return std::string();
+}
+
+bool CheckHResult(HRESULT r,const std::string& context=std::string())
+{
+    if (r<0)
+    {
+        if (context.size()>0)
+            std::cerr << "COM/winapi error : "<<context<<"\n";
+        return false;
+    }
+    return true;
 }
 
 /* not really useful yet...this should wrap crap that needs to be deallocated with CoTaskMemFree etc
