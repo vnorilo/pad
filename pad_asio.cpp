@@ -552,8 +552,7 @@ namespace {
 					FormatOutput(blockType, delegateBufferOutput.data()+beg-streamNumInputs,bufferPtr,callbackBufferFrames,streamNumChannels-beg,streamNumOutputs);
 				}
 			}
-			
-			return params;
+            return params;
 		}
 
 		virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration& conf)
