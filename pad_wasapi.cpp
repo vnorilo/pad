@@ -273,7 +273,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
             //cout << "WASAPI TAHTOO DATAA "<<counter<<"\n";
             UINT32 nFramesOfPadding;
             hr = dev->outputAudioClient->GetCurrentPadding(&nFramesOfPadding);
-            if (nFramesOfPadding == nFramesInBuffer)
+            if (nFramesOfPadding < nFramesInBuffer)
             {
                 cout << "some stupid glitch :C\n";
             }
