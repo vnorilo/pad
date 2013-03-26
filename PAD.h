@@ -12,7 +12,7 @@ namespace PAD{
 		unsigned b, e;
 	public:
 		
-		ChannelRange(unsigned b = 0, unsigned e = -1):b(b),e(e) {if(e<=b) throw SoftError(ChannelRangeInvalid,"Invalid channel range");}
+		ChannelRange(unsigned b = 0, unsigned e = -1):b(b),e(e) {if(e<b) throw SoftError(ChannelRangeInvalid,"Invalid channel range");}
 		unsigned begin() const {return b;}
 		unsigned end() const {return e;}
 		bool Overlaps(ChannelRange);
