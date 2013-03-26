@@ -2,22 +2,13 @@
 #include <list>
 #include <regex>
 #include <unordered_set>
+#include <mutex>
 
 #include "HostAPI.h"
 #include "PAD.h"
 
 namespace PAD{
-	using namespace std;
-
-	namespace{
-		unordered_set<Session*> liveSession;
-		void KillLiveSessions()
-		{
-			for(auto s : liveSession) s->~Session();
-			liveSession.clear();
-		}
-	}
-	
+	using namespace std;	
 
 	static list<HostAPIPublisher*>& AvailablePublishers()
 	{
@@ -38,8 +29,10 @@ namespace PAD{
 		AvailablePublishers().push_back(this);
 	}
 
+	static mutex publisherMutex;
 	void Session::InitializeApi(HostAPIPublisher* api, DeviceErrorDelegate &errHandler)
 	{
+		lock_guard<mutex> guard(publisherMutex);
 		AvailablePublishers().remove(api);
 		heldAPIProviders.push_back(api);
 		api->Publish(*this, errHandler);
@@ -47,8 +40,6 @@ namespace PAD{
 
 	Session::Session(bool loadAll, DeviceErrorDelegate* del)
 	{
-	//	atexit(KillLiveSessions);
-		liveSession.insert(this);
 		AlwaysPropagateErrors p;
 		if (del == NULL) del = &p;
 		if (loadAll)
@@ -77,9 +68,7 @@ namespace PAD{
 
 	Session::~Session()
 	{
-		auto f(liveSession.find(this));
-		if (f!=liveSession.end()) liveSession.erase(f);
-
+		lock_guard<mutex> guard(publisherMutex);		
 		AvailablePublishers().insert(AvailablePublishers().begin(),heldAPIProviders.begin(),heldAPIProviders.end());
 		for(auto api : heldAPIProviders) api->Cleanup(*this);
 	}
