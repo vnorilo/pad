@@ -13,9 +13,9 @@ int main()
 		void Catch(SoftError e) {std::cerr << "*Soft "<<e.GetCode()<<"* :" << e.what() << "\n";}
 		void Catch(HardError e) {std::cerr << "*Hard "<<e.GetCode()<<"* :" << e.what() << "\n";}
 	};
-	
-	Session myAudioSession(false,&ErrorLogger());
-	myAudioSession.InitializeHostAPI("ASIO",&ErrorLogger());
+    
+    ErrorLogger log;	
+	Session myAudioSession(true,&log);
 
 	for(auto& dev : myAudioSession)
 	{
@@ -23,7 +23,7 @@ int main()
 						 << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
 	}
 
-	auto asioDevice = myAudioSession.FindDevice("ASIO","ASIO4ALL");
+	auto asioDevice = myAudioSession.FindDevice(".*");
 
 	if (asioDevice != myAudioSession.end())
 	{

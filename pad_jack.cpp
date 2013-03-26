@@ -15,7 +15,7 @@
 
 // prevent stdint definitions by jack
 #define _STDINT_H
-#include "jack/jack.h"
+#include <jack/jack.h>
 
 #ifdef WIN32
 #include "utils/pad_com_smartpointer.h"
@@ -24,7 +24,7 @@
 #undef min
 #undef max
 
-#define CLEANUP(statement) Cleanup([&](){statement;})
+#define CLEANUP(statement) Cleanup([&]() -> void { statement; return;})
 
 namespace{
 	using namespace PAD;
