@@ -21,6 +21,9 @@
 		1104D64E170242F700721830 /* padtest.1 in CopyFiles */ = {isa = PBXBuildFile; fileRef = 1104D64D170242F700721830 /* padtest.1 */; };
 		1104D6531702430E00721830 /* test1.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1104D6521702430E00721830 /* test1.cpp */; };
 		1104D6541702437800721830 /* PAD.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1103FA1D1701EB98005103BA /* PAD.framework */; };
+		11B8B25217024885006E717C /* pad_coreaudio.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11B8B25017024885006E717C /* pad_coreaudio.cpp */; };
+		11B8B25B1702568A006E717C /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 11B8B25A1702568A006E717C /* CoreAudio.framework */; };
+		11B8B25D17025691006E717C /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 11B8B25C17025691006E717C /* CoreFoundation.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -57,6 +60,12 @@
 		1104D649170242F700721830 /* padtest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = padtest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1104D64D170242F700721830 /* padtest.1 */ = {isa = PBXFileReference; lastKnownFileType = text.man; path = padtest.1; sourceTree = "<group>"; };
 		1104D6521702430E00721830 /* test1.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = test1.cpp; path = ../../../test1.cpp; sourceTree = "<group>"; };
+		11B8B25017024885006E717C /* pad_coreaudio.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pad_coreaudio.cpp; sourceTree = "<group>"; };
+		11B8B2541702562D006E717C /* CoreAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreAudio.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/System/Library/Frameworks/CoreAudio.framework; sourceTree = DEVELOPER_DIR; };
+		11B8B25617025639006E717C /* AudioUnit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioUnit.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/System/Library/Frameworks/AudioUnit.framework; sourceTree = DEVELOPER_DIR; };
+		11B8B25817025650006E717C /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/System/Library/Frameworks/CoreFoundation.framework; sourceTree = DEVELOPER_DIR; };
+		11B8B25A1702568A006E717C /* CoreAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreAudio.framework; path = System/Library/Frameworks/CoreAudio.framework; sourceTree = SDKROOT; };
+		11B8B25C17025691006E717C /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = System/Library/Frameworks/CoreFoundation.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,6 +73,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				11B8B25D17025691006E717C /* CoreFoundation.framework in Frameworks */,
+				11B8B25B1702568A006E717C /* CoreAudio.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -81,6 +92,11 @@
 		1103FA111701EB98005103BA = {
 			isa = PBXGroup;
 			children = (
+				11B8B25C17025691006E717C /* CoreFoundation.framework */,
+				11B8B25A1702568A006E717C /* CoreAudio.framework */,
+				11B8B25817025650006E717C /* CoreFoundation.framework */,
+				11B8B25617025639006E717C /* AudioUnit.framework */,
+				11B8B2541702562D006E717C /* CoreAudio.framework */,
 				1103FA261701EB98005103BA /* PAD */,
 				1104D64A170242F700721830 /* padtest */,
 				1103FA1F1701EB98005103BA /* Frameworks */,
@@ -118,16 +134,17 @@
 		1103FA261701EB98005103BA /* PAD */ = {
 			isa = PBXGroup;
 			children = (
-				1103FA491701EFB2005103BA /* pad_jack.cpp */,
-				1103FA431701EC55005103BA /* HostAPI.cpp */,
-				1103FA451701EC5A005103BA /* PADErrors.h */,
+				1103FA391701EC4C005103BA /* PAD.cpp */,
 				1103FA361701EC4C005103BA /* PAD.h */,
+				1103FA451701EC5A005103BA /* PADErrors.h */,
+				1103FA431701EC55005103BA /* HostAPI.cpp */,
+				1103FA471701EC61005103BA /* HostAPI.h */,
 				1103FA371701EC4C005103BA /* pad_channels.h */,
 				1103FA381701EC4C005103BA /* pad_samples.h */,
-				1103FA391701EC4C005103BA /* PAD.cpp */,
-				1103FA471701EC61005103BA /* HostAPI.h */,
 				1103FA3A1701EC4C005103BA /* pad_samples_avx.h */,
 				1103FA3B1701EC4C005103BA /* pad_samples_sse2.h */,
+				1103FA491701EFB2005103BA /* pad_jack.cpp */,
+				11B8B25017024885006E717C /* pad_coreaudio.cpp */,
 				1103FA271701EB98005103BA /* Supporting Files */,
 			);
 			path = PAD;
@@ -252,6 +269,7 @@
 				1103FA401701EC4C005103BA /* PAD.cpp in Sources */,
 				1103FA441701EC55005103BA /* HostAPI.cpp in Sources */,
 				1103FA4A1701EFB2005103BA /* pad_jack.cpp in Sources */,
+				11B8B25217024885006E717C /* pad_coreaudio.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -428,6 +446,7 @@
 				1104D651170242F700721830 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
