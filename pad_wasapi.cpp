@@ -111,6 +111,11 @@ public:
                         delegateBuffer.resize(nFramesInBuffer*numOutputs);
                         currentConfiguration.SetBufferSize(nFramesInBuffer);
                         hr = outputAudioClient->GetService(__uuidof(IAudioRenderClient),(void**)outputAudioRenderClient.NullAndGetPtrAddress());
+                        enabledDeviceOutputs.resize(numOutputs);
+                        for (unsigned i=0;i<numOutputs;i++)
+                        {
+                            enabledDeviceOutputs[i]=currentConfiguration.IsOutputEnabled(i);
+                        }
                     } else cerr << "PAD/WASAPI : Output audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
 
                 } else cerr << "PAD/WASAPI : Could not initialize IAudioClient\n";
@@ -166,6 +171,7 @@ public:
     bool m_stopThread;
     vector<float> delegateBuffer;
     unsigned glitchCounter;
+    vector<bool> enabledDeviceOutputs;
 private:
     HANDLE audioThreadHandle;
     vector<PadComSmartPointer<IMMDevice>> inputEndpoints;
@@ -243,8 +249,10 @@ struct WasapiPublisher : public HostAPIPublisher
             hr=tempClient->GetMixFormat(&mixFormat);
             if (CheckHResult(hr,"PAD/WASAPI : Could not get mix format")==false) continue;
             WAVEFORMATEXTENSIBLE format;
-            CopyWavFormat (format, mixFormat);
-            CoTaskMemFree (mixFormat);
+            CopyWavFormat(format, mixFormat);
+            //WAVE_FORMAT_IEEE_FLOAT
+            //cout << "endpoint " << i << " format is " << mixFormat->wFormatTag << "\n";
+            CoTaskMemFree(mixFormat);
             if (audioDirection==eRender)
             {
                 wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels);
@@ -264,6 +272,7 @@ struct WasapiPublisher : public HostAPIPublisher
 
 DWORD WINAPI WasapiThreadFunction(LPVOID params)
 {
+    CheckHResult(CoInitialize(0),"Wasapi audio thread could not init COM");
     WasapiDevice* dev=(WasapiDevice*)params;
     cout << "starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
     HANDLE hWantData=CreateEvent(NULL, FALSE, FALSE, NULL);
@@ -294,9 +303,8 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                 unsigned k=0;
                 for (unsigned i=0;i<numDeviceChans;i++)
                 {
-                    if (curConf.IsOutputEnabled(i)==true)
+                    if (dev->enabledDeviceOutputs[i]==true)
                     {
-                        //cout << "chan " << i << " audio " << counter << "\n";
                         for (unsigned j=0;j<nFramesInBuffer-nFramesOfPadding;j++)
                         {
                             pf[j*numDeviceChans+i]=dev->delegateBuffer[j*numStreamChans+k];
@@ -304,7 +312,6 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                         k++;
                     } else
                     {
-                        //cout << "chan " << i << " tacet " << counter << "\n";
                         for (unsigned j=0;j<nFramesInBuffer-nFramesOfPadding;j++)
                         {
                             pf[j*numDeviceChans+i]=0.0;
