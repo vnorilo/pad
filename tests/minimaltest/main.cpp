@@ -2,13 +2,15 @@
 #include "pad.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include "Windows.h"
+
 using namespace std;
 using namespace PAD;
 
 int main()
 {
     cout << "Hello from PAD "<<PAD::VersionString()<<"!"<<endl;
-    //getchar();
+    getchar();
     using namespace PAD;
     class ErrorLogger : public DeviceErrorDelegate {
     public:
@@ -25,9 +27,9 @@ int main()
                   << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
     }
     //return 0;
-    auto asioDevice = myAudioSession.FindDevice("E-MU E-DSP");
+    auto audioDevice = myAudioSession.FindDevice("E-MU ASIO");
     //getchar();
-    if (asioDevice != myAudioSession.end())
+    if (audioDevice != myAudioSession.end())
     {
         double phase = 0;
         auto myAudioProcess = Closure(([&](uint64_t time, const PAD::AudioStreamConfiguration& cfg, const float *input, float *output, unsigned frames)
@@ -49,14 +51,22 @@ int main()
         AudioStreamConfiguration conf;
         //conf.SetSampleRate(22050.0);
         conf.SetAudioDelegate(myAudioProcess);
-        conf.AddDeviceOutputs(ChannelRange(1,3));
-        AudioStreamConfiguration actualConf=asioDevice->Open(conf);
-        std::cout << "actual stream parameters " << actualConf << "\n";
-        std::cout << "actual buffer size is "<<actualConf.GetBufferSize()<<"\n";
-        std::cout << "device name is " << asioDevice->GetName() << "\n";
-        getchar();
-        asioDevice->Close();
+        conf.AddDeviceOutputs(ChannelRange(0,2));
+        for (int i=0;i<64;i++)
+        {
+            cout << "lifecycle pass " << i << ", opening device and playing audio...\n";
+            AudioStreamConfiguration actualConf=audioDevice->Open(conf);
+            //std::cout << "actual stream parameters " << actualConf << "\n";
+            //std::cout << "actual buffer size is "<<actualConf.GetBufferSize()<<"\n";
+            //std::cout << "device name is " << audioDevice->GetName() << "\n";
+            Sleep(100);
+            audioDevice->Close();
+            //Sleep(2000);
+            cout << "device closed for pass " << i << "\n";
+            cout << "\n";
+        }
     }
+    getchar();
     return 0;
 }
 
