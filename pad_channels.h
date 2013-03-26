@@ -14,7 +14,7 @@ namespace PAD {
 
 				for(unsigned j(0);j<VEC;++j)
 				{
-					auto tmp = SAMPLE::ConstructVector<VEC>((typename SAMPLE::smp_t*)blockBuffers[0]);
+					auto tmp = SAMPLE::ConstructVector<VEC>(blockBuffers[0]);
 					tmp = mtx[j];
 					tmp.data.Write<ALIGN_B>((typename SAMPLE::smp_t*)blockBuffers[j]+i);
 				}

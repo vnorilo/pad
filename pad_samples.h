@@ -216,8 +216,7 @@ namespace PAD{
 			}
 		};
 
-		template <int N, typename SMP>
-		static void Transpose(SampleVector<SMP,N> *v)
+		template <int N, typename SMP> static void Transpose(SampleVector<SMP,N> *v)
 		{
 			for(unsigned i(0);i<N;++i)
 				for(unsigned j(i+1);j<N;++j)

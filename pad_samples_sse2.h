@@ -104,7 +104,7 @@ namespace PAD{
 			}
 		};
 
-		template <> void Transpose<>(SampleVector<float,4> *v)
+		template <> static void Transpose<>(SampleVector<float,4> *v)
 		{
 			__m128i t0 = _mm_castps_si128(_mm_unpacklo_ps(v[0].data,v[1].data));
 			__m128i t1 = _mm_castps_si128(_mm_unpacklo_ps(v[2].data,v[3].data));
