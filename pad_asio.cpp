@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <unordered_map>
 #include <mutex>
+#include <thread>
 
 #include "HostAPI.h"
 #include "PAD.h"
@@ -62,6 +63,8 @@ namespace {
 
 		unsigned numInputs, numOutputs;
 		unsigned index;
+
+		volatile unsigned callbackEntryCounter;
 		
 		AudioStreamConfiguration currentConfiguration;
 		AudioCallbackDelegate* currentDelegate;
@@ -84,6 +87,13 @@ namespace {
 		case Running:
 			if (to == Running) break;
 			THROW_ERROR(DeviceStopStreamFailure,ASIO().stop());
+
+			while(callbackEntryCounter>0)
+			{
+				fprintf(stderr,"*WARNING* ASIO driver allowed premature stop stream");
+				this_thread::yield();
+			}
+
 		case Prepared:
 			State = Prepared;
 			if (to == Prepared) break;
@@ -95,15 +105,13 @@ namespace {
 		case Loaded:
 			State = Loaded;
 			if (to == Loaded) break;
-//			THROW_ERROR(DeviceDeinitializationFailure,ASIOExit());
-			//drivers.removeCurrentDriver();
 		case Idle: break;
 		}
 	}
 
 	public:
 		AsioDevice(ASIO::ComRef<ASIO::IASIO> comDriver,double defaultRate, const string& name, unsigned inputs, unsigned outputs):
-			deviceName(name),numInputs(inputs),numOutputs(outputs),driver(move(comDriver))
+			deviceName(name),numInputs(inputs),numOutputs(outputs),driver(move(comDriver)),callbackEntryCounter(0)
 		{
 			if (numOutputs >= 1)
 			{
@@ -129,7 +137,6 @@ namespace {
 
 		~AsioDevice()
 		{
-			Close();
 			AsioUnwind(Initialized);
 		}
 
@@ -182,7 +189,6 @@ namespace {
 			case ASIO::EngineVersion:
 				return 2L;
 			case ASIO::ResetRequest:
-				AsioUnwind(Idle);
 			case ASIO::ResyncRequest:
 			case ASIO::LatenciesChanged:
 			case ASIO::SupportsTimeInfo:
@@ -476,6 +482,8 @@ namespace {
 
 		ASIO::Time* BufferSwitchTimeInfo(ASIO::Time* params, long doubleBufferIndex, ASIO::Bool directProcess)
 		{
+			callbackEntryCounter++;
+
 			/* convert ASIO format to canonical format */
 			void *bufferPtr[64];
 			unsigned block(0);
@@ -546,6 +554,8 @@ namespace {
 
 				ASIO().outputReady();
 			}
+
+			--callbackEntryCounter;
             return params;
 		}
 
@@ -653,11 +663,32 @@ namespace {
 
 	} publisher;
 
+	static ASIO::Time dummyTime;
 	template <int IDX> class CallbackForwarder{
-		static void bufferSwitch(long doubleBufferIndex, ASIO::Bool directProcess) {GetDevice()->BufferSwitch(doubleBufferIndex,directProcess);}
-		static void sampleRateDidChange(ASIO::SampleRate sRate) {GetDevice()->SampleRateDidChange(sRate);}
-		static long asioMessage(long selector, long value, void* message, double* opt) {return GetDevice()->AsioMessage(selector,value,message,opt);}
-		static ASIO::Time* bufferSwitchTimeInfo(ASIO::Time* params, long doubleBufferIndex, ASIO::Bool directProcess) {return GetDevice()->BufferSwitchTimeInfo(params,doubleBufferIndex,directProcess);}
+		static void bufferSwitch(long doubleBufferIndex, ASIO::Bool directProcess) 
+		{
+			AsioDevice* ad(GetDevice());
+			if (ad) ad->BufferSwitch(doubleBufferIndex,directProcess);
+		}
+
+		static void sampleRateDidChange(ASIO::SampleRate sRate) 
+		{
+			AsioDevice* ad(GetDevice());
+			if (ad) ad->SampleRateDidChange(sRate);
+		}
+
+		static long asioMessage(long selector, long value, void* message, double* opt) 
+		{
+			AsioDevice* ad(GetDevice());
+			if (ad) return ad->AsioMessage(selector,value,message,opt); else return 0L;
+		}
+
+		static ASIO::Time* bufferSwitchTimeInfo(ASIO::Time* params, long doubleBufferIndex, ASIO::Bool directProcess) 
+		{
+			AsioDevice* ad(GetDevice());
+			if (ad) return ad->BufferSwitchTimeInfo(params,doubleBufferIndex,directProcess); else return &dummyTime;
+		}
+
 		static AsioDevice*& GetDevice() {static AsioDevice* device; return device;}
 	public:
 		static bool AlreadyHasCallbacks(AsioDevice* master)
