@@ -161,16 +161,6 @@ namespace PAD{
 			HOST_FORMAT data;
 			HostSample(){}
 
-			//static HostSample ToMachineFormat(const HOST_FORMAT& constructFrom)
-			//{
-			//	HostSample tmp;
-			//	tmp.data = constructFrom;
-			//	if (BIGENDIAN != SYSTEM_BIGENDIAN)
-			//	{
-			//		tmp.data = Bytes<HOST_FORMAT>::Swap(tmp.data);
-			//	}
-			//}
-
 			HostSample(const CANONICAL_FORMAT& convertFrom)
 			{
 				*this = convertFrom;
@@ -207,7 +197,7 @@ namespace PAD{
 			}
 
 			template <int N> static
-				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN> ConstructVector()
+				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN> ConstructVector(const _myt* ptrb)
 			{
 				return HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN>();
 			}
@@ -216,8 +206,6 @@ namespace PAD{
 				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN> LoadVector(const _myt* ptr)
 			{
 				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN> tmp;
-				const void *ptr1 = &ptr->data;
-				const void *ptr2 = ptr;
 				assert((const void*)&ptr->data == (const void*)ptr);
 				tmp.data.Load<ALIGNED>(&ptr->data);
 				if (BIGENDIAN != SYSTEM_BIGENDIAN)
