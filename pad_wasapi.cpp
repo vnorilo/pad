@@ -29,20 +29,12 @@ using namespace PAD;
 
 class WasapiDevice;
 
-bool g_STOP=false;
-
 DWORD WINAPI WasapiThreadFunction(LPVOID params);
 class WasapiDevice : public AudioDevice
 {
 public:
-    WasapiDevice() : deviceName("Invalid"), numInputs(0), numOutputs(0), audioThreadHandle(0), currentDelegate(0)
+    WasapiDevice() : deviceName("Invalid"), numInputs(0), numOutputs(0), audioThreadHandle(0), currentDelegate(0), m_stopThread(false)
     {
-
-    }
-    WasapiDevice(unsigned i,double defaultRate,const string& name, unsigned inputs, unsigned outputs):
-        deviceName(name),numInputs(inputs),numOutputs(outputs),index(i)
-    {
-
     }
     ~WasapiDevice()
     {
@@ -97,6 +89,7 @@ public:
     virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration& conf)
     {
         cout << "Wasapi::Open, thread id "<<GetCurrentThreadId()<<"\n";
+        m_stopThread=false;
         currentDelegate = &conf.GetAudioDelegate();
         currentConfiguration=conf;
         HRESULT hr=0;
@@ -130,12 +123,14 @@ public:
             if (!audioThreadHandle)
                 cout << "it failed :C\n";
         }
+        m_stopThread=false;
         Resume();
     }
 
     virtual void Resume()
     {
         cout << "Pad/Wasapi : Resume()\n";
+        m_stopThread=false;
         if (audioThreadHandle)
         {
             ResumeThread(audioThreadHandle);
@@ -143,22 +138,27 @@ public:
     }
     virtual void Suspend()
     {
+        m_stopThread=true;
         cout  << "Pad/Wasapi : Suspend()\n";
         if (audioThreadHandle)
         {
-            SuspendThread(audioThreadHandle);
+            WaitForSingleObject(audioThreadHandle,1000);
         }
     }
 
     virtual void Close()
     {
-        g_STOP=true;
-        Sleep(1000); // :)
+        cout << "Pad/Wasapi close, waiting for thread to stop...\n";
+        m_stopThread=true;
+        if (WaitForSingleObject(audioThreadHandle,1000)==WAIT_TIMEOUT)
+            cout << "Pad/Wasapi close, thread timed out when stopping\n";
+        cout << "Pad/Wasapi close, thread was stopped\n";
     }
     AudioCallbackDelegate* currentDelegate;
     AudioStreamConfiguration currentConfiguration;
     PadComSmartPointer<IAudioClient> outputAudioClient;
     PadComSmartPointer<IAudioRenderClient> outputAudioRenderClient;
+    bool m_stopThread;
 private:
     HANDLE audioThreadHandle;
     vector<PadComSmartPointer<IMMDevice>> inputEndpoints;
@@ -266,7 +266,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     int counter=0;
     int nFramesInBuffer=dev->currentConfiguration.GetBufferSize();
     BYTE* data=0;
-    while (g_STOP==false)
+    while (dev->m_stopThread==false)
     {
         if (WaitForSingleObject(hWantData,1000)==WAIT_OBJECT_0)
         {
@@ -275,7 +275,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
             hr = dev->outputAudioClient->GetCurrentPadding(&nFramesOfPadding);
             if (nFramesOfPadding < nFramesInBuffer)
             {
-                cout << "some stupid glitch :C\n";
+                //cout << "some stupid glitch :C\n";
             }
             hr = dev->outputAudioRenderClient->GetBuffer(nFramesInBuffer - nFramesOfPadding, &data);
             if (hr>=0 && data!=nullptr)
