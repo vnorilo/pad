@@ -25,7 +25,7 @@ int main()
                   << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
     }
     //return 0;
-    auto asioDevice = myAudioSession.FindDevice("E-MU ASIO");
+    auto asioDevice = myAudioSession.FindDevice("E-MU E-DSP");
     //getchar();
     if (asioDevice != myAudioSession.end())
     {
@@ -54,11 +54,12 @@ int main()
                                           }
                                       }));
 
-        std::cout << "Actual stream parameters: " <<
-                     asioDevice->Open(Stream(myAudioProcess).SampleRate(44100)
-                                      .StereoInput(0).StereoOutput(0)
-                                      .Delegate(myAudioProcess)) << "\n";
-
+        AudioStreamConfiguration conf;
+        conf.SetAudioDelegate(myAudioProcess);
+        conf.AddDeviceOutputs(ChannelRange(0,2));
+        AudioStreamConfiguration actualConf=asioDevice->Open(conf);
+        std::cout << "actual stream parameters " << actualConf << "\n";
+        std::cout << "actual buffer size is "<<actualConf.GetBufferSize()<<"\n";
         std::cout << "device name is " << asioDevice->GetName() << "\n";
         getchar();
         asioDevice->Close();
