@@ -33,52 +33,61 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params);
 class WasapiDevice : public AudioDevice
 {
 public:
-    WasapiDevice() : deviceName("Invalid"), numInputs(0), numOutputs(0), audioThreadHandle(0), currentDelegate(0), m_stopThread(false)
+    enum WasapiState
+    {
+        WASS_Idle,
+        WASS_Open,
+        WASS_Playing,
+        WASS_Closed
+    };
+
+    WasapiDevice() : m_deviceName("Invalid"),
+        m_numInputs(0), m_numOutputs(0), m_audioThreadHandle(0), currentDelegate(0), m_currentState(WASS_Idle)
     {
     }
     ~WasapiDevice()
     {
-        if (audioThreadHandle)
-            CloseHandle(audioThreadHandle);
+        if (m_audioThreadHandle)
+            CloseHandle(m_audioThreadHandle);
     }
 
-    const char *GetName() const { return deviceName.c_str(); }
+    const char *GetName() const { return m_deviceName.c_str(); }
     const char *GetHostAPI() const { return "WASAPI"; }
-    void SetName(const std::string& n) { deviceName=n; }
+    void SetName(const std::string& n) { m_deviceName=n; }
     void AddInputEndPoint(const PadComSmartPointer<IMMDevice>& ep, unsigned numChannels)
     {
-        numInputs+=numChannels;
-        inputEndpoints.push_back(ep);
+        m_numInputs+=numChannels;
+        m_inputEndpoints.push_back(ep);
     }
     void AddOutputEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numChannels)
     {
-        numOutputs+=numChannels;
-        outputEndpoints.push_back(ep);
+        m_numOutputs+=numChannels;
+        m_outputEndpoints.push_back(ep);
     }
-    unsigned GetNumInputs() const {return numInputs;}
-    unsigned GetNumOutputs() const {return numOutputs;}
+    unsigned GetNumInputs() const {return m_numInputs;}
+    unsigned GetNumOutputs() const {return m_numOutputs;}
     void InitDefaultStreamConfigurations(double defaultRate)
     {
-        if (numOutputs >= 1)
+        if (m_numOutputs >= 1)
         {
-            defaultMono = AudioStreamConfiguration(defaultRate,true);
-            defaultMono.AddDeviceOutputs(Channel(0));
-            if (numInputs > 0) defaultMono.AddDeviceInputs(Channel(0));
+            m_defaultMono = AudioStreamConfiguration(defaultRate,true);
+            m_defaultMono.AddDeviceOutputs(Channel(0));
+            if (m_numInputs > 0) m_defaultMono.AddDeviceInputs(Channel(0));
         }
-        else defaultMono.SetValid(false);
+        else m_defaultMono.SetValid(false);
 
-        if (numOutputs >= 2)
+        if (m_numOutputs >= 2)
         {
-            defaultStereo = AudioStreamConfiguration(defaultRate,true);
-            defaultStereo.AddDeviceOutputs(ChannelRange(0,2));
-            if (numInputs > 0)
-                defaultStereo.AddDeviceInputs(ChannelRange(0,min(numInputs,2u)));
+            m_defaultStereo = AudioStreamConfiguration(defaultRate,true);
+            m_defaultStereo.AddDeviceOutputs(ChannelRange(0,2));
+            if (m_numInputs > 0)
+                m_defaultStereo.AddDeviceInputs(ChannelRange(0,min(m_numInputs,2u)));
         }
-        else defaultStereo.SetValid(false);
+        else m_defaultStereo.SetValid(false);
 
-        defaultAll = AudioStreamConfiguration(44100,true);
-        defaultAll.AddDeviceOutputs(ChannelRange(0,numOutputs));
-        defaultAll.AddDeviceInputs(ChannelRange(0,numInputs));
+        m_defaultAll = AudioStreamConfiguration(44100,true);
+        m_defaultAll.AddDeviceOutputs(ChannelRange(0,m_numOutputs));
+        m_defaultAll.AddDeviceInputs(ChannelRange(0,m_numInputs));
     }
 
     virtual bool Supports(const AudioStreamConfiguration&) const
@@ -88,102 +97,127 @@ public:
 
     virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration& conf)
     {
+        if (m_currentState==WASS_Playing)
+        {
+            cout << "PAD/WASAPI : Open called when already playing!\n";
+            return currentConfiguration;
+        }
         cout << "Wasapi::Open, thread id "<<GetCurrentThreadId()<<"\n";
-        glitchCounter=0;
-        m_stopThread=false;
+        m_glitchCounter=0;
+        //m_stopThread=false;
         currentDelegate = &conf.GetAudioDelegate();
         currentConfiguration=conf;
-        HRESULT hr=0;
-        if (outputEndpoints.size()>0)
+        if (m_currentState==WASS_Closed || m_currentState==WASS_Idle)
         {
-            hr = outputEndpoints.at(0)->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)outputAudioClient.NullAndGetPtrAddress());
-            if (CheckHResult(hr,"PAD/WASAPI : Activate output audioclient")==true)
+            HRESULT hr=0;
+            if (m_outputEndpoints.size()>0)
             {
-                if (outputAudioClient)
+                hr = m_outputEndpoints.at(0)->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)outputAudioClient.NullAndGetPtrAddress());
+                if (CheckHResult(hr,"PAD/WASAPI : Activate output audioclient")==true)
                 {
-                    WAVEFORMATEX *pwfx;
-                    hr = outputAudioClient->GetMixFormat(&pwfx);
-                    hr = outputAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0, 0, pwfx, NULL);
-                    UINT32 nFramesInBuffer;
-                    hr = outputAudioClient->GetBufferSize(&nFramesInBuffer);
-                    if (nFramesInBuffer>8 && nFramesInBuffer<32768)
+                    if (outputAudioClient)
                     {
-                        delegateBuffer.resize(nFramesInBuffer*numOutputs);
-                        currentConfiguration.SetBufferSize(nFramesInBuffer);
-                        hr = outputAudioClient->GetService(__uuidof(IAudioRenderClient),(void**)outputAudioRenderClient.NullAndGetPtrAddress());
-                        enabledDeviceOutputs.resize(numOutputs);
-                        for (unsigned i=0;i<numOutputs;i++)
+                        WAVEFORMATEX *pwfx;
+                        hr = outputAudioClient->GetMixFormat(&pwfx);
+                        hr = outputAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pwfx, NULL);
+                        if (CheckHResult(hr,"PAD/WASAPI : Initialize audio render client")==true)
                         {
-                            enabledDeviceOutputs[i]=currentConfiguration.IsOutputEnabled(i);
+                            UINT32 nFramesInBuffer;
+                            hr = outputAudioClient->GetBufferSize(&nFramesInBuffer);
+                            if (nFramesInBuffer>8 && nFramesInBuffer<32768)
+                            {
+                                m_delegateBuffer.resize(nFramesInBuffer*m_numOutputs);
+                                currentConfiguration.SetBufferSize(nFramesInBuffer);
+                                hr = outputAudioClient->GetService(__uuidof(IAudioRenderClient),(void**)outputAudioRenderClient.NullAndGetPtrAddress());
+                                m_enabledDeviceOutputs.resize(m_numOutputs);
+                                for (unsigned i=0;i<m_numOutputs;i++)
+                                {
+                                    m_enabledDeviceOutputs[i]=currentConfiguration.IsOutputEnabled(i);
+                                }
+                                m_currentState=WASS_Open;
+                            } else cerr << "PAD/WASAPI : Output audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
                         }
-                    } else cerr << "PAD/WASAPI : Output audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
 
-                } else cerr << "PAD/WASAPI : Could not initialize IAudioClient\n";
+                    } else cerr << "PAD/WASAPI : Could not initialize IAudioClient\n";
+                }
             }
         }
-        if (conf.HasSuspendOnStartup() == false) Run();
+        if (m_currentState==WASS_Open && conf.HasSuspendOnStartup() == false) Run();
         return currentConfiguration;
     }
     void Run()
     {
-        if (audioThreadHandle==0)
+        if (m_currentState!=WASS_Open)
+        {
+            cerr << "PAD/WASAPI : Run called when device not open\n";
+            return;
+        }
+        if (m_audioThreadHandle==0)
         {
             cout << "creating wasapi audio thread...\n";
-            audioThreadHandle=CreateThread(NULL, 0,WasapiThreadFunction, (void*)this, CREATE_SUSPENDED,NULL);
-            if (!audioThreadHandle)
-                cout << "it failed :C\n";
+            m_audioThreadHandle=CreateThread(NULL, 0,WasapiThreadFunction,(void*)this, CREATE_SUSPENDED,NULL);
+            if (!m_audioThreadHandle)
+                cout << "PAD/WASAPI : Creating audio thread failed :C\n";
         }
-        m_stopThread=false;
         Resume();
     }
 
     virtual void Resume()
     {
         cout << "Pad/Wasapi : Resume()\n";
-        m_stopThread=false;
-        if (audioThreadHandle)
+        if (m_audioThreadHandle)
         {
-            ResumeThread(audioThreadHandle);
+            m_currentState=WASS_Playing;
+            ResumeThread(m_audioThreadHandle);
         }
     }
     virtual void Suspend()
     {
-        m_stopThread=true;
-        cout  << "Pad/Wasapi : Suspend()\n";
-        if (audioThreadHandle)
+        if (m_currentState!=WASS_Playing)
         {
-            WaitForSingleObject(audioThreadHandle,1000);
+            cerr << "PAD/WASAPI : Suspend() called when not playing\n";
+            return;
+        }
+        m_currentState=WASS_Idle;
+        cout  << "Pad/Wasapi : Suspend()\n";
+        if (m_audioThreadHandle)
+        {
+            WaitForSingleObject(m_audioThreadHandle,1000);
         }
     }
 
     virtual void Close()
     {
         cout << "Pad/Wasapi close, waiting for thread to stop...\n";
-        m_stopThread=true;
-        if (WaitForSingleObject(audioThreadHandle,1000)==WAIT_TIMEOUT)
+        m_currentState=WASS_Idle;
+        if (WaitForSingleObject(m_audioThreadHandle,1000)==WAIT_TIMEOUT)
             cout << "Pad/Wasapi close, thread timed out when stopping\n";
+        m_currentState=WASS_Closed;
+        CloseHandle(m_audioThreadHandle);
+        m_audioThreadHandle=0;
         cout << "Pad/Wasapi close, thread was stopped\n";
     }
     AudioCallbackDelegate* currentDelegate;
     AudioStreamConfiguration currentConfiguration;
     PadComSmartPointer<IAudioClient> outputAudioClient;
     PadComSmartPointer<IAudioRenderClient> outputAudioRenderClient;
-    bool m_stopThread;
-    vector<float> delegateBuffer;
-    unsigned glitchCounter;
-    vector<bool> enabledDeviceOutputs;
+    //bool m_stopThread;
+    vector<float> m_delegateBuffer;
+    unsigned m_glitchCounter;
+    vector<bool> m_enabledDeviceOutputs;
+    WasapiState m_currentState;
 private:
-    HANDLE audioThreadHandle;
-    vector<PadComSmartPointer<IMMDevice>> inputEndpoints;
-    vector<PadComSmartPointer<IMMDevice>> outputEndpoints;
-    string deviceName;
-    unsigned numInputs;
-    unsigned numOutputs;
-    unsigned index;
-    AudioStreamConfiguration defaultMono, defaultStereo, defaultAll;
-    AudioStreamConfiguration DefaultMono() const { return defaultMono; }
-    AudioStreamConfiguration DefaultStereo() const { return defaultStereo; }
-    AudioStreamConfiguration DefaultAllChannels() const { return defaultAll; }
+    HANDLE m_audioThreadHandle;
+    vector<PadComSmartPointer<IMMDevice>> m_inputEndpoints;
+    vector<PadComSmartPointer<IMMDevice>> m_outputEndpoints;
+    string m_deviceName;
+    unsigned m_numInputs;
+    unsigned m_numOutputs;
+    unsigned m_index;
+    AudioStreamConfiguration m_defaultMono, m_defaultStereo, m_defaultAll;
+    AudioStreamConfiguration DefaultMono() const { return m_defaultMono; }
+    AudioStreamConfiguration DefaultStereo() const { return m_defaultStereo; }
+    AudioStreamConfiguration DefaultAllChannels() const { return m_defaultAll; }
 };
 
 EDataFlow getAudioDirection (const PadComSmartPointer<IMMDevice>& device)
@@ -274,7 +308,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
 {
     CheckHResult(CoInitialize(0),"Wasapi audio thread could not init COM");
     WasapiDevice* dev=(WasapiDevice*)params;
-    cout << "starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
+    cout << "*** Starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
     HANDLE hWantData=CreateEvent(NULL, FALSE, FALSE, NULL);
     dev->outputAudioClient->SetEventHandle(hWantData);
     HRESULT hr=dev->outputAudioClient->Start();
@@ -282,7 +316,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     int counter=0;
     int nFramesInBuffer=dev->currentConfiguration.GetBufferSize();
     BYTE* data=0;
-    while (dev->m_stopThread==false)
+    while (dev->m_currentState==WasapiDevice::WASS_Playing)
     {
         const AudioStreamConfiguration curConf=dev->currentConfiguration;
         if (WaitForSingleObject(hWantData,1000)==WAIT_OBJECT_0)
@@ -291,23 +325,23 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
             hr = dev->outputAudioClient->GetCurrentPadding(&nFramesOfPadding);
             if (nFramesOfPadding==nFramesInBuffer)
             {
-                dev->glitchCounter++;
+                dev->m_glitchCounter++;
             }
             hr = dev->outputAudioRenderClient->GetBuffer(nFramesInBuffer - nFramesOfPadding, &data);
             if (hr>=0 && data!=nullptr)
             {
-                dev->currentDelegate->Process(0,curConf,0,dev->delegateBuffer.data(),nFramesInBuffer - nFramesOfPadding);
+                dev->currentDelegate->Process(0,curConf,0,dev->m_delegateBuffer.data(),nFramesInBuffer - nFramesOfPadding);
                 float* pf=(float*)data;
                 unsigned numStreamChans=curConf.GetNumStreamOutputs();
                 unsigned numDeviceChans=dev->GetNumOutputs();
                 unsigned k=0;
                 for (unsigned i=0;i<numDeviceChans;i++)
                 {
-                    if (dev->enabledDeviceOutputs[i]==true)
+                    if (dev->m_enabledDeviceOutputs[i]==true)
                     {
                         for (unsigned j=0;j<nFramesInBuffer-nFramesOfPadding;j++)
                         {
-                            pf[j*numDeviceChans+i]=dev->delegateBuffer[j*numStreamChans+k];
+                            pf[j*numDeviceChans+i]=dev->m_delegateBuffer[j*numStreamChans+k];
                         }
                         k++;
                     } else
@@ -325,7 +359,8 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     }
     dev->outputAudioClient->Stop();
     CloseHandle(hWantData);
-    cout << "ended wasapi audio thread. "<<dev->glitchCounter<< " glitches detected\n";
+    CoUninitialize();
+    cout << "ended wasapi audio thread. "<<dev->m_glitchCounter<< " glitches detected\n";
     return 0;
 }
 }
