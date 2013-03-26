@@ -47,7 +47,7 @@ namespace PAD{
 
 	Session::Session(bool loadAll, DeviceErrorDelegate* del)
 	{
-		atexit(KillLiveSessions);
+	//	atexit(KillLiveSessions);
 		liveSession.insert(this);
 		AlwaysPropagateErrors p;
 		if (del == NULL) del = &p;

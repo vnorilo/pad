@@ -207,7 +207,7 @@ namespace PAD{
 			{
 				HostSample<SampleVector<HOST_FORMAT,N>,SampleVector<CANONICAL_FORMAT,N>,NOMINAL_MINUS,NOMINAL_PLUS,SHIFT_LEFT,BIGENDIAN> tmp;
 				assert((const void*)&ptr->data == (const void*)ptr);
-				tmp.data.Load<ALIGNED>(&ptr->data);
+				tmp.data.template Load<ALIGNED>(&ptr->data);
 				if (BIGENDIAN != SYSTEM_BIGENDIAN)
 				{
 					tmp.data=Bytes<decltype(tmp.data)>::Swap(tmp.data);
