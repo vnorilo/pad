@@ -24,27 +24,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\ASIOSDK2\host\ASIOConvertSamples.cpp">
-      <Filter>Source Files\ASIO</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\ASIOSDK2\host\asiodrivers.cpp">
-      <Filter>Source Files\ASIO</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\ASIOSDK2\host\pc\asiolist.cpp">
-      <Filter>Source Files\ASIO</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\ASIOSDK2\common\asio.cpp">
-      <Filter>Source Files\ASIO</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\ASIOSDK2\common\combase.cpp">
-      <Filter>Source Files\ASIO</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\ASIOSDK2\common\debugmessage.cpp">
-      <Filter>Source Files\ASIO</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\ASIOSDK2\common\register.cpp">
-      <Filter>Source Files\ASIO</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\pad_asio.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -63,22 +42,13 @@
     <ClCompile Include="..\..\pad_jack.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\AsioUtil.cpp">
+      <Filter>Source Files\ASIO</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\PAD.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\ASIOSDK2\host\ASIOConvertSamples.h">
-      <Filter>Header Files\ASIO</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\ASIOSDK2\host\asiodrivers.h">
-      <Filter>Header Files\ASIO</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\ASIOSDK2\host\pc\asiolist.h">
-      <Filter>Header Files\ASIO</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\ASIOSDK2\host\ginclude.h">
-      <Filter>Header Files\ASIO</Filter>
     </ClInclude>
     <ClInclude Include="..\..\HostAPI.h">
       <Filter>Header Files</Filter>
@@ -97,6 +67,9 @@
     </ClInclude>
     <ClInclude Include="..\..\PADErrors.h">
       <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\AsioUtil.h">
+      <Filter>Header Files\ASIO</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
