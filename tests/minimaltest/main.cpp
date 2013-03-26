@@ -32,31 +32,23 @@ int main()
         double phase = 0;
         auto myAudioProcess = Closure(([&](uint64_t time, const PAD::AudioStreamConfiguration& cfg, const float *input, float *output, unsigned frames)
         {
-                                          static int cnt=0;
-                                          //if (cnt<100)
-                                          //{
-                                          //cerr << "callback "<<phase<<"\n";
-                                              //cnt++;
-                                          //}
-                                          unsigned numOuts(cfg.GetNumStreamOutputs());
-                                          unsigned numIns(cfg.GetNumStreamInputs());
-                                          for(unsigned i(0);i<frames;++i)
-                                          {
-                                              for(unsigned j(0);j<numOuts;++j)
-                                              {
-                                                  if (output)
-
-                                                  output[i*numOuts+j] = 0.1*( (float)sin(phase * (1.0 + double(j)/numOuts)));
-
-                                                  //if (j<numIns) output[i*numOuts+j] = input[i*numIns+j];
-                                                  phase = phase + 0.01 * M_PI;
-                                              }
-                                          }
-                                      }));
+            unsigned numOuts(cfg.GetNumStreamOutputs());
+            unsigned numIns(cfg.GetNumStreamInputs());
+            for(unsigned i(0);i<frames;++i)
+            {
+                for(unsigned j(0);j<numOuts;++j)
+                {
+                    if (output)
+                        output[i*numOuts+j] = 0.1*( (float)sin(phase * (1.0 + double(j)/numOuts)));
+                    //if (j<numIns) output[i*numOuts+j] = input[i*numIns+j];
+                    phase = phase + 0.01 * M_PI;
+                }
+            }
+        }));
 
         AudioStreamConfiguration conf;
         conf.SetAudioDelegate(myAudioProcess);
-        conf.AddDeviceOutputs(ChannelRange(0,2));
+        conf.AddDeviceOutputs(ChannelRange(2,4));
         AudioStreamConfiguration actualConf=asioDevice->Open(conf);
         std::cout << "actual stream parameters " << actualConf << "\n";
         std::cout << "actual buffer size is "<<actualConf.GetBufferSize()<<"\n";
@@ -64,7 +56,6 @@ int main()
         getchar();
         asioDevice->Close();
     }
-
     return 0;
 }
 
