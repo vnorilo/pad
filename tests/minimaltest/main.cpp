@@ -47,8 +47,9 @@ int main()
         }));
 
         AudioStreamConfiguration conf;
+        //conf.SetSampleRate(22050.0);
         conf.SetAudioDelegate(myAudioProcess);
-        conf.AddDeviceOutputs(ChannelRange(2,4));
+        conf.AddDeviceOutputs(ChannelRange(1,3));
         AudioStreamConfiguration actualConf=asioDevice->Open(conf);
         std::cout << "actual stream parameters " << actualConf << "\n";
         std::cout << "actual buffer size is "<<actualConf.GetBufferSize()<<"\n";
