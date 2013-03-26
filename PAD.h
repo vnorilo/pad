@@ -88,6 +88,7 @@ namespace PAD{
 
 	static AudioStreamConfiguration Stream(AudioCallbackDelegate& d) {return AudioStreamConfiguration().Delegate(d);}
 
+    class AudioDevice;
     class AudioCallbackDelegate{
 	public:
 		/**
