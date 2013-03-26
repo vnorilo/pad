@@ -15,7 +15,7 @@ int main()
 	};
 	
 	Session myAudioSession(false,&ErrorLogger());
-	myAudioSession.InitializeHostAPI("WASAPI");
+	myAudioSession.InitializeHostAPI("ASIO",&ErrorLogger());
 
 	for(auto& dev : myAudioSession)
 	{
@@ -23,7 +23,7 @@ int main()
 						 << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
 	}
 
-	auto asioDevice = myAudioSession.FindDevice("wasapi","idt");
+	auto asioDevice = myAudioSession.FindDevice("ASIO","ASIO4ALL");
 
 	if (asioDevice != myAudioSession.end())
 	{
