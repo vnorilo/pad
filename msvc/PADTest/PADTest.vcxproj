@@ -148,13 +148,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\ASIOSDK2\common\asio.cpp" />
-    <ClCompile Include="..\..\ASIOSDK2\common\combase.cpp" />
-    <ClCompile Include="..\..\ASIOSDK2\common\debugmessage.cpp" />
-    <ClCompile Include="..\..\ASIOSDK2\common\register.cpp" />
-    <ClCompile Include="..\..\ASIOSDK2\host\ASIOConvertSamples.cpp" />
-    <ClCompile Include="..\..\ASIOSDK2\host\asiodrivers.cpp" />
-    <ClCompile Include="..\..\ASIOSDK2\host\pc\asiolist.cpp" />
+    <ClCompile Include="..\..\AsioUtil.cpp" />
     <ClCompile Include="..\..\HostAPI.cpp" />
     <ClCompile Include="..\..\PAD.cpp" />
     <ClCompile Include="..\..\pad_asio.cpp" />
@@ -167,10 +161,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\ASIOSDK2\host\ASIOConvertSamples.h" />
-    <ClInclude Include="..\..\ASIOSDK2\host\asiodrivers.h" />
-    <ClInclude Include="..\..\ASIOSDK2\host\ginclude.h" />
-    <ClInclude Include="..\..\ASIOSDK2\host\pc\asiolist.h" />
+    <ClInclude Include="..\..\AsioUtil.h" />
     <ClInclude Include="..\..\HostAPI.h" />
     <ClInclude Include="..\..\PAD.h" />
     <ClInclude Include="..\..\PADErrors.h" />
