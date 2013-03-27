@@ -18,8 +18,8 @@ int main()
         void Catch(HardError e) {std::cerr << "*Hard "<<e.GetCode()<<"* :" << e.what() << "\n";}
     };
 
-    Session myAudioSession(true,&ErrorLogger());
-
+    Session myAudioSession(false);
+    myAudioSession.InitializeHostAPI("WASAPI",&ErrorLogger());
 
     for(auto& dev : myAudioSession)
     {
@@ -66,6 +66,13 @@ int main()
             //cout << "device closed for pass " << i << "\n";
             //cout << "\n";
         //}
+
+        /*
+        std::cout << "Actual stream parameters: " <<
+                             audioDevice->Open(Stream(myAudioProcess).SampleRate(44100)
+                                              .StereoInput(0).StereoOutput(0)
+                                             .Delegate(myAudioProcess)) << "\n";*/
+        //getchar();
     }
     //getchar();
     return 0;
