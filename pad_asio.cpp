@@ -58,6 +58,7 @@ namespace {
 
 	class AsioDevice : public AudioDevice {
 
+		ASIO::DriverRecord driverInfo;
 		ASIO::ComRef<ASIO::IASIO> driver;
 		string deviceName;
 
@@ -78,7 +79,16 @@ namespace {
 		AudioStreamConfiguration DefaultStereo() const { return defaultStereo; }
 		AudioStreamConfiguration DefaultAllChannels() const { return defaultAll; }
 
-		ASIO::IASIO& ASIO() {return *driver;}
+		ASIO::IASIO& ASIO() 
+		{
+			if (driver.GetCount() < 1) 
+			{
+				THROW_FALSE(DeviceInitializationFailure,(driver = driverInfo.Load())); 
+				THROW_FALSE(DeviceInitializationFailure,driver->init(GetDesktopWindow()));
+			}
+			
+			return *driver;
+		}
 
 	void AsioUnwind(AsioState to)
 	{
@@ -105,13 +115,15 @@ namespace {
 		case Loaded:
 			State = Loaded;
 			if (to == Loaded) break;
-		case Idle: break;
+		case Idle: 
+			driver = ASIO::ComRef<ASIO::IASIO>();
+			break;
 		}
 	}
 
 	public:
-		AsioDevice(ASIO::ComRef<ASIO::IASIO> comDriver,double defaultRate, const string& name, unsigned inputs, unsigned outputs):
-			deviceName(name),numInputs(inputs),numOutputs(outputs),driver(move(comDriver)),callbackEntryCounter(0)
+		AsioDevice(ASIO::DriverRecord comDriverInfo,double defaultRate, const string& name, unsigned inputs, unsigned outputs):
+			deviceName(name),numInputs(inputs),numOutputs(outputs),driverInfo(comDriverInfo),callbackEntryCounter(0)
 		{
 			if (numOutputs >= 1)
 			{
@@ -137,7 +149,7 @@ namespace {
 
 		~AsioDevice()
 		{
-			AsioUnwind(Initialized);
+			AsioUnwind(Idle);
 		}
 
 		const char *GetName() const { return deviceName.c_str(); }
@@ -202,7 +214,7 @@ namespace {
 		{
 			if (State < Initialized)
 			{
-				THROW_FALSE(DeviceInitializationFailure,ASIO().init(GetDesktopWindow()));
+				this->ASIO();
 				State = Initialized;
 			}
 		}
@@ -563,12 +575,12 @@ namespace {
 		{
 			AsioUnwind(Initialized);
 
+
 			ASIO::SampleRate sr(0);
 			ASIO().getSampleRate(&sr);
 
 			if (sr!=conf.GetSampleRate()) ASIO().setSampleRate(conf.GetSampleRate());
 
-			//Load();
 			Init();
 
 			/* canonicalize passed format */
@@ -610,6 +622,10 @@ namespace {
 
 	struct AsioPublisher : public HostAPIPublisher {		
 		list<AsioDevice> devices;
+		int coInitializeCount;
+		AsioPublisher():coInitializeCount(0){}
+		~AsioPublisher() {while(coInitializeCount>0) {CoUninitialize();coInitializeCount--;} }
+
 		void RegisterDevice(Session& PADInstance, AsioDevice dev)
 		{
 			devices.push_back(dev);
@@ -625,6 +641,7 @@ namespace {
 			BlackList.insert("JackRouter");
 
 			std::vector<ASIO::DriverRecord> drivers = ASIO::GetDrivers();
+			if (drivers.size() && coInitializeCount < 1) {CoInitialize(0);coInitializeCount++;}
 
             for(auto drv : drivers)
 			{
@@ -636,13 +653,16 @@ namespace {
 						long numOutputs = 0;
 
 						ASIO::ComRef<ASIO::IASIO> driver = drv.Load();
-						ASIO::SampleRate currentSampleRate;
+						if (driver)
+						{
+							ASIO::SampleRate currentSampleRate;
 
-						THROW_FALSE(DeviceInitializationFailure,driver->init(GetDesktopWindow()));
-						THROW_ERROR(DeviceInitializationFailure,driver->getChannels(&numInputs,&numOutputs));
-						THROW_ERROR(DeviceInitializationFailure,driver->getSampleRate(&currentSampleRate));
-
-						RegisterDevice(PADInstance,AsioDevice(driver,currentSampleRate,drv.driverName,numInputs,numOutputs));
+							THROW_FALSE(DeviceInitializationFailure,driver->init(GetDesktopWindow()));
+							THROW_ERROR(DeviceInitializationFailure,driver->getChannels(&numInputs,&numOutputs));
+							THROW_ERROR(DeviceInitializationFailure,driver->getSampleRate(&currentSampleRate));
+						
+							RegisterDevice(PADInstance,AsioDevice(drv,currentSampleRate,drv.driverName,numInputs,numOutputs));
+						}
 					}
 				}
 				catch(SoftError s)
@@ -659,6 +679,7 @@ namespace {
 		void Cleanup()
 		{
 			devices.clear();
+			if (coInitializeCount>0) {coInitializeCount--;CoUninitialize();}
 		}
 
 	} publisher;

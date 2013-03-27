@@ -234,13 +234,14 @@ namespace ASIO {
 		ComRef& operator=(const ComRef& c) {if (ptr!=c.ptr) {c.ptr->AddRef();ptr->Release();ptr=c.ptr;} return *this; }
 		ComRef& operator=(ComRef&& c) {swap(ptr,c.ptr);return *this;}
 		ComRef(T* ptr=0):ptr(ptr) {if (ptr) ptr->AddRef();}
-		ComRef(const ComRef& c):ptr(c.ptr) {ptr->AddRef();}
+		ComRef(const ComRef& c):ptr(c.ptr) {if (ptr) ptr->AddRef();}
 		ComRef(ComRef&& c):ptr(c.ptr){c.ptr=0;}
 		~ComRef() {if (ptr) ptr->Release();}
 		operator T*() {return ptr;}
 		T* operator->() {return ptr;}
 		T** Placement() {*this = ComRef();return &ptr;}
 		unsigned GetCount() {if (ptr) {ptr->AddRef(); return ptr->Release();} else return 0;}
+		bool NotNull() const {return ptr!=0;}
 	};
 
 	struct DriverRecord {

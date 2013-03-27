@@ -96,7 +96,7 @@ namespace ASIO{
 					datatype = REG_SZ;
 					datasize = _datasize;
 					if (RegQueryValueEx(hksub,ASIODRV_DESC,0,&datatype,(LPBYTE)databuf,&datasize) == ERROR_SUCCESS)
-						asioDriver.driverName = (const char*)databuf;
+						asioDriver.driverName = std::string((const char*)databuf,(const char*)databuf+datasize-1);
 					else
 						asioDriver.driverName = keyname;				
 				}
@@ -123,7 +123,6 @@ namespace ASIO{
 			LoadDriver(hkEnum,keyname,drivers);
 		}
 
-		if (drivers.empty() == false) CoInitialize(0);
 		return drivers;
 	}
 

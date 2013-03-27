@@ -29,10 +29,10 @@ namespace PAD{
 		AvailablePublishers().push_back(this);
 	}
 
-	static mutex publisherMutex;
+	static recursive_mutex publisherMutex;
 	void Session::InitializeApi(HostAPIPublisher* api, DeviceErrorDelegate &errHandler)
 	{
-		lock_guard<mutex> guard(publisherMutex);
+		lock_guard<recursive_mutex> guard(publisherMutex);
 		AvailablePublishers().remove(api);
 		heldAPIProviders.push_back(api);
 		api->Publish(*this, errHandler);
@@ -44,6 +44,7 @@ namespace PAD{
 		if (del == NULL) del = &p;
 		if (loadAll)
 		{
+			lock_guard<recursive_mutex> guard(publisherMutex);
 			while(AvailablePublishers().size()) InitializeApi(AvailablePublishers().front(),*del);
 		}
 	}
@@ -68,7 +69,8 @@ namespace PAD{
 
 	Session::~Session()
 	{
-		lock_guard<mutex> guard(publisherMutex);		
+		lock_guard<recursive_mutex> guard(publisherMutex);
+		devices.clear();
 		AvailablePublishers().insert(AvailablePublishers().begin(),heldAPIProviders.begin(),heldAPIProviders.end());
 		for(auto api : heldAPIProviders) api->Cleanup(*this);
 	}
