@@ -61,12 +61,13 @@ namespace {
 		ASIO::DriverRecord driverInfo;
 		ASIO::ComRef<ASIO::IASIO> driver;
 		string deviceName;
+		static std::mutex pasasenPertti;
 
 		unsigned numInputs, numOutputs;
 		unsigned index;
 
 		volatile unsigned callbackEntryCounter;
-		
+
 		AudioStreamConfiguration currentConfiguration;
 		AudioCallbackDelegate* currentDelegate;
 		vector<ASIO::BufferInfo> bufferInfos;
@@ -86,40 +87,43 @@ namespace {
 				THROW_FALSE(DeviceInitializationFailure,(driver = driverInfo.Load())); 
 				THROW_FALSE(DeviceInitializationFailure,driver->init(GetDesktopWindow()));
 			}
-			
+
 			return *driver;
 		}
 
-	void AsioUnwind(AsioState to)
-	{
-		switch(State)
+		void AsioUnwind(AsioState to)
 		{
-		case Running:
-			if (to == Running) break;
-			THROW_ERROR(DeviceStopStreamFailure,ASIO().stop());
-
-			while(callbackEntryCounter>0)
+			lock_guard<mutex> spede(pasasenPertti);
+			switch(State)
 			{
-				fprintf(stderr,"*WARNING* ASIO driver allowed premature stop stream");
-				this_thread::yield();
+			case Running:
+				if (to == Running) break;
+				THROW_ERROR(DeviceStopStreamFailure,ASIO().stop());
+
+				while(callbackEntryCounter>0)
+				{
+					fprintf(stderr,"*WARNING* ASIO driver allowed premature stop stream");
+					this_thread::yield();
+				}
+
+			case Prepared:
+				State = Prepared;
+				if (to == Prepared) break;
+				THROW_ERROR(DeviceCloseStreamFailure,ASIO().disposeBuffers());
+			case Initialized:
+				State = Initialized;
+				callbacks.Release(*this);
+				if (to == Initialized) break;
+			case Loaded:
+				State = Loaded;
+				if (to == Loaded) break;
+			case Idle: 
+				driver = ASIO::ComRef<ASIO::IASIO>();
+				break;
 			}
 
-		case Prepared:
-			State = Prepared;
-			if (to == Prepared) break;
-			THROW_ERROR(DeviceCloseStreamFailure,ASIO().disposeBuffers());
-		case Initialized:
-			State = Initialized;
-			callbacks.Release(*this);
-			if (to == Initialized) break;
-		case Loaded:
-			State = Loaded;
-			if (to == Loaded) break;
-		case Idle: 
-			driver = ASIO::ComRef<ASIO::IASIO>();
-			break;
+			this_thread::sleep_for(chrono::milliseconds(20));
 		}
-	}
 
 	public:
 		AsioDevice(ASIO::DriverRecord comDriverInfo,double defaultRate, const string& name, unsigned inputs, unsigned outputs):
@@ -180,7 +184,7 @@ namespace {
 			currentConfiguration.SetSampleRate(sRate);
 			if (currentDelegate) 
 				currentDelegate->StreamConfigurationDidChange(
-					AudioCallbackDelegate::SampleRateDidChange,currentConfiguration);
+				AudioCallbackDelegate::SampleRateDidChange,currentConfiguration);
 		}
 
 		long AsioMessage(long selector, long value, void* message, double* opt)
@@ -214,12 +218,11 @@ namespace {
 		{
 			if (State < Initialized)
 			{
-				this->ASIO();
+				this->ASIO(); // trigger loading of the driver
 				State = Initialized;
 			}
 		}
 
-//		ASIO::Callbacks asioCb;
 
 		AsioCallbackHolder callbacks;
 		void Prepare()
@@ -227,8 +230,6 @@ namespace {
 			if (State < Prepared)
 			{
 				long minBuf, maxBuf, prefBuf, bufGran;
-				//ASIO::Callbacks tmp = {BufferSwitch,SampleRateDidChange,AsioMessage,BufferSwitchTimeInfo};
-				//asioCb = tmp;
 				callbacks.Allocate(*this);
 				THROW_ERROR(DeviceOpenStreamFailure,ASIO().getBufferSize(&minBuf,&maxBuf,&prefBuf,&bufGran));
 				callbackBufferFrames = prefBuf;
@@ -259,6 +260,7 @@ namespace {
 				delegateBufferOutput.resize(callbackBufferFrames * streamNumOutputs);
 
 				THROW_ERROR(DeviceOpenStreamFailure,ASIO().createBuffers(bufferInfos.data(),bufferInfos.size(),callbackBufferFrames,callbacks));
+				State = Prepared;
 
 				channelInfos.clear();
 				channelInfos.resize(bufferInfos.size());
@@ -269,7 +271,6 @@ namespace {
 					THROW_ERROR(DeviceOpenStreamFailure,ASIO().getChannelInfo(&channelInfos[i]));
 				}
 
-				State = Prepared;
 			}
 		}
 
@@ -329,12 +330,12 @@ namespace {
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
-			//case ASIO::Float64MSB: 
-			//	{
-			//		typedef HostSample<double,float,-1,1,0,true> AsioSmp;
-			//		ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
-			//		break;
-			//	}
+				//case ASIO::Float64MSB: 
+				//	{
+				//		typedef HostSample<double,float,-1,1,0,true> AsioSmp;
+				//		ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+				//		break;
+				//	}
 			case ASIO::Int16LSB: 
 				{
 					typedef HostSample<int16_t,float,-(1<<15),(1<<15)-1,0,false> AsioSmp;
@@ -377,12 +378,12 @@ namespace {
 					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
-			//case ASIO::Float64LSB: 
-			//	{
-			//		typedef HostSample<double,float,-1,1,0,false> AsioSmp;
-			//		ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
-			//		break;
-			//	}
+				//case ASIO::Float64LSB: 
+				//	{
+				//		typedef HostSample<double,float,-1,1,0,false> AsioSmp;
+				//		ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+				//		break;
+				//	}
 			default:break;
 			}
 		}
@@ -433,12 +434,12 @@ namespace {
 					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
-			//case ASIO::Float64MSB: 
-			//	{
-			//		typedef HostSample<double,float,-1,1,0,true> AsioSmp;
-			//		ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-			//		break;
-			//	}
+				//case ASIO::Float64MSB: 
+				//	{
+				//		typedef HostSample<double,float,-1,1,0,true> AsioSmp;
+				//		ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+				//		break;
+				//	}
 			case ASIO::Int16LSB: 
 				{
 					typedef HostSample<int16_t,float,-(1<<16),(1<<16)-1,0,false> AsioSmp;
@@ -481,12 +482,12 @@ namespace {
 					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
-			//case ASIO::Float64LSB: 
-			//	{
-			//		typedef HostSample<double,float,-1,1,0,false> AsioSmp;
-			//		ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-			//		break;
-			//	}
+				//case ASIO::Float64LSB: 
+				//	{
+				//		typedef HostSample<double,float,-1,1,0,false> AsioSmp;
+				//		ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+				//		break;
+				//	}
 			default:break;
 			}
 		}
@@ -494,6 +495,7 @@ namespace {
 
 		ASIO::Time* BufferSwitchTimeInfo(ASIO::Time* params, long doubleBufferIndex, ASIO::Bool directProcess)
 		{
+			lock_guard<mutex> spede(pasasenPertti);
 			callbackEntryCounter++;
 
 			/* convert ASIO format to canonical format */
@@ -501,7 +503,7 @@ namespace {
 			unsigned block(0);
 			ASIO::SampleType blockType(-1);
 			unsigned strideInCanonicalBuffer = streamNumInputs;
-						
+
 
 			/* convert ASIO format to canonical format */
 			if (streamNumInputs)
@@ -532,9 +534,9 @@ namespace {
 			}
 
 			currentDelegate->Process(0ll,currentConfiguration,
-									 delegateBufferInput.data(),
-									 delegateBufferOutput.data(),
-									 callbackBufferFrames);
+				delegateBufferInput.data(),
+				delegateBufferOutput.data(),
+				callbackBufferFrames);
 
 			/* convert canonical format to ASIO format */
 			if (streamNumOutputs)
@@ -568,13 +570,12 @@ namespace {
 			}
 
 			--callbackEntryCounter;
-            return params;
+			return params;
 		}
 
 		virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration& conf)
 		{
 			AsioUnwind(Initialized);
-
 
 			ASIO::SampleRate sr(0);
 			ASIO().getSampleRate(&sr);
@@ -623,8 +624,8 @@ namespace {
 	struct AsioPublisher : public HostAPIPublisher {		
 		list<AsioDevice> devices;
 		int coInitializeCount;
-		AsioPublisher():coInitializeCount(0){}
-		~AsioPublisher() {while(coInitializeCount>0) {CoUninitialize();coInitializeCount--;} }
+		AsioPublisher():coInitializeCount(0) {}
+		~AsioPublisher() {devices.clear(); while(coInitializeCount>0) {CoUninitialize();coInitializeCount--;} }
 
 		void RegisterDevice(Session& PADInstance, AsioDevice dev)
 		{
@@ -643,7 +644,7 @@ namespace {
 			std::vector<ASIO::DriverRecord> drivers = ASIO::GetDrivers();
 			if (drivers.size() && coInitializeCount < 1) {CoInitialize(0);coInitializeCount++;}
 
-            for(auto drv : drivers)
+			for(auto drv : drivers)
 			{
 				try
 				{
@@ -660,7 +661,7 @@ namespace {
 							THROW_FALSE(DeviceInitializationFailure,driver->init(GetDesktopWindow()));
 							THROW_ERROR(DeviceInitializationFailure,driver->getChannels(&numInputs,&numOutputs));
 							THROW_ERROR(DeviceInitializationFailure,driver->getSampleRate(&currentSampleRate));
-						
+
 							RegisterDevice(PADInstance,AsioDevice(drv,currentSampleRate,drv.driverName,numInputs,numOutputs));
 						}
 					}
@@ -764,4 +765,6 @@ namespace {
 		CallbackForwarder<NUM_CALLBACKS>::Free(&master);
 		memset(&cb,0,sizeof(ASIO::Callbacks));
 	}
+
+	mutex AsioDevice::pasasenPertti;
 }
