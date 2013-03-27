@@ -8,15 +8,15 @@ namespace PAD {
 			for(;i+VEC<=frames;i+=VEC)
 			{
 				SampleVector<float,VEC> mtx[VEC];
-				for(unsigned j(0);j<VEC;++j) mtx[j].Load<ALIGN_I>(interleavedBuffer + (i+j) * stride);
+				for(unsigned j(0);j<VEC;++j) mtx[j].template Load<ALIGN_I>(interleavedBuffer + (i+j) * stride);
 				
 				Transpose(mtx);
 
 				for(unsigned j(0);j<VEC;++j)
 				{
-					auto tmp = SAMPLE::ConstructVector<VEC>(blockBuffers[0]);
+					auto tmp = SAMPLE::template ConstructVector<VEC>(blockBuffers[0]);
 					tmp = mtx[j];
-					tmp.data.Write<ALIGN_B>((typename SAMPLE::smp_t*)blockBuffers[j]+i);
+					tmp.data.template Write<ALIGN_B>((typename SAMPLE::smp_t*)blockBuffers[j]+i);
 				}
 			}
 
@@ -39,13 +39,14 @@ namespace PAD {
 			for(;i+VEC<=frames;i+=VEC)
 			{
 				SampleVector<float,VEC> mtx[VEC];
+                SAMPLE fmt;
 				for(unsigned j(0);j<VEC;++j) 
-					mtx[j] = SAMPLE::LoadVector<VEC,ALIGN_B>(bb[j] + i);
+					mtx[j] = SAMPLE::template LoadVector<VEC,ALIGN_B>(bb[j] + i);
 
 				Transpose(mtx);
 
 				for(unsigned j(0);j<VEC;++j) 
-					mtx[j].Write<ALIGN_I>(interleavedBuffer + (i+j) * stride);
+					mtx[j].template Write<ALIGN_I>(interleavedBuffer + (i+j) * stride);
 			}
 
 			if (i < frames)
@@ -86,7 +87,7 @@ namespace PAD {
 			else if (channels >= 2)
 			{
 				/* interleave 2 channels from bundle into destination */
-				DeInterleaveBundle<2,false,false>(interleavedBuffer,blockBuffers,frames,stride);
+				DeInterleaveBundle<2,AI,AB>(interleavedBuffer,blockBuffers,frames,stride);
 				DeInterleaveVectored<AI,AB>(interleavedBuffer + 2, blockBuffers + 2, frames, channels - 2, stride);
 			}
 			else
