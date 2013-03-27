@@ -552,7 +552,7 @@ namespace {
 					FormatOutput(blockType, delegateBufferOutput.data()+beg-streamNumInputs,bufferPtr,callbackBufferFrames,streamNumChannels-beg,streamNumOutputs);
 				}
 
-				ASIO().outputReady();
+                ASIO().outputReady();
 			}
 
 			--callbackEntryCounter;

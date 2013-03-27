@@ -157,7 +157,8 @@ static bool CheckHResult(HRESULT r,const std::string& context=std::string())
     if (r<0)
     {
         if (context.size()>0)
-            std::cerr << "COM/winapi error : "<<context<<"\n";
+            std::cerr << "COM/winapi error : "<<context<<" " << r << "\n";
+        else std::cerr << "COM/winapi error : " << r << "\n";
         return false;
     }
     return true;
