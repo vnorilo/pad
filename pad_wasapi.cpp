@@ -355,6 +355,10 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                 hr = dev->outputAudioRenderClient->ReleaseBuffer(nFramesInBuffer - nFramesOfPadding, 0);
             }
             counter++;
+        } else
+        {
+            cerr << "PAD/WASAPI : Audio thread had to wait too long for data, ending thread\n";
+            break;
         }
     }
     dev->outputAudioClient->Stop();

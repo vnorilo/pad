@@ -27,7 +27,7 @@ int main()
                   << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
     }
     //return 0;
-    auto audioDevice = myAudioSession.FindDevice("E-MU ASIO");
+    auto audioDevice = myAudioSession.FindDevice("E-MU E-DSP");
     //getchar();
     if (audioDevice != myAudioSession.end())
     {
