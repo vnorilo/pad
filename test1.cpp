@@ -36,20 +36,15 @@ int main()
 			{
 				for(unsigned j(0);j<numOuts;++j)
 				{
-					output[i*numOuts+j] = (float)sin(phase * (1.0 + double(j)/numOuts)) * 0.8;
+					output[i*numOuts+j] = (float)sin(phase * (2 + double(j)/numOuts)) * 0.8;
 					if (j<numIns) output[i*numOuts+j] = input[i*numIns+j];
 					phase = phase + 0.01 * M_PI;
 				}
 			}
 		}));
 
-        AudioStreamConfiguration conf;
-        //conf.SetSampleRate(22050.0);
-        conf.SetAudioDelegate(myAudioProcess);
-        conf.AddDeviceOutputs(ChannelRange(0,2));
-
 		std::cout << "Actual stream parameters: " <<
-		asioDevice->Open(conf);
+		asioDevice->Open(Stream(myAudioProcess).StereoOutput(0).SampleRate(48000));
 		getchar();
 		asioDevice->Close();
 	}
