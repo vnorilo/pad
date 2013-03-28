@@ -488,7 +488,7 @@ namespace {
 					Format<Output>(blockType, delegateBufferOutput.data()+beg-streamNumInputs,bufferPtr,callbackBufferFrames,streamNumChannels-beg,streamNumOutputs);
 				}
 
-				ASIO().outputReady();
+                ASIO().outputReady();
 			}
 
 			return params;

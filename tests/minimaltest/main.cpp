@@ -10,7 +10,7 @@ using namespace PAD;
 int main()
 {
     cout << "Hello from PAD "<<PAD::VersionString()<<"!"<<endl;
-    getchar();
+    //getchar();
     using namespace PAD;
     class ErrorLogger : public DeviceErrorDelegate {
     public:
@@ -18,8 +18,8 @@ int main()
         void Catch(HardError e) {std::cerr << "*Hard "<<e.GetCode()<<"* :" << e.what() << "\n";}
     };
 
-    Session myAudioSession(true,&ErrorLogger());
-
+    Session myAudioSession(false);
+    myAudioSession.InitializeHostAPI("WASAPI",&ErrorLogger());
 
     for(auto& dev : myAudioSession)
     {
@@ -27,7 +27,7 @@ int main()
                   << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
     }
     //return 0;
-    auto audioDevice = myAudioSession.FindDevice("E-MU ASIO");
+    auto audioDevice = myAudioSession.FindDevice("E-MU E-DSP");
     //getchar();
     if (audioDevice != myAudioSession.end())
     {
@@ -52,21 +52,29 @@ int main()
         //conf.SetSampleRate(22050.0);
         conf.SetAudioDelegate(myAudioProcess);
         conf.AddDeviceOutputs(ChannelRange(0,2));
-        for (int i=0;i<64;i++)
-        {
-            cout << "lifecycle pass " << i << ", opening device and playing audio...\n";
+        //for (int i=0;i<64;i++)
+        //{
+            //cout << "lifecycle pass " << i << ", opening device and playing audio...\n";
             AudioStreamConfiguration actualConf=audioDevice->Open(conf);
-            //std::cout << "actual stream parameters " << actualConf << "\n";
-            //std::cout << "actual buffer size is "<<actualConf.GetBufferSize()<<"\n";
-            //std::cout << "device name is " << audioDevice->GetName() << "\n";
-            Sleep(100);
+            std::cout << "actual stream parameters " << actualConf << "\n";
+            std::cout << "actual buffer size is "<<actualConf.GetBufferSize()<<"\n";
+            std::cout << "device name is " << audioDevice->GetName() << "\n";
+            getchar();
+            //Sleep(100);
             audioDevice->Close();
             //Sleep(2000);
-            cout << "device closed for pass " << i << "\n";
-            cout << "\n";
-        }
+            //cout << "device closed for pass " << i << "\n";
+            //cout << "\n";
+        //}
+
+        /*
+        std::cout << "Actual stream parameters: " <<
+                             audioDevice->Open(Stream(myAudioProcess).SampleRate(44100)
+                                              .StereoInput(0).StereoOutput(0)
+                                             .Delegate(myAudioProcess)) << "\n";*/
+        //getchar();
     }
-    getchar();
+    //getchar();
     return 0;
 }
 

@@ -112,23 +112,23 @@ public:
             HRESULT hr=0;
             if (m_outputEndpoints.size()>0)
             {
-                hr = m_outputEndpoints.at(0)->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)outputAudioClient.NullAndGetPtrAddress());
+                hr = m_outputEndpoints.at(0)->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)m_outputAudioClient.NullAndGetPtrAddress());
                 if (CheckHResult(hr,"PAD/WASAPI : Activate output audioclient")==true)
                 {
-                    if (outputAudioClient)
+                    if (m_outputAudioClient)
                     {
                         WAVEFORMATEX *pwfx;
-                        hr = outputAudioClient->GetMixFormat(&pwfx);
-                        hr = outputAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pwfx, NULL);
+                        hr = m_outputAudioClient->GetMixFormat(&pwfx);
+                        hr = m_outputAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pwfx, NULL);
                         if (CheckHResult(hr,"PAD/WASAPI : Initialize audio render client")==true)
                         {
                             UINT32 nFramesInBuffer;
-                            hr = outputAudioClient->GetBufferSize(&nFramesInBuffer);
+                            hr = m_outputAudioClient->GetBufferSize(&nFramesInBuffer);
                             if (nFramesInBuffer>8 && nFramesInBuffer<32768)
                             {
                                 m_delegateBuffer.resize(nFramesInBuffer*m_numOutputs);
                                 currentConfiguration.SetBufferSize(nFramesInBuffer);
-                                hr = outputAudioClient->GetService(__uuidof(IAudioRenderClient),(void**)outputAudioRenderClient.NullAndGetPtrAddress());
+                                hr = m_outputAudioClient->GetService(__uuidof(IAudioRenderClient),(void**)outputAudioRenderClient.NullAndGetPtrAddress());
                                 m_enabledDeviceOutputs.resize(m_numOutputs);
                                 for (unsigned i=0;i<m_numOutputs;i++)
                                 {
@@ -199,7 +199,7 @@ public:
     }
     AudioCallbackDelegate* currentDelegate;
     AudioStreamConfiguration currentConfiguration;
-    PadComSmartPointer<IAudioClient> outputAudioClient;
+    PadComSmartPointer<IAudioClient> m_outputAudioClient;
     PadComSmartPointer<IAudioRenderClient> outputAudioRenderClient;
     //bool m_stopThread;
     vector<float> m_delegateBuffer;
@@ -310,8 +310,8 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     WasapiDevice* dev=(WasapiDevice*)params;
     cout << "*** Starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
     HANDLE hWantData=CreateEvent(NULL, FALSE, FALSE, NULL);
-    dev->outputAudioClient->SetEventHandle(hWantData);
-    HRESULT hr=dev->outputAudioClient->Start();
+    dev->m_outputAudioClient->SetEventHandle(hWantData);
+    HRESULT hr=dev->m_outputAudioClient->Start();
     CheckHResult(hr,"Wasapi TestFunction Start audio");
     int counter=0;
     int nFramesInBuffer=dev->currentConfiguration.GetBufferSize();
@@ -322,7 +322,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         if (WaitForSingleObject(hWantData,1000)==WAIT_OBJECT_0)
         {
             UINT32 nFramesOfPadding;
-            hr = dev->outputAudioClient->GetCurrentPadding(&nFramesOfPadding);
+            hr = dev->m_outputAudioClient->GetCurrentPadding(&nFramesOfPadding);
             if (nFramesOfPadding==nFramesInBuffer)
             {
                 dev->m_glitchCounter++;
@@ -355,9 +355,13 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                 hr = dev->outputAudioRenderClient->ReleaseBuffer(nFramesInBuffer - nFramesOfPadding, 0);
             }
             counter++;
+        } else
+        {
+            cerr << "PAD/WASAPI : Audio thread had to wait too long for data, ending thread\n";
+            break;
         }
     }
-    dev->outputAudioClient->Stop();
+    dev->m_outputAudioClient->Stop();
     CloseHandle(hWantData);
     CoUninitialize();
     cout << "ended wasapi audio thread. "<<dev->m_glitchCounter<< " glitches detected\n";
