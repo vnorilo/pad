@@ -600,7 +600,7 @@ namespace {
 			}
 		}
 
-		void Cleanup()
+		void Cleanup(PAD::Session&)
 		{
 			devices.clear();
 			if (coInitializeCount>0) {coInitializeCount--;CoUninitialize();}
