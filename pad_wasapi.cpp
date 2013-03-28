@@ -10,6 +10,7 @@
 #include "PAD.h"
 #include <map>
 #include <thread>
+#include <mutex>
 #include <memory>
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
@@ -92,6 +93,7 @@ public:
 
     virtual bool Supports(const AudioStreamConfiguration&) const
     {
+        throw SoftError(InternalError,"Supports() not implemented");
         return false;
     }
 
@@ -99,12 +101,11 @@ public:
     {
         if (m_currentState==WASS_Playing)
         {
-            cout << "PAD/WASAPI : Open called when already playing!\n";
+            throw SoftError(DeviceOpenStreamFailure,"Open called when already playing");
             return currentConfiguration;
         }
-        cout << "Wasapi::Open, thread id "<<GetCurrentThreadId()<<"\n";
+        //cout << "Wasapi::Open, thread id "<<GetCurrentThreadId()<<"\n";
         m_glitchCounter=0;
-        //m_stopThread=false;
         currentDelegate = &conf.GetAudioDelegate();
         currentConfiguration=conf;
         if (m_currentState==WASS_Closed || m_currentState==WASS_Idle)
@@ -158,6 +159,7 @@ public:
             m_audioThreadHandle=CreateThread(NULL, 0,WasapiThreadFunction,(void*)this, CREATE_SUSPENDED,NULL);
             if (!m_audioThreadHandle)
                 cout << "PAD/WASAPI : Creating audio thread failed :C\n";
+
         }
         Resume();
     }
@@ -206,6 +208,7 @@ public:
     unsigned m_glitchCounter;
     vector<bool> m_enabledDeviceOutputs;
     WasapiState m_currentState;
+    std::shared_ptr<std::mutex> m_mutex;
 private:
     HANDLE m_audioThreadHandle;
     vector<PadComSmartPointer<IMMDevice>> m_inputEndpoints;
