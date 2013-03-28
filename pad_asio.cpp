@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <thread>
+#include <memory>
 
 #include "HostAPI.h"
 #include "PAD.h"
@@ -58,15 +59,14 @@ namespace {
 
 	class AsioDevice : public AudioDevice {
 
+		recursive_mutex *callbackMutex;
+
 		ASIO::DriverRecord driverInfo;
 		ASIO::ComRef<ASIO::IASIO> driver;
 		string deviceName;
-		static std::mutex pasasenPertti;
 
 		unsigned numInputs, numOutputs;
 		unsigned index;
-
-		volatile unsigned callbackEntryCounter;
 
 		AudioStreamConfiguration currentConfiguration;
 		AudioCallbackDelegate* currentDelegate;
@@ -91,21 +91,13 @@ namespace {
 			return *driver;
 		}
 
-		void AsioUnwind(AsioState to)
+		void _AsioUnwind(AsioState to)
 		{
-			lock_guard<mutex> spede(pasasenPertti);
 			switch(State)
 			{
 			case Running:
 				if (to == Running) break;
 				THROW_ERROR(DeviceStopStreamFailure,ASIO().stop());
-
-				while(callbackEntryCounter>0)
-				{
-					fprintf(stderr,"*WARNING* ASIO driver allowed premature stop stream");
-					this_thread::yield();
-				}
-
 			case Prepared:
 				State = Prepared;
 				if (to == Prepared) break;
@@ -125,9 +117,19 @@ namespace {
 			this_thread::sleep_for(chrono::milliseconds(20));
 		}
 
+		void AsioUnwind(AsioState to)
+		{
+			if (callbackMutex)
+			{
+				lock_guard<recursive_mutex> lock(*callbackMutex);
+				_AsioUnwind(to);
+			}
+			else _AsioUnwind(to);
+		}
+
 	public:
-		AsioDevice(ASIO::DriverRecord comDriverInfo,double defaultRate, const string& name, unsigned inputs, unsigned outputs):
-			deviceName(name),numInputs(inputs),numOutputs(outputs),driverInfo(comDriverInfo),callbackEntryCounter(0)
+		AsioDevice(ASIO::DriverRecord comDriverInfo,recursive_mutex* callbackMtx, double defaultRate, const string& name, unsigned inputs, unsigned outputs):
+			deviceName(name),numInputs(inputs),numOutputs(outputs),driverInfo(comDriverInfo),callbackMutex(callbackMtx)
 		{
 			if (numOutputs >= 1)
 			{
@@ -168,7 +170,6 @@ namespace {
 				conf.GetNumDeviceOutputs() > GetNumOutputs()) return false;
 			return false;
 		}
-
 
 		void BufferSwitch(long doubleBufferIndex, ASIO::Bool directProcess)
 		{
@@ -283,51 +284,63 @@ namespace {
 			}
 		}
 
+		enum Direction{
+			Input,
+			Output
+		};
 
-		static void FormatOutput(ASIO::SampleType type, const float* interleaved, void** blocks, unsigned frames, unsigned channels, unsigned stride)
+		template <Direction MODE>
+		static void Format(ASIO::SampleType type, float* interleaved, void** blocks, unsigned frames, unsigned channels, unsigned stride)
 		{
 			switch(type)
 			{
 			case ASIO::Int16MSB: 
 				{
 					typedef HostSample<int16_t,float,-(1<<15),(1<<15)-1,0,true> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
-					break;
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+								    else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
+					break; 
 				}
 			case ASIO::Int32MSB: 
 				{
 					typedef HostSample<int32_t,float,-(1<<24),(1<<23)-1,8,true> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIO::Int32MSB16: 
 				{
 					typedef HostSample<int32_t,float,-(1<<15),(1<<15)-1,0,true> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIO::Int32MSB18: 
 				{
 					typedef HostSample<int32_t,float,-(1<<17),(1<<17)-1,0,true> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIO::Int32MSB20: 
 				{
 					typedef HostSample<int32_t,float,-(1<<19),(1<<19)-1,0,true> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIO::Int32MSB24: 
 				{
 					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,0,true> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIO::Float32MSB: 
 				{
 					typedef HostSample<float,float,-1,1,0,true> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 				//case ASIO::Float64MSB: 
@@ -339,43 +352,50 @@ namespace {
 			case ASIO::Int16LSB: 
 				{
 					typedef HostSample<int16_t,float,-(1<<15),(1<<15)-1,0,false> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIO::Int32LSB: 
 				{
 					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,8,false> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIO::Int32LSB16: 
 				{
 					typedef HostSample<int32_t,float,-(1<<15),(1<<15)-1,0,false> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIO::Int32LSB18: 
 				{
 					typedef HostSample<int32_t,float,-(1<<17),(1<<17)-1,0,false> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIO::Int32LSB20: 
 				{
 					typedef HostSample<int32_t,float,-(1<<19),(1<<19)-1,0,false> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIO::Int32LSB24: 
 				{
 					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,0,false> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 			case ASIO::Float32LSB: 
 				{
 					typedef HostSample<float,float,-1,1,0,false> AsioSmp;
-					ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+					if (MODE==Output) ChannelConverter<AsioSmp>::DeInterleave(interleaved,(AsioSmp**)blocks,frames,channels,stride);
+									 else ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
 					break;
 				}
 				//case ASIO::Float64LSB: 
@@ -388,116 +408,18 @@ namespace {
 			}
 		}
 
-		static void FormatInput(ASIO::SampleType type, float* interleaved, const void** blocks, unsigned frames, unsigned channels, unsigned stride)
-		{
-			switch(type)
-			{
-			case ASIO::Int16MSB: 
-				{
-					typedef HostSample<int16_t,float,-(1<<15),(1<<15)-1,0,true> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-			case ASIO::Int32MSB: 
-				{
-					typedef HostSample<int32_t,float,-(1<<24),(1<<23)-1,8,true> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-			case ASIO::Int32MSB16: 
-				{
-					typedef HostSample<int32_t,float,-(1<<15),(1<<15)-1,0,true> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-			case ASIO::Int32MSB18: 
-				{
-					typedef HostSample<int32_t,float,-(1<<17),(1<<17)-1,0,true> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-			case ASIO::Int32MSB20: 
-				{
-					typedef HostSample<int32_t,float,-(1<<19),(1<<19)-1,0,true> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-			case ASIO::Int32MSB24: 
-				{
-					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,0,true> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-			case ASIO::Float32MSB: 
-				{
-					typedef HostSample<float,float,-1,1,0,true> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-				//case ASIO::Float64MSB: 
-				//	{
-				//		typedef HostSample<double,float,-1,1,0,true> AsioSmp;
-				//		ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-				//		break;
-				//	}
-			case ASIO::Int16LSB: 
-				{
-					typedef HostSample<int16_t,float,-(1<<16),(1<<16)-1,0,false> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-			case ASIO::Int32LSB: 
-				{
-					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,8,false> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-			case ASIO::Int32LSB16: 
-				{
-					typedef HostSample<int32_t,float,-(1<<15),(1<<15)-1,0,false> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-			case ASIO::Int32LSB18: 
-				{
-					typedef HostSample<int32_t,float,-(1<<17),(1<<17)-1,0,false> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-			case ASIO::Int32LSB20: 
-				{
-					typedef HostSample<int32_t,float,-(1<<19),(1<<19)-1,0,false> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-			case ASIO::Int32LSB24: 
-				{
-					typedef HostSample<int32_t,float,-(1<<23),(1<<23)-1,0,false> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-			case ASIO::Float32LSB: 
-				{
-					typedef HostSample<float,float,-1,1,0,false> AsioSmp;
-					ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-					break;
-				}
-				//case ASIO::Float64LSB: 
-				//	{
-				//		typedef HostSample<double,float,-1,1,0,false> AsioSmp;
-				//		ChannelConverter<AsioSmp>::Interleave(interleaved,(const AsioSmp**)blocks,frames,channels,stride);
-				//		break;
-				//	}
-			default:break;
-			}
-		}
-
-
 		ASIO::Time* BufferSwitchTimeInfo(ASIO::Time* params, long doubleBufferIndex, ASIO::Bool directProcess)
 		{
-			lock_guard<mutex> spede(pasasenPertti);
-			callbackEntryCounter++;
+			if (callbackMutex)
+			{
+				lock_guard<recursive_mutex> lock(*callbackMutex);
+				return _BufferSwitchTimeInfo(params,doubleBufferIndex,directProcess);
+			}
+			else return _BufferSwitchTimeInfo(params,doubleBufferIndex,directProcess);
+		}
 
+		ASIO::Time* _BufferSwitchTimeInfo(ASIO::Time* params, long doubleBufferIndex, ASIO::Bool directProcess)
+		{
 			/* convert ASIO format to canonical format */
 			void *bufferPtr[64];
 			unsigned block(0);
@@ -518,7 +440,7 @@ namespace {
 					if (channelInfos[idx].type != blockType || (idx - beg) >= 64)
 					{
 						for(unsigned j(beg);j!=idx;++j) bufferPtr[j-beg] = bufferInfos[j].buffers[doubleBufferIndex];
-						FormatInput(blockType,delegateBufferInput.data()+beg,(const void**)bufferPtr,callbackBufferFrames,idx-beg,streamNumInputs);
+						Format<Input>(blockType,delegateBufferInput.data()+beg,(void**)bufferPtr,callbackBufferFrames,idx-beg,streamNumInputs);
 
 						beg = idx;
 						blockType = channelInfos[beg].type;
@@ -529,7 +451,7 @@ namespace {
 				if (beg<streamNumInputs)
 				{
 					for(unsigned j(beg);j!=streamNumInputs;++j) bufferPtr[j-beg] = bufferInfos[j].buffers[doubleBufferIndex];
-					FormatInput(blockType, delegateBufferInput.data()+beg,(const void**)bufferPtr,callbackBufferFrames,streamNumInputs-beg,streamNumInputs);
+					Format<Input>(blockType, delegateBufferInput.data()+beg,(void**)bufferPtr,callbackBufferFrames,streamNumInputs-beg,streamNumInputs);
 				}
 			}
 
@@ -552,7 +474,7 @@ namespace {
 					if (channelInfos[idx].type != blockType || (idx - beg) >= 64)
 					{
 						for(unsigned j(beg);j!=idx;++j) bufferPtr[j-beg] = bufferInfos[j].buffers[doubleBufferIndex];
-						FormatOutput(blockType,delegateBufferOutput.data()+beg-streamNumInputs,bufferPtr,callbackBufferFrames,idx-beg,streamNumOutputs);
+						Format<Output>(blockType,delegateBufferOutput.data()+beg-streamNumInputs,bufferPtr,callbackBufferFrames,idx-beg,streamNumOutputs);
 
 						beg = idx;
 						blockType = channelInfos[beg].type;
@@ -563,13 +485,12 @@ namespace {
 				if (beg<streamNumChannels)
 				{
 					for(unsigned j(beg);j!=streamNumChannels;++j) bufferPtr[j-beg] = bufferInfos[j].buffers[doubleBufferIndex];
-					FormatOutput(blockType, delegateBufferOutput.data()+beg-streamNumInputs,bufferPtr,callbackBufferFrames,streamNumChannels-beg,streamNumOutputs);
+					Format<Output>(blockType, delegateBufferOutput.data()+beg-streamNumInputs,bufferPtr,callbackBufferFrames,streamNumChannels-beg,streamNumOutputs);
 				}
 
 				ASIO().outputReady();
 			}
 
-			--callbackEntryCounter;
 			return params;
 		}
 
@@ -622,6 +543,7 @@ namespace {
 	};
 
 	struct AsioPublisher : public HostAPIPublisher {		
+		vector<unique_ptr<recursive_mutex>> deviceMutex;
 		list<AsioDevice> devices;
 		int coInitializeCount;
 		AsioPublisher():coInitializeCount(0) {}
@@ -662,7 +584,8 @@ namespace {
 							THROW_ERROR(DeviceInitializationFailure,driver->getChannels(&numInputs,&numOutputs));
 							THROW_ERROR(DeviceInitializationFailure,driver->getSampleRate(&currentSampleRate));
 
-							RegisterDevice(PADInstance,AsioDevice(drv,currentSampleRate,drv.driverName,numInputs,numOutputs));
+							deviceMutex.push_back(unique_ptr<recursive_mutex>());
+							RegisterDevice(PADInstance,AsioDevice(drv,deviceMutex.back().get(),currentSampleRate,drv.driverName,numInputs,numOutputs));
 						}
 					}
 				}
@@ -750,21 +673,19 @@ namespace {
 		}
 	};
 
-	static mutex callbackMutex;
+	static mutex callbackAllocationMutex;
 	static const uint32_t NUM_CALLBACKS = 64;
 	void AsioCallbackHolder::Allocate(AsioDevice& master)
 	{
-		lock_guard<mutex> guard(callbackMutex);
+		lock_guard<mutex> guard(callbackAllocationMutex);
 		if (CallbackForwarder<NUM_CALLBACKS>::AlreadyHasCallbacks(&master)) throw HardError(InternalError,"Error in AsioDevice callback allocation logic");
 		cb = CallbackForwarder<NUM_CALLBACKS>::GetCallbacks(&master);
 	}
 
 	void AsioCallbackHolder::Release(AsioDevice& master)
 	{
-		lock_guard<mutex> guard(callbackMutex);
+		lock_guard<mutex> guard(callbackAllocationMutex);
 		CallbackForwarder<NUM_CALLBACKS>::Free(&master);
 		memset(&cb,0,sizeof(ASIO::Callbacks));
 	}
-
-	mutex AsioDevice::pasasenPertti;
 }
