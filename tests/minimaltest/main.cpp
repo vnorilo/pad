@@ -7,17 +7,16 @@
 using namespace std;
 using namespace PAD;
 
+class ErrorLogger : public DeviceErrorDelegate {
+public:
+    void Catch(SoftError e) {std::cerr << "*Soft "<<e.GetCode()<<"* :" << e.what() << "\n";}
+    void Catch(HardError e) {std::cerr << "*Hard "<<e.GetCode()<<"* :" << e.what() << "\n";}
+};
+
 int main()
 {
     cout << "Hello from PAD "<<PAD::VersionString()<<"!"<<endl;
     //getchar();
-    using namespace PAD;
-    class ErrorLogger : public DeviceErrorDelegate {
-    public:
-        void Catch(SoftError e) {std::cerr << "*Soft "<<e.GetCode()<<"* :" << e.what() << "\n";}
-        void Catch(HardError e) {std::cerr << "*Hard "<<e.GetCode()<<"* :" << e.what() << "\n";}
-    };
-
     Session myAudioSession(false);
     myAudioSession.InitializeHostAPI("WASAPI",&ErrorLogger());
 
