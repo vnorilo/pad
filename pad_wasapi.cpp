@@ -12,6 +12,7 @@
 #include <thread>
 #include <mutex>
 #include <memory>
+#include <algorithm>
 #include "Avrt.h"
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
@@ -37,8 +38,9 @@ class WasapiDevice : public AudioDevice
 public:
     struct WasapiEndPoint
     {
-        WasapiEndPoint() { m_numChannels=0; }
-        WasapiEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numch, const std::string& name) : m_numChannels(numch), m_name(name), m_Endpoint(ep)
+        WasapiEndPoint() : m_numChannels(0), m_isDefault(0) {}
+        WasapiEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numch, unsigned isDefault, const std::string& name) :
+            m_numChannels(numch), m_name(name), m_Endpoint(ep), m_isDefault(isDefault)
         {
         }
         PadComSmartPointer<IAudioClient> m_AudioClient;
@@ -46,6 +48,7 @@ public:
         PadComSmartPointer<IMMDevice> m_Endpoint;
         unsigned m_numChannels;
         std::string m_name;
+        unsigned m_isDefault;
     };
 
     enum WasapiState
@@ -71,15 +74,23 @@ public:
     void SetName(const std::string& n) { m_deviceName=n; }
     void AddInputEndPoint(const PadComSmartPointer<IMMDevice>& ep, unsigned numChannels, const std::string& name=std::string())
     {
+        cerr << "PAD/WASAPI: Inputs are not yet supported\n";
+        /*
         m_numInputs+=numChannels;
         WasapiEndPoint wep(ep, numChannels,name);
         m_inputEndPoints.push_back(wep);
+        */
     }
-    void AddOutputEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numChannels, const std::string& name=std::string())
+    void AddOutputEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numChannels, bool isDefault,const std::string& name=std::string())
     {
         m_numOutputs+=numChannels;
-        WasapiEndPoint wep(ep, numChannels,name);
+        unsigned foo=1; if (isDefault==true) foo=0;
+        WasapiEndPoint wep(ep, numChannels, foo, name);
+        // I realize this is theoretically inefficient and not really elegant but I hate std::list so much I don't want to use it
+        // just to get push_front and to avoid moving the couple of entries around in the std::vector which I prefer to use in the code
         m_outputEndPoints.push_back(wep);
+        std::sort(m_outputEndPoints.begin(),m_outputEndPoints.end(),
+                  [](const WasapiEndPoint& a,const WasapiEndPoint& b) { return a.m_isDefault<b.m_isDefault; });
     }
     unsigned GetNumInputs() const {return m_numInputs;}
     unsigned GetNumOutputs() const {return m_numOutputs;}
@@ -120,6 +131,7 @@ public:
             cerr << "Open called when already playing\n";
             return currentConfiguration;
         }
+        const unsigned endPointToActivate=0;
         //cout << "Wasapi::Open, thread id "<<GetCurrentThreadId()<<"\n";
         m_glitchCounter=0;
         currentDelegate = &conf.GetAudioDelegate();
@@ -129,7 +141,10 @@ public:
             HRESULT hr=0;
             if (m_outputEndPoints.size()>0)
             {
-                const unsigned endPointToActivate=0;
+                if (currentConfiguration.GetNumStreamOutputs()>m_outputEndPoints.at(endPointToActivate).m_numChannels)
+                {
+                    currentConfiguration.SetDeviceChannelLimits(0,m_outputEndPoints.at(endPointToActivate).m_numChannels);
+                }
                 PadComSmartPointer<IAudioClient> theClient;
                 hr = m_outputEndPoints.at(endPointToActivate).m_Endpoint->Activate(
                             __uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)theClient.NullAndGetPtrAddress());
@@ -291,6 +306,8 @@ struct WasapiPublisher : public HostAPIPublisher
 	const char *GetName() const {return "WASAPI";}
     void Publish(Session& PADInstance, DeviceErrorDelegate& errorHandler)
 	{
+        using namespace chrono;
+        high_resolution_clock::time_point t1 = high_resolution_clock::now();
         CoInitialize(0);
         HRESULT hr = S_OK;
         PadComSmartPointer<IMMDeviceEnumerator> enumerator;
@@ -298,6 +315,7 @@ struct WasapiPublisher : public HostAPIPublisher
         if (CheckHResult(hr,"PAD/WASAPI : Could not create device enumerator")==false) return;
         PadComSmartPointer<IMMDeviceCollection> collection;
         PadComSmartPointer<IMMDevice> endpoint;
+        PadComSmartPointer<IMMDevice> defaultEndpoint;
         PadComSmartPointer<IPropertyStore> props;
         //LPWSTR pwszID = NULL;
         hr=enumerator->EnumAudioEndpoints(eAll,DEVICE_STATE_ACTIVE,collection.NullAndGetPtrAddress());
@@ -308,11 +326,27 @@ struct WasapiPublisher : public HostAPIPublisher
         if (count == 0)
         {
             cerr << "pad : wasapi : No endpoints found\n";
+            return;
+        }
+        std::string defaultDevId;
+        if (CheckHResult(enumerator->GetDefaultAudioEndpoint(eRender,eMultimedia,defaultEndpoint.NullAndGetPtrAddress()),"PAD/WASAPI : Could not get default endpoint device"))
+        {
+            WCHAR* deviceId=nullptr;
+            defaultEndpoint->GetId(&deviceId);
+            defaultDevId=WideCharToStdString(deviceId);
+            CoTaskMemFree (deviceId);
         }
         for (unsigned i=0;i<count;i++)
         {
+            bool isDefaultDevice=false;
             hr = collection->Item(i, endpoint.NullAndGetPtrAddress());
             if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint collection item")==false) continue;
+            WCHAR* deviceId=nullptr;
+            endpoint->GetId(&deviceId);
+            std::string curDevId=WideCharToStdString(deviceId);
+            CoTaskMemFree(deviceId);
+            if (curDevId==defaultDevId)
+                isDefaultDevice=true;
             hr = endpoint->OpenPropertyStore(STGM_READ, props.NullAndGetPtrAddress());
             if (CheckHResult(hr,"PAD/WASAPI : Could not open endpoint property store")==false) continue;
             MyPropVariant adapterName;
@@ -342,29 +376,37 @@ struct WasapiPublisher : public HostAPIPublisher
             CoTaskMemFree(mixFormat);
             if (audioDirection==eRender)
             {
-                wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,endPointNameString);
+                wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,isDefaultDevice, endPointNameString);
             }
             else if (audioDirection==eCapture)
             {
                 wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,endPointNameString);
             }
         }
-        for( std::map<std::string,WasapiDevice>::iterator iter=wasapiMap.begin(); iter!=wasapiMap.end(); ++iter)
+        for(std::map<std::string,WasapiDevice>::iterator iter=wasapiMap.begin(); iter!=wasapiMap.end(); ++iter)
         {
             iter->second.InitDefaultStreamConfigurations(44100.0);
             PADInstance.Register(&iter->second);
         }
+        high_resolution_clock::time_point t2 = high_resolution_clock::now();
+        duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
+        std::cout << "Enumerating WASAPI devices took " << time_span.count()*1000.0 << " ms\n";
     }
 } publisher;
 
 DWORD WINAPI WasapiThreadFunction(LPVOID params)
 {
-    CheckHResult(CoInitialize(0),"Wasapi audio thread could not init COM");
     WasapiDevice* dev=(WasapiDevice*)params;
+    if (dev->m_outputEndPoints.size()==0)
+    {
+        return 0;
+    }
+    CheckHResult(CoInitialize(0),"Wasapi audio thread could not init COM");
     dev->EnableMultiMediaThreadPriority(true);
     //cout << "*** Starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
     std::vector<HANDLE> wantDataEvents;
-    const unsigned numOutputEndPoints=dev->m_outputEndPoints.size();
+    // 1 is used as a hack until rendering multiple endpoints can be properly tested
+    const unsigned numOutputEndPoints=1; //dev->m_outputEndPoints.size();
     wantDataEvents.resize(numOutputEndPoints);
     HRESULT hr=0;
     for (unsigned int i=0;i<numOutputEndPoints;i++)
@@ -381,7 +423,6 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     {
         const AudioStreamConfiguration curConf=dev->currentConfiguration;
         if (WaitForMultipleObjects(numOutputEndPoints,wantDataEvents.data(),TRUE,1000)==WAIT_OBJECT_0)
-        //if (WaitForSingleObject(hWantData,1000)==WAIT_OBJECT_0)
         {
             for (unsigned ep=0;ep<numOutputEndPoints;ep++)
             {
