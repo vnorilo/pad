@@ -1,4 +1,6 @@
 syntax: glob
+xcode/PAD/PAD.xcodeproj/xcuserdata
+xcode/PAD/PAD.xcodeproj/project.xcworkspace/xcuserdata
 msvc/PADTest/Debug
 msvc/PADTest/Release
 msvc/PADTest/Test.App

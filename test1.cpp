@@ -23,10 +23,11 @@ int main()
 						 << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
 	}
 
-	auto asioDevice = myAudioSession.FindDevice("asio","asio4all");
+	auto asioDevice = myAudioSession.FindDevice("coreaudio","Pertti");
 
 	if (asioDevice != myAudioSession.end())
 	{
+        try{
 		double phase = 0;
 		auto myAudioProcess = Closure(([&](uint64_t time, const PAD::AudioStreamConfiguration& cfg, const float *input, float *output, unsigned frames)
 		{
@@ -47,6 +48,11 @@ int main()
 		asioDevice->Open(Stream(myAudioProcess).StereoOutput(0).SampleRate(48000));
 		getchar();
 		asioDevice->Close();
+        }
+        catch(std::runtime_error e)
+        {
+            std::cerr << e.what();
+        }
 	}
 
 }
