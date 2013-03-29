@@ -12,6 +12,7 @@
 #include <thread>
 #include <mutex>
 #include <memory>
+#include "Avrt.h"
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
@@ -36,6 +37,10 @@ class WasapiDevice : public AudioDevice
 public:
     struct WasapiEndPoint
     {
+        WasapiEndPoint() { m_numChannels=0; }
+        WasapiEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numch, const std::string& name) : m_numChannels(numch), m_name(name), m_Endpoint(ep)
+        {
+        }
         PadComSmartPointer<IAudioClient> m_AudioClient;
         PadComSmartPointer<IAudioRenderClient> m_AudioRenderClient;
         PadComSmartPointer<IMMDevice> m_Endpoint;
@@ -67,19 +72,13 @@ public:
     void AddInputEndPoint(const PadComSmartPointer<IMMDevice>& ep, unsigned numChannels, const std::string& name=std::string())
     {
         m_numInputs+=numChannels;
-        WasapiEndPoint wep;
-        wep.m_Endpoint=ep;
-        wep.m_numChannels=numChannels;
-        wep.m_name=name;
+        WasapiEndPoint wep(ep, numChannels,name);
         m_inputEndPoints.push_back(wep);
     }
     void AddOutputEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numChannels, const std::string& name=std::string())
     {
         m_numOutputs+=numChannels;
-        WasapiEndPoint wep;
-        wep.m_Endpoint=ep;
-        wep.m_numChannels=numChannels;
-        wep.m_name=name;
+        WasapiEndPoint wep(ep, numChannels,name);
         m_outputEndPoints.push_back(wep);
     }
     unsigned GetNumInputs() const {return m_numInputs;}
@@ -110,7 +109,7 @@ public:
 
     virtual bool Supports(const AudioStreamConfiguration&) const
     {
-        throw SoftError(InternalError,"Supports() not implemented");
+        cerr << "Supports() not implemented\n";
         return false;
     }
 
@@ -118,7 +117,7 @@ public:
     {
         if (m_currentState==WASS_Playing)
         {
-            throw SoftError(DeviceOpenStreamFailure,"Open called when already playing");
+            cerr << "Open called when already playing\n";
             return currentConfiguration;
         }
         //cout << "Wasapi::Open, thread id "<<GetCurrentThreadId()<<"\n";
@@ -178,7 +177,7 @@ public:
         }
         if (m_audioThreadHandle==0)
         {
-            cout << "creating wasapi audio thread...\n";
+            //cout << "creating wasapi audio thread...\n";
             m_audioThreadHandle=CreateThread(NULL, 0,WasapiThreadFunction,(void*)this, CREATE_SUSPENDED,NULL);
             if (!m_audioThreadHandle)
                 cout << "PAD/WASAPI : Creating audio thread failed :C\n";
@@ -189,7 +188,7 @@ public:
 
     virtual void Resume()
     {
-        cout << "Pad/Wasapi : Resume()\n";
+        //cout << "Pad/Wasapi : Resume()\n";
         if (m_audioThreadHandle)
         {
             m_currentState=WASS_Playing;
@@ -213,15 +212,42 @@ public:
 
     virtual void Close()
     {
-        cout << "Pad/Wasapi close, waiting for thread to stop...\n";
+        //cout << "Pad/Wasapi close, waiting for thread to stop...\n";
         m_currentState=WASS_Idle;
         if (WaitForSingleObject(m_audioThreadHandle,1000)==WAIT_TIMEOUT)
             cout << "Pad/Wasapi close, thread timed out when stopping\n";
         m_currentState=WASS_Closed;
         CloseHandle(m_audioThreadHandle);
         m_audioThreadHandle=0;
-        cout << "Pad/Wasapi close, thread was stopped\n";
+        //cout << "Pad/Wasapi close, thread was stopped\n";
     }
+    void EnableMultiMediaThreadPriority(bool proAudio=false)
+    {
+        HMODULE hModule=LoadLibrary("avrt.dll");
+        if (hModule)
+        {
+            HANDLE (WINAPI *ptrAvSetMmThreadCharacteristics)(LPCTSTR,LPDWORD);
+            *((void **)&ptrAvSetMmThreadCharacteristics)=(void*)GetProcAddress(hModule,"AvSetMmThreadCharacteristicsA");
+            BOOL (WINAPI *ptrAvSetMmThreadPriority)(HANDLE,AVRT_PRIORITY);
+            *((void **)&ptrAvSetMmThreadPriority)=(void*)GetProcAddress(hModule,"AvSetMmThreadPriority");
+            if (ptrAvSetMmThreadCharacteristics!=0 && ptrAvSetMmThreadPriority!=0)
+            {
+                DWORD foo=0;
+                HANDLE h = 0;
+                if (proAudio==false)
+                    h=ptrAvSetMmThreadCharacteristics ("Audio", &foo);
+                else h=ptrAvSetMmThreadCharacteristics ("Pro Audio", &foo);
+                if (h != 0)
+                {
+                    BOOL result=ptrAvSetMmThreadPriority (h, AVRT_PRIORITY_NORMAL);
+                    if (result==FALSE)
+                        cerr << "AvSetMmThreadPriority failed\n";
+                }
+                else cerr << "Task wasn't returned from ptrAvSetMmThreadCharacteristics\n";
+            } else cerr << "Could not resolve functions from avrt.dll\n";
+        } else cerr << "Could not load avrt.dll\n";
+    }
+
     AudioCallbackDelegate* currentDelegate;
     AudioStreamConfiguration currentConfiguration;
     //PadComSmartPointer<IAudioClient> m_outputAudioClient;
@@ -297,6 +323,7 @@ struct WasapiPublisher : public HostAPIPublisher
             MyPropVariant endPointName;
             hr = props->GetValue(PKEY_Device_FriendlyName, endPointName());
             if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint name")==false) continue;
+            std::string endPointNameString=WideCharToStdString(endPointName()->pwszVal);
             EDataFlow audioDirection=getAudioDirection(endpoint);
             PadComSmartPointer<IAudioClient> tempClient;
             hr = endpoint->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)tempClient.NullAndGetPtrAddress());
@@ -315,11 +342,11 @@ struct WasapiPublisher : public HostAPIPublisher
             CoTaskMemFree(mixFormat);
             if (audioDirection==eRender)
             {
-                wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels);
+                wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,endPointNameString);
             }
             else if (audioDirection==eCapture)
             {
-                wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels);
+                wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,endPointNameString);
             }
         }
         for( std::map<std::string,WasapiDevice>::iterator iter=wasapiMap.begin(); iter!=wasapiMap.end(); ++iter)
@@ -334,7 +361,8 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
 {
     CheckHResult(CoInitialize(0),"Wasapi audio thread could not init COM");
     WasapiDevice* dev=(WasapiDevice*)params;
-    cout << "*** Starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
+    dev->EnableMultiMediaThreadPriority(true);
+    //cout << "*** Starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
     std::vector<HANDLE> wantDataEvents;
     const unsigned numOutputEndPoints=dev->m_outputEndPoints.size();
     wantDataEvents.resize(numOutputEndPoints);
@@ -404,7 +432,8 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         CloseHandle(wantDataEvents[i]);
     }
     CoUninitialize();
-    cout << "ended wasapi audio thread. "<<dev->m_glitchCounter<< " glitches detected\n";
+    if (dev->m_glitchCounter>0)
+        cout << "ended wasapi audio thread. "<<dev->m_glitchCounter<< " glitches detected\n";
     return 0;
 }
 }
