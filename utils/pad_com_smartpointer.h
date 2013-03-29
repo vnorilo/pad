@@ -31,6 +31,7 @@ public:
     {
         return m_ptr;
     }
+    COMClass* getRawPointer() const { return m_ptr; }
     COMClass& operator*() const throw()
     {
         return *m_ptr;
@@ -65,8 +66,8 @@ public:
         return &m_ptr;
     }
 
-    template <class OtherComClass>
-    HRESULT QueryInterface (REFCLSID classUUID, PadComSmartPointer<OtherComClass>& destObject) const
+    template <class Other>
+    HRESULT QueryInterface (REFCLSID classUUID, PadComSmartPointer<Other>& destObject) const
     {
         if (m_ptr == 0)
             return E_POINTER;
@@ -74,10 +75,10 @@ public:
         return m_ptr->QueryInterface (classUUID, (void**) destObject.NullAndGetPtrAddress());
     }
 
-    template <class OtherCOMClass>
-    HRESULT QueryInterface (PadComSmartPointer<OtherCOMClass>& destObject) const
+    template <class Other>
+    HRESULT QueryInterface (PadComSmartPointer<Other>& destObject) const
     {
-        return this->QueryInterface (__uuidof (OtherCOMClass), destObject);
+        return this->QueryInterface (__uuidof (Other), destObject);
     }
 
 private:
