@@ -84,6 +84,9 @@ namespace PAD{
 		AudioStreamConfiguration Delegate(AudioCallbackDelegate& del) const;
 		AudioStreamConfiguration SampleRate(double rate) const;
 		AudioStreamConfiguration StartSuspended() const;
+        
+        const std::vector<ChannelRange> GetInputRanges() const {return inputRanges;}
+        const std::vector<ChannelRange> GetOutputRanges() const {return outputRanges;}
 	};
 
 	static AudioStreamConfiguration Stream(AudioCallbackDelegate& d) {return AudioStreamConfiguration().Delegate(d);}
