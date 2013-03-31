@@ -14,14 +14,27 @@
 #include <memory>
 #include <algorithm>
 #include "Avrt.h"
+#include <cmath>
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
 
 void CopyWavFormat(WAVEFORMATEXTENSIBLE& dest, const WAVEFORMATEX* const src)
 {
-    memcpy(&dest,src,src->wFormatTag==WAVE_FORMAT_EXTENSIBLE ? sizeof (WAVEFORMATEXTENSIBLE)
-                                                                  : sizeof (WAVEFORMATEX));
+    if (src->wFormatTag==WAVE_FORMAT_EXTENSIBLE)
+        memcpy(&dest,src,sizeof(WAVEFORMATEXTENSIBLE));
+    else
+        memcpy(&dest,src,sizeof(WAVEFORMATEX));
+}
+
+inline int simple_round(double x)
+{
+    return x+0.5;
+}
+
+int RefTimeToSamples(const REFERENCE_TIME& v, const double sr)
+{
+    return simple_round(sr * ((double) v) * 0.0000001);
 }
 
 namespace
@@ -65,8 +78,9 @@ public:
     }
     ~WasapiDevice()
     {
-        cerr << "WasapiDevice dtor\n";
-        Close();
+        //cerr << "WasapiDevice dtor\n";
+        if (m_audioThreadHandle!=0)
+            Close();
     }
 
     const char *GetName() const { return m_deviceName.c_str(); }
@@ -94,11 +108,14 @@ public:
     }
     unsigned GetNumInputs() const {return m_numInputs;}
     unsigned GetNumOutputs() const {return m_numOutputs;}
-    void InitDefaultStreamConfigurations(double defaultRate)
+    void InitDefaultStreamConfigurations()
     {
+        int defSr=44100;
+        if (m_supportedSampleRates.size()>0)
+            defSr=m_supportedSampleRates.at(0);
         if (m_numOutputs >= 1)
         {
-            m_defaultMono = AudioStreamConfiguration(defaultRate,true);
+            m_defaultMono = AudioStreamConfiguration(defSr,true);
             m_defaultMono.AddDeviceOutputs(Channel(0));
             if (m_numInputs > 0) m_defaultMono.AddDeviceInputs(Channel(0));
         }
@@ -106,7 +123,7 @@ public:
 
         if (m_numOutputs >= 2)
         {
-            m_defaultStereo = AudioStreamConfiguration(defaultRate,true);
+            m_defaultStereo = AudioStreamConfiguration(defSr,true);
             m_defaultStereo.AddDeviceOutputs(ChannelRange(0,2));
             if (m_numInputs > 0)
                 m_defaultStereo.AddDeviceInputs(ChannelRange(0,min(m_numInputs,2u)));
@@ -153,14 +170,14 @@ public:
                 {
                     if (theClient)
                     {
-                        WAVEFORMATEX *pwfx;
-                        hr = theClient->GetMixFormat(&pwfx);
-                        hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pwfx, NULL);
+                        WAVEFORMATEX *pMixformat=nullptr;
+                        hr = theClient->GetMixFormat(&pMixformat);
+                        hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,150000,0,pMixformat, NULL);
                         if (CheckHResult(hr,"PAD/WASAPI : Initialize audio render client")==true)
                         {
-                            UINT32 nFramesInBuffer;
+                            UINT32 nFramesInBuffer=0;
                             hr = theClient->GetBufferSize(&nFramesInBuffer);
-                            if (nFramesInBuffer>8 && nFramesInBuffer<32768)
+                            if (nFramesInBuffer>7 && nFramesInBuffer<32769)
                             {
                                 m_delegateBuffer.resize(nFramesInBuffer*m_numOutputs);
                                 currentConfiguration.SetBufferSize(nFramesInBuffer);
@@ -181,7 +198,8 @@ public:
                 }
             }
         }
-        InitAudioThread();
+        if (m_currentState==WASS_Open)
+            InitAudioThread();
         if (m_currentState==WASS_Open && conf.HasSuspendOnStartup() == false) Run();
         return currentConfiguration;
     }
@@ -233,7 +251,7 @@ public:
     {
         if (m_currentState==WASS_Closed)
         {
-            //cout << "PAD/WASAPI : Close called when already closed\n";
+            cout << "PAD/WASAPI : Close called when already closed\n";
             return;
         }
         cout << "Pad/Wasapi close, waiting for thread to stop...\n";
@@ -268,7 +286,7 @@ public:
                     if (result==FALSE)
                         cerr << "AvSetMmThreadPriority failed\n";
                 }
-                else cerr << "Task wasn't returned from ptrAvSetMmThreadCharacteristics\n";
+                else cerr << "Task wasn't returned from AvSetMmThreadCharacteristics\n";
             } else cerr << "Could not resolve functions from avrt.dll\n";
         } else cerr << "Could not load avrt.dll\n";
     }
@@ -285,6 +303,7 @@ public:
     vector<WasapiEndPoint> m_inputEndPoints;
     vector<WasapiEndPoint> m_outputEndPoints;
     bool m_threadShouldStop;
+    std::vector<int> m_supportedSampleRates;
 private:
     HANDLE m_audioThreadHandle;
     //vector<PadComSmartPointer<IMMDevice>> m_inputEndpoints;
@@ -347,6 +366,9 @@ struct WasapiPublisher : public HostAPIPublisher
             defaultDevId=WideCharToStdString(deviceId);
             CoTaskMemFree (deviceId);
         }
+        std::vector<int> sampleRatesToTest;
+        sampleRatesToTest.push_back(44100); sampleRatesToTest.push_back(48000); sampleRatesToTest.push_back(88200); sampleRatesToTest.push_back(96000);
+        sampleRatesToTest.push_back(176400); sampleRatesToTest.push_back(192000);
         for (unsigned i=0;i<count;i++)
         {
             bool isDefaultDevice=false;
@@ -377,6 +399,12 @@ struct WasapiPublisher : public HostAPIPublisher
                 cerr << "pad : wasapi : could not create temp client for " << i << " to get channel counts and shit\n";
                 continue;
             }
+            REFERENCE_TIME defPer, minPer;
+            if (CheckHResult(tempClient->GetDevicePeriod(&defPer,&minPer))==false)
+            {
+                cerr << "PAD/WASAPI : could not get device default/min period for " << endPointNameString << "\n";
+                continue;
+            }
             WAVEFORMATEX* mixFormat = nullptr;
             hr=tempClient->GetMixFormat(&mixFormat);
             if (CheckHResult(hr,"PAD/WASAPI : Could not get mix format")==false) continue;
@@ -385,6 +413,24 @@ struct WasapiPublisher : public HostAPIPublisher
             //WAVE_FORMAT_IEEE_FLOAT
             //cout << "endpoint " << i << " format is " << mixFormat->wFormatTag << "\n";
             CoTaskMemFree(mixFormat);
+            int defaultSr=format.Format.nSamplesPerSec;
+            wasapiMap[adapterNameString].m_supportedSampleRates.push_back(defaultSr);
+            //cerr << endPointNameString << " default sr is " << defaultSr << "\n";
+            int minPeriodSamples=RefTimeToSamples(minPer,defaultSr);
+            int defaultPeriodSamples=RefTimeToSamples(defPer,defaultSr);
+            //cerr << endPointNameString << " minimum period is " << (double)minPer/10000 << " ms, default period is " << (double)defPer/10000 << " ms\n";
+            //cerr << endPointNameString << " minimum buf size is " << minPeriodSamples << " , default buf size is " << defaultPeriodSamples << "\n";
+            for (int samplerate : sampleRatesToTest)
+            {
+                if (samplerate==defaultSr)
+                    continue;
+                format.Format.nSamplesPerSec=(DWORD)samplerate;
+                if (tempClient->IsFormatSupported(AUDCLNT_SHAREMODE_SHARED,(WAVEFORMATEX*)&format,0)>=0)
+                {
+                    cerr << endPointNameString << " supports " << samplerate << " hz\n";
+                    wasapiMap[adapterNameString].m_supportedSampleRates.push_back(samplerate);
+                }
+            }
             if (audioDirection==eRender)
             {
                 wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,isDefaultDevice, endPointNameString);
@@ -396,7 +442,7 @@ struct WasapiPublisher : public HostAPIPublisher
         }
         for(std::map<std::string,WasapiDevice>::iterator iter=wasapiMap.begin(); iter!=wasapiMap.end(); ++iter)
         {
-            iter->second.InitDefaultStreamConfigurations(44100.0);
+            iter->second.InitDefaultStreamConfigurations();
             PADInstance.Register(&iter->second);
         }
         high_resolution_clock::time_point t2 = high_resolution_clock::now();
@@ -451,22 +497,22 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                         dev->currentDelegate->Process(0,curConf,0,dev->m_delegateBuffer.data(),nFramesInBuffer - nFramesOfPadding);
                         float* pf=(float*)data;
                         unsigned numStreamChans=curConf.GetNumStreamOutputs();
-                        unsigned numDeviceChans=dev->GetNumOutputs();
+                        unsigned numEndpointChans=dev->m_outputEndPoints.at(ep).m_numChannels;
                         unsigned k=0;
-                        for (unsigned i=0;i<numDeviceChans;i++)
+                        for (unsigned i=0;i<numEndpointChans;i++)
                         {
                             if (dev->m_enabledDeviceOutputs[i]==true)
                             {
                                 for (unsigned j=0;j<nFramesInBuffer-nFramesOfPadding;j++)
                                 {
-                                    pf[j*numDeviceChans+i]=dev->m_delegateBuffer[j*numStreamChans+k];
+                                    pf[j*numEndpointChans+i]=dev->m_delegateBuffer[j*numStreamChans+k];
                                 }
                                 k++;
                             } else
                             {
                                 for (unsigned j=0;j<nFramesInBuffer-nFramesOfPadding;j++)
                                 {
-                                    pf[j*numDeviceChans+i]=0.0;
+                                    pf[j*numEndpointChans+i]=0.0;
                                 }
                             }
                         }
