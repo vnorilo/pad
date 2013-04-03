@@ -78,7 +78,7 @@ public:
     }
     ~WasapiDevice()
     {
-        cerr << "WasapiDevice dtor\n";
+        //cerr << "WasapiDevice dtor\n";
         if (m_audioThreadHandle!=0)
             Close();
     }
@@ -145,7 +145,7 @@ public:
 
     virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration& conf)
     {
-        cerr << "Open\n";
+        //cerr << "Open\n";
         if (m_currentState==WASS_Playing)
         {
             cerr << "Open called when already playing\n";
@@ -246,7 +246,7 @@ public:
             cerr << "PAD/WASAPI : Suspend() called when not playing\n";
             return;
         }
-        cerr  << "Pad/Wasapi : Suspend()\n";
+        //cerr  << "Pad/Wasapi : Suspend()\n";
         m_currentState=WASS_Idle;
     }
 
@@ -257,7 +257,7 @@ public:
             cout << "PAD/WASAPI : Close called when already closed\n";
             return;
         }
-        cerr << "Pad/Wasapi close, waiting for thread to stop...\n";
+        //cerr << "Pad/Wasapi close, waiting for thread to stop...\n";
         m_currentState=WASS_Idle;
         m_threadShouldStop=true;
         if (WaitForSingleObject(m_audioThreadHandle,1000)==WAIT_TIMEOUT)
@@ -272,11 +272,11 @@ public:
     }
     void EnableMultiMediaThreadPriority(bool proAudio=false)
     {
-        HMODULE hModule=LoadLibrary("avrt.dll");
+        HMODULE hModule=LoadLibrary(L"avrt.dll");
         if (hModule)
         {
             HANDLE (WINAPI *ptrAvSetMmThreadCharacteristics)(LPCTSTR,LPDWORD);
-            *((void **)&ptrAvSetMmThreadCharacteristics)=(void*)GetProcAddress(hModule,"AvSetMmThreadCharacteristicsA");
+            *((void **)&ptrAvSetMmThreadCharacteristics)=(void*)GetProcAddress(hModule,"AvSetMmThreadCharacteristicsW");
             BOOL (WINAPI *ptrAvSetMmThreadPriority)(HANDLE,AVRT_PRIORITY);
             *((void **)&ptrAvSetMmThreadPriority)=(void*)GetProcAddress(hModule,"AvSetMmThreadPriority");
             if (ptrAvSetMmThreadCharacteristics!=0 && ptrAvSetMmThreadPriority!=0)
@@ -284,8 +284,8 @@ public:
                 DWORD foo=0;
                 HANDLE h = 0;
                 if (proAudio==false)
-                    h=ptrAvSetMmThreadCharacteristics("Audio", &foo);
-                else h=ptrAvSetMmThreadCharacteristics("Pro Audio", &foo);
+                    h=ptrAvSetMmThreadCharacteristics(L"Audio", &foo);
+                else h=ptrAvSetMmThreadCharacteristics(L"Pro Audio", &foo);
                 if (h != 0)
                 {
                     BOOL result=ptrAvSetMmThreadPriority (h, AVRT_PRIORITY_NORMAL);
