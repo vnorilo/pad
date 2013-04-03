@@ -78,7 +78,7 @@ public:
     }
     ~WasapiDevice()
     {
-        //cerr << "WasapiDevice dtor\n";
+        cerr << "WasapiDevice dtor\n";
         if (m_audioThreadHandle!=0)
             Close();
     }
@@ -99,6 +99,8 @@ public:
     {
         m_numOutputs+=numChannels;
         unsigned foo=1; if (isDefault==true) foo=0;
+        if (isDefault==true)
+            cerr << name << " is default end point\n";
         WasapiEndPoint wep(ep, numChannels, foo, name);
         // I realize this is theoretically inefficient and not really elegant but I hate std::list so much I don't want to use it
         // just to get push_front and to avoid moving the couple of entries around in the std::vector which I prefer to use in the code
@@ -172,7 +174,7 @@ public:
                     {
                         WAVEFORMATEX *pMixformat=nullptr;
                         hr = theClient->GetMixFormat(&pMixformat);
-                        hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,150000,0,pMixformat, NULL);
+                        hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pMixformat, NULL);
                         if (CheckHResult(hr,"PAD/WASAPI : Initialize audio render client")==true)
                         {
                             UINT32 nFramesInBuffer=0;
@@ -198,6 +200,8 @@ public:
                 }
             }
         }
+        if (currentDelegate)
+            currentDelegate->AboutToBeginStream(currentConfiguration,*this);
         if (m_currentState==WASS_Open)
             InitAudioThread();
         if (m_currentState==WASS_Open && conf.HasSuspendOnStartup() == false) Run();
@@ -232,8 +236,7 @@ public:
         if (m_audioThreadHandle)
         {
             m_currentState=WASS_Playing;
-            //ResumeThread(m_audioThreadHandle);
-        }
+        } else cerr << "PAD/WASAPI : Resume called when audio thread not initialized\n";
     }
 
     void Suspend()
@@ -243,8 +246,8 @@ public:
             cerr << "PAD/WASAPI : Suspend() called when not playing\n";
             return;
         }
+        cerr  << "Pad/Wasapi : Suspend()\n";
         m_currentState=WASS_Idle;
-        cout  << "Pad/Wasapi : Suspend()\n";
     }
 
     void Close()
@@ -254,14 +257,17 @@ public:
             cout << "PAD/WASAPI : Close called when already closed\n";
             return;
         }
-        cout << "Pad/Wasapi close, waiting for thread to stop...\n";
+        cerr << "Pad/Wasapi close, waiting for thread to stop...\n";
         m_currentState=WASS_Idle;
         m_threadShouldStop=true;
         if (WaitForSingleObject(m_audioThreadHandle,1000)==WAIT_TIMEOUT)
-            cout << "Pad/Wasapi close, audio thread timed out when stopping\n";
+            cerr << "Pad/Wasapi close, audio thread timed out when stopping\n";
         m_currentState=WASS_Closed;
+        //Sleep(500);
         CloseHandle(m_audioThreadHandle);
         m_audioThreadHandle=0;
+        //if (currentDelegate)
+        //    currentDelegate->StreamDidEnd(*this);
         //cout << "Pad/Wasapi close, thread was stopped\n";
     }
     void EnableMultiMediaThreadPriority(bool proAudio=false)
@@ -278,8 +284,8 @@ public:
                 DWORD foo=0;
                 HANDLE h = 0;
                 if (proAudio==false)
-                    h=ptrAvSetMmThreadCharacteristics ("Audio", &foo);
-                else h=ptrAvSetMmThreadCharacteristics ("Pro Audio", &foo);
+                    h=ptrAvSetMmThreadCharacteristics("Audio", &foo);
+                else h=ptrAvSetMmThreadCharacteristics("Pro Audio", &foo);
                 if (h != 0)
                 {
                     BOOL result=ptrAvSetMmThreadPriority (h, AVRT_PRIORITY_NORMAL);
@@ -433,6 +439,7 @@ struct WasapiPublisher : public HostAPIPublisher
             }
             if (audioDirection==eRender)
             {
+                cerr << i << " " << endPointNameString << "\n";
                 wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,isDefaultDevice, endPointNameString);
             }
             else if (audioDirection==eCapture)
@@ -531,7 +538,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     }
     for (unsigned i=0;i<numOutputEndPoints;i++)
     {
-        hr = dev->m_outputEndPoints.at(i).m_AudioClient->Stop();
+        hr=dev->m_outputEndPoints.at(i).m_AudioClient->Stop();
         CloseHandle(wantDataEvents[i]);
     }
     CoUninitialize();
