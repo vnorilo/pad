@@ -34,22 +34,22 @@ namespace ASIO{
 
 		CleanupList Cleanup;
 
-		CharLowerBuff(clsidstr,strlen(clsidstr));
-		if ((cr = RegOpenKey(HKEY_CLASSES_ROOT,COM_CLSID,&hkEnum)) == ERROR_SUCCESS) 
+		CharLowerBuffA(clsidstr,strlen(clsidstr));
+		if ((cr = RegOpenKeyA(HKEY_CLASSES_ROOT,COM_CLSID,&hkEnum)) == ERROR_SUCCESS) 
 		{
 			CLEANUP(RegCloseKey(hkEnum));
 			index = 0;
 			while (cr == ERROR_SUCCESS && !found) {
-				cr = RegEnumKey(hkEnum,index++,databuf,512);
+				cr = RegEnumKeyA(hkEnum,index++,databuf,512);
 				if (cr == ERROR_SUCCESS) {
-					CharLowerBuff(databuf,strlen(databuf));
+					CharLowerBuffA(databuf,strlen(databuf));
 					if (!(strcmp(databuf,clsidstr))) {
-						if ((cr = RegOpenKeyEx(hkEnum,(LPCTSTR)databuf,0,KEY_READ,&hksub)) == ERROR_SUCCESS) {
+						if ((cr = RegOpenKeyExA(hkEnum,(LPCSTR)databuf,0,KEY_READ,&hksub)) == ERROR_SUCCESS) {
 							CLEANUP(RegCloseKey(hksub));
-							if ((cr = RegOpenKeyEx(hksub,(LPCTSTR)INPROC_SERVER,0,KEY_READ,&hkpath)) == ERROR_SUCCESS) {
+							if ((cr = RegOpenKeyExA(hksub,INPROC_SERVER,0,KEY_READ,&hkpath)) == ERROR_SUCCESS) {
 								CLEANUP(RegCloseKey(hkpath));
 								datatype = REG_SZ; datasize = (DWORD)dllpathsize;
-								cr = RegQueryValueEx(hkpath,0,0,&datatype,(LPBYTE)dllpath,&datasize);
+								cr = RegQueryValueExA(hkpath,0,0,&datatype,(LPBYTE)dllpath,&datasize);
 								if (cr == ERROR_SUCCESS) {
 									memset(&ofs,0,sizeof(OFSTRUCT));
 									ofs.cBytes = sizeof(OFSTRUCT); 
@@ -76,12 +76,12 @@ namespace ASIO{
 
 		CleanupList Cleanup;
 
-		if (RegOpenKeyEx(hkey,keyname.c_str(),0,KEY_READ,&hksub) == ERROR_SUCCESS)
+		if (RegOpenKeyExA(hkey,keyname.c_str(),0,KEY_READ,&hksub) == ERROR_SUCCESS)
 		{
 			CLEANUP(RegCloseKey(hksub));
 
 			datatype = REG_SZ;
-			if (RegQueryValueEx(hksub,COM_CLSID,0,&datatype,databuf,&datasize) == ERROR_SUCCESS)
+			if (RegQueryValueExA(hksub,COM_CLSID,0,&datatype,databuf,&datasize) == ERROR_SUCCESS)
 			{
 				if (findDrvPath((char*)databuf,dllpath,MAXPATHLEN) == 0)
 				{
@@ -95,7 +95,7 @@ namespace ASIO{
 
 					datatype = REG_SZ;
 					datasize = _datasize;
-					if (RegQueryValueEx(hksub,ASIODRV_DESC,0,&datatype,(LPBYTE)databuf,&datasize) == ERROR_SUCCESS)
+					if (RegQueryValueExA(hksub,ASIODRV_DESC,0,&datatype,(LPBYTE)databuf,&datasize) == ERROR_SUCCESS)
 						asioDriver.driverName = std::string((const char*)databuf,(const char*)databuf+datasize-1);
 					else
 						asioDriver.driverName = keyname;				
@@ -116,9 +116,9 @@ namespace ASIO{
 
 		CLEANUP(if (hkEnum) RegCloseKey(hkEnum));
 
-		for(auto cr = RegOpenKey(HKEY_LOCAL_MACHINE,ASIO_PATH,&hkEnum);
+		for(auto cr = RegOpenKeyA(HKEY_LOCAL_MACHINE,ASIO_PATH,&hkEnum);
 			cr == ERROR_SUCCESS;
-			cr = RegEnumKey(hkEnum,index++,keyname,MAXDRVNAMELEN))
+			cr = RegEnumKeyA(hkEnum,index++,keyname,MAXDRVNAMELEN))
 		{
 			LoadDriver(hkEnum,keyname,drivers);
 		}

@@ -541,3 +541,8 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
 }
 
 }
+
+#ifdef WIN32
+extern "C" const char* LinkWasapi() {return publisher.GetName();}
+#pragma comment(linker,"/include:LinkWasapi")
+#endif
