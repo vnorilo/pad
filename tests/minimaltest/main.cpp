@@ -1,3 +1,4 @@
+#ifndef PAD_EXPORT_STATIC_LIB
 #include <iostream>
 #include "pad.h"
 #define _USE_MATH_DEFINES
@@ -26,13 +27,21 @@ int main()
                   << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
     }
     //return 0;
+    //auto audioDevice = myAudioSession.FindDevice("2- High Definition Audio Device");
     auto audioDevice = myAudioSession.FindDevice("E-MU E-DSP");
     //getchar();
     if (audioDevice != myAudioSession.end())
     {
         double phase = 0;
+        int lastCBSize=-1;
         auto myAudioProcess = Closure(([&](uint64_t time, const PAD::AudioStreamConfiguration& cfg, const float *input, float *output, unsigned frames)
         {
+                                          if (lastCBSize!=frames)
+                                            {
+                                            cerr << frames << "\n";
+                                              lastCBSize=frames;
+                                          }
+
             unsigned numOuts(cfg.GetNumStreamOutputs());
             unsigned numIns(cfg.GetNumStreamInputs());
             for(unsigned i(0);i<frames;++i)
@@ -77,3 +86,4 @@ int main()
     return 0;
 }
 
+#endif
