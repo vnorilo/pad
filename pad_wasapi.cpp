@@ -548,3 +548,4 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
 }
 
 }
+
