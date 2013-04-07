@@ -57,6 +57,7 @@ public:
         }
         PadComSmartPointer<IAudioClient> m_AudioClient;
         PadComSmartPointer<IAudioRenderClient> m_AudioRenderClient;
+        PadComSmartPointer<IAudioCaptureClient> m_AudioCaptureClient;
         PadComSmartPointer<IMMDevice> m_Endpoint;
         unsigned m_numChannels;
         std::string m_name;
@@ -78,7 +79,7 @@ public:
     }
     ~WasapiDevice()
     {
-        //cerr << "WasapiDevice dtor\n";
+        cerr << "WasapiDevice dtor\n";
         if (m_audioThreadHandle!=0)
             Close();
     }
@@ -86,21 +87,25 @@ public:
     const char *GetName() const { return m_deviceName.c_str(); }
     const char *GetHostAPI() const { return "WASAPI"; }
     void SetName(const std::string& n) { m_deviceName=n; }
-    void AddInputEndPoint(const PadComSmartPointer<IMMDevice>& ep, unsigned numChannels, const std::string& name=std::string())
+    void AddInputEndPoint(const PadComSmartPointer<IMMDevice>& ep, unsigned numChannels, bool isDefault, const std::string& name=std::string())
     {
-        cerr << "PAD/WASAPI: Inputs are not yet supported\n";
-        /*
         m_numInputs+=numChannels;
-        WasapiEndPoint wep(ep, numChannels,name);
+        unsigned foo=1; if (isDefault==true) foo=0;
+        if (isDefault==true)
+            cerr << name << " is default input end point\n";
+        WasapiEndPoint wep(ep, numChannels, foo, name);
+        // I realize this is theoretically inefficient and not really elegant but I hate std::list so much I don't want to use it
+        // just to get push_front and to avoid moving the couple of entries around in the std::vector which I prefer to use in the code
         m_inputEndPoints.push_back(wep);
-        */
+        std::sort(m_inputEndPoints.begin(),m_inputEndPoints.end(),
+                  [](const WasapiEndPoint& a,const WasapiEndPoint& b) { return a.m_isDefault<b.m_isDefault; });
     }
     void AddOutputEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numChannels, bool isDefault,const std::string& name=std::string())
     {
         m_numOutputs+=numChannels;
         unsigned foo=1; if (isDefault==true) foo=0;
         if (isDefault==true)
-            cerr << name << " is default end point\n";
+            cerr << name << " is default output end point\n";
         WasapiEndPoint wep(ep, numChannels, foo, name);
         // I realize this is theoretically inefficient and not really elegant but I hate std::list so much I don't want to use it
         // just to get push_front and to avoid moving the couple of entries around in the std::vector which I prefer to use in the code
@@ -153,7 +158,7 @@ public:
         }
         const unsigned endPointToActivate=0;
         //cout << "Wasapi::Open, thread id "<<GetCurrentThreadId()<<"\n";
-        m_glitchCounter=0;
+        m_outputGlitchCounter=0;
         currentDelegate = &conf.GetAudioDelegate();
         currentConfiguration=conf;
         if (m_currentState==WASS_Closed || m_currentState==WASS_Idle)
@@ -181,7 +186,7 @@ public:
                             hr = theClient->GetBufferSize(&nFramesInBuffer);
                             if (nFramesInBuffer>7 && nFramesInBuffer<32769)
                             {
-                                m_delegateBuffer.resize(nFramesInBuffer*m_numOutputs);
+                                m_delegateOutputBuffer.resize(nFramesInBuffer*m_numOutputs);
                                 currentConfiguration.SetBufferSize(nFramesInBuffer);
                                 PadComSmartPointer<IAudioRenderClient> theAudioRenderClient;
                                 hr = theClient->GetService(__uuidof(IAudioRenderClient),(void**)theAudioRenderClient.NullAndGetPtrAddress());
@@ -194,6 +199,46 @@ public:
                                 }
                                 m_currentState=WASS_Open;
                             } else cerr << "PAD/WASAPI : Output audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
+                        }
+
+                    } else cerr << "PAD/WASAPI : Could not initialize IAudioClient\n";
+                }
+            }
+            if (m_inputEndPoints.size()>0)
+            {
+                //if (currentConfiguration.GetNumStreamInputs()>m_inputEndPoints.at(endPointToActivate).m_numChannels)
+                //{
+                //    currentConfiguration.SetDeviceChannelLimits(0,m_outputEndPoints.at(endPointToActivate).m_numChannels);
+                //}
+                PadComSmartPointer<IAudioClient> theClient;
+                hr = m_inputEndPoints.at(endPointToActivate).m_Endpoint->Activate(
+                            __uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)theClient.NullAndGetPtrAddress());
+                if (CheckHResult(hr,"PAD/WASAPI : Activate input audioclient")==true)
+                {
+                    if (theClient)
+                    {
+                        WAVEFORMATEX *pMixformat=nullptr;
+                        hr = theClient->GetMixFormat(&pMixformat);
+                        hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pMixformat, NULL);
+                        if (CheckHResult(hr,"PAD/WASAPI : Initialize audio capture client")==true)
+                        {
+                            UINT32 nFramesInBuffer=0;
+                            hr = theClient->GetBufferSize(&nFramesInBuffer);
+                            if (nFramesInBuffer>7 && nFramesInBuffer<32769)
+                            {
+                                m_delegateInputBuffer.resize(nFramesInBuffer*m_numInputs);
+                                currentConfiguration.SetBufferSize(nFramesInBuffer);
+                                PadComSmartPointer<IAudioCaptureClient> theAudioCaptureClient;
+                                hr = theClient->GetService(__uuidof(IAudioCaptureClient),(void**)theAudioCaptureClient.NullAndGetPtrAddress());
+                                m_inputEndPoints[endPointToActivate].m_AudioClient=theClient;
+                                m_inputEndPoints[endPointToActivate].m_AudioCaptureClient=theAudioCaptureClient;
+                                m_enabledDeviceInputs.resize(m_numInputs);
+                                for (unsigned i=0;i<m_numOutputs;i++)
+                                {
+                                    m_enabledDeviceInputs[i]=currentConfiguration.IsInputEnabled(i);
+                                }
+                                m_currentState=WASS_Open;
+                            } else cerr << "PAD/WASAPI : Input audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
                         }
 
                     } else cerr << "PAD/WASAPI : Could not initialize IAudioClient\n";
@@ -299,11 +344,12 @@ public:
 
     AudioCallbackDelegate* currentDelegate;
     AudioStreamConfiguration currentConfiguration;
-    //PadComSmartPointer<IAudioClient> m_outputAudioClient;
-    //PadComSmartPointer<IAudioRenderClient> outputAudioRenderClient;
-    vector<float> m_delegateBuffer;
-    unsigned m_glitchCounter;
+    vector<float> m_delegateOutputBuffer;
+    vector<float> m_delegateInputBuffer;
+    unsigned m_outputGlitchCounter;
+    unsigned m_inputGlitchCounter;
     vector<bool> m_enabledDeviceOutputs;
+    vector<bool> m_enabledDeviceInputs;
     WasapiState m_currentState;
     std::shared_ptr<std::mutex> m_mutex;
     vector<WasapiEndPoint> m_inputEndPoints;
@@ -312,8 +358,6 @@ public:
     std::vector<int> m_supportedSampleRates;
 private:
     HANDLE m_audioThreadHandle;
-    //vector<PadComSmartPointer<IMMDevice>> m_inputEndpoints;
-    //vector<PadComSmartPointer<IMMDevice>> m_outputEndpoints;
     string m_deviceName;
     unsigned m_numInputs;
     unsigned m_numOutputs;
@@ -351,7 +395,8 @@ struct WasapiPublisher : public HostAPIPublisher
         if (CheckHResult(hr,"PAD/WASAPI : Could not create device enumerator")==false) return;
         PadComSmartPointer<IMMDeviceCollection> collection;
         PadComSmartPointer<IMMDevice> endpoint;
-        PadComSmartPointer<IMMDevice> defaultEndpoint;
+        PadComSmartPointer<IMMDevice> defaultOutputEndpoint;
+        PadComSmartPointer<IMMDevice> defaultInputEndpoint;
         PadComSmartPointer<IPropertyStore> props;
         //LPWSTR pwszID = NULL;
         hr=enumerator->EnumAudioEndpoints(eAll,DEVICE_STATE_ACTIVE,collection.NullAndGetPtrAddress());
@@ -364,28 +409,38 @@ struct WasapiPublisher : public HostAPIPublisher
             cerr << "pad : wasapi : No endpoints found\n";
             return;
         }
-        std::string defaultDevId;
-        if (CheckHResult(enumerator->GetDefaultAudioEndpoint(eRender,eMultimedia,defaultEndpoint.NullAndGetPtrAddress()),"PAD/WASAPI : Could not get default endpoint device"))
+        std::string defaultOutputDevId;
+        if (CheckHResult(enumerator->GetDefaultAudioEndpoint(eRender,eMultimedia,defaultOutputEndpoint.NullAndGetPtrAddress()),"PAD/WASAPI : Could not get default output endpoint device"))
         {
             WCHAR* deviceId=nullptr;
-            defaultEndpoint->GetId(&deviceId);
-            defaultDevId=WideCharToStdString(deviceId);
-            CoTaskMemFree (deviceId);
+            defaultOutputEndpoint->GetId(&deviceId);
+            defaultOutputDevId=WideCharToStdString(deviceId);
+            CoTaskMemFree(deviceId);
+        }
+        std::string defaultInputDevId;
+        if (CheckHResult(enumerator->GetDefaultAudioEndpoint(eCapture,eMultimedia,defaultInputEndpoint.NullAndGetPtrAddress()),"PAD/WASAPI : Could not get default input endpoint device"))
+        {
+            WCHAR* deviceId=nullptr;
+            defaultInputEndpoint->GetId(&deviceId);
+            defaultInputDevId=WideCharToStdString(deviceId);
+            CoTaskMemFree(deviceId);
         }
         std::vector<int> sampleRatesToTest;
         sampleRatesToTest.push_back(44100); sampleRatesToTest.push_back(48000); sampleRatesToTest.push_back(88200); sampleRatesToTest.push_back(96000);
         sampleRatesToTest.push_back(176400); sampleRatesToTest.push_back(192000);
         for (unsigned i=0;i<count;i++)
         {
-            bool isDefaultDevice=false;
+            bool isDefaultOutputDevice=false; bool isDefaultInputDevice=false;
             hr = collection->Item(i, endpoint.NullAndGetPtrAddress());
             if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint collection item")==false) continue;
             WCHAR* deviceId=nullptr;
             endpoint->GetId(&deviceId);
             std::string curDevId=WideCharToStdString(deviceId);
             CoTaskMemFree(deviceId);
-            if (curDevId==defaultDevId)
-                isDefaultDevice=true;
+            if (curDevId==defaultOutputDevId)
+                isDefaultOutputDevice=true;
+            if (curDevId==defaultInputDevId)
+                isDefaultInputDevice=true;
             hr = endpoint->OpenPropertyStore(STGM_READ, props.NullAndGetPtrAddress());
             if (CheckHResult(hr,"PAD/WASAPI : Could not open endpoint property store")==false) continue;
             MyPropVariant adapterName;
@@ -402,7 +457,7 @@ struct WasapiPublisher : public HostAPIPublisher
             hr = endpoint->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)tempClient.NullAndGetPtrAddress());
             if (tempClient==nullptr)
             {
-                cerr << "pad : wasapi : could not create temp client for " << i << " to get channel counts and shit\n";
+                cerr << "pad : wasapi : could not create temp client for " << i << " to get channel counts etc\n";
                 continue;
             }
             REFERENCE_TIME defPer, minPer;
@@ -440,11 +495,11 @@ struct WasapiPublisher : public HostAPIPublisher
             if (audioDirection==eRender)
             {
                 cerr << i << " " << endPointNameString << "\n";
-                wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,isDefaultDevice, endPointNameString);
+                wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,isDefaultOutputDevice, endPointNameString);
             }
             else if (audioDirection==eCapture)
             {
-                wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,endPointNameString);
+                wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,isDefaultInputDevice,endPointNameString);
             }
         }
         for(std::map<std::string,WasapiDevice>::iterator iter=wasapiMap.begin(); iter!=wasapiMap.end(); ++iter)
@@ -471,38 +526,88 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     std::vector<HANDLE> wantDataEvents;
     // 1 is used as a hack until rendering multiple endpoints can be properly tested
     const unsigned numOutputEndPoints=1; //dev->m_outputEndPoints.size();
-    wantDataEvents.resize(numOutputEndPoints);
+    const unsigned numInputEndPoints=1;
+    const unsigned numEndpointEvents=numOutputEndPoints+numInputEndPoints;
+    wantDataEvents.resize(numEndpointEvents);
     HRESULT hr=0;
+    unsigned evCnt=0;
     for (unsigned int i=0;i<numOutputEndPoints;i++)
     {
-        wantDataEvents[i]=CreateEvent(NULL,FALSE,FALSE,NULL);
-        dev->m_outputEndPoints.at(i).m_AudioClient->SetEventHandle(wantDataEvents[i]);
+        wantDataEvents[evCnt]=CreateEvent(NULL,FALSE,FALSE,NULL);
+        dev->m_outputEndPoints.at(i).m_AudioClient->SetEventHandle(wantDataEvents[evCnt]);
         hr=dev->m_outputEndPoints.at(i).m_AudioClient->Start();
-        CheckHResult(hr,"Wasapi TestFunction Start audio");
+        CheckHResult(hr,"Wasapi Output Start audio");
+        evCnt++;
+    }
+    for (unsigned int i=0;i<numInputEndPoints;i++)
+    {
+        wantDataEvents[evCnt]=CreateEvent(NULL,FALSE,FALSE,NULL);
+        dev->m_inputEndPoints.at(i).m_AudioClient->SetEventHandle(wantDataEvents[evCnt]);
+        hr=dev->m_inputEndPoints.at(i).m_AudioClient->Start();
+        CheckHResult(hr,"Wasapi Input Start audio");
+        evCnt++;
     }
     int counter=0;
     int nFramesInBuffer=dev->currentConfiguration.GetBufferSize();
-    BYTE* data=0;
+    BYTE* captureData=0;
+    BYTE* renderData=0;
     while (dev->m_threadShouldStop==false)
     {
         while (dev->m_currentState==WasapiDevice::WASS_Playing)
         {
             const AudioStreamConfiguration curConf=dev->currentConfiguration;
-            if (WaitForMultipleObjects(numOutputEndPoints,wantDataEvents.data(),TRUE,1000)==WAIT_OBJECT_0)
+            if (WaitForMultipleObjects(numEndpointEvents,wantDataEvents.data(),TRUE,1000)<WAIT_OBJECT_0+numEndpointEvents)
             {
+                for (unsigned ep=0;ep<numInputEndPoints;ep++)
+                {
+                    UINT32 nFramesOfPadding;
+                    hr = dev->m_inputEndPoints.at(ep).m_AudioClient->GetCurrentPadding(&nFramesOfPadding);
+                    if (nFramesOfPadding==nFramesInBuffer)
+                    {
+                        dev->m_inputGlitchCounter++;
+                    }
+                    UINT32 framesInPacket=0;
+                    DWORD bufferStatus=0;
+                    hr = dev->m_inputEndPoints.at(ep).m_AudioCaptureClient->GetBuffer(&captureData, &framesInPacket, &bufferStatus, NULL, NULL);
+                    if (hr>=0 && captureData!=nullptr)
+                    {
+                        float* pf=(float*)captureData;
+                        unsigned numStreamChans=curConf.GetNumStreamInputs();
+                        unsigned numEndpointChans=dev->m_inputEndPoints.at(ep).m_numChannels;
+                        unsigned k=0;
+                        for (unsigned i=0;i<numEndpointChans;i++)
+                        {
+                            if (dev->m_enabledDeviceInputs.at(i)==true)
+                            {
+                                for (unsigned j=0;j<framesInPacket;j++)
+                                {
+                                    dev->m_delegateInputBuffer[j*numStreamChans+k]=pf[j*numEndpointChans+i];
+                                }
+                                k++;
+                            } else
+                            {
+                                for (unsigned j=0;j<framesInPacket;j++)
+                                {
+                                    dev->m_delegateInputBuffer[j*numStreamChans+k]=0.0f;
+                                }
+                            }
+                        }
+                        hr = dev->m_inputEndPoints.at(ep).m_AudioCaptureClient->ReleaseBuffer(framesInPacket);
+                    }
+                }
                 for (unsigned ep=0;ep<numOutputEndPoints;ep++)
                 {
                     UINT32 nFramesOfPadding;
                     hr = dev->m_outputEndPoints.at(ep).m_AudioClient->GetCurrentPadding(&nFramesOfPadding);
                     if (nFramesOfPadding==nFramesInBuffer)
                     {
-                        dev->m_glitchCounter++;
+                        dev->m_outputGlitchCounter++;
                     }
-                    hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->GetBuffer(nFramesInBuffer - nFramesOfPadding, &data);
-                    if (hr>=0 && data!=nullptr)
+                    hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->GetBuffer(nFramesInBuffer - nFramesOfPadding, &renderData);
+                    if (hr>=0 && renderData!=nullptr)
                     {
-                        dev->currentDelegate->Process(0,curConf,0,dev->m_delegateBuffer.data(),nFramesInBuffer - nFramesOfPadding);
-                        float* pf=(float*)data;
+                        dev->currentDelegate->Process(0,curConf,dev->m_delegateInputBuffer.data(),dev->m_delegateOutputBuffer.data(),nFramesInBuffer - nFramesOfPadding);
+                        float* pf=(float*)renderData;
                         unsigned numStreamChans=curConf.GetNumStreamOutputs();
                         unsigned numEndpointChans=dev->m_outputEndPoints.at(ep).m_numChannels;
                         unsigned k=0;
@@ -512,14 +617,14 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                             {
                                 for (unsigned j=0;j<nFramesInBuffer-nFramesOfPadding;j++)
                                 {
-                                    pf[j*numEndpointChans+i]=dev->m_delegateBuffer[j*numStreamChans+k];
+                                    pf[j*numEndpointChans+i]=dev->m_delegateOutputBuffer[j*numStreamChans+k];
                                 }
                                 k++;
                             } else
                             {
                                 for (unsigned j=0;j<nFramesInBuffer-nFramesOfPadding;j++)
                                 {
-                                    pf[j*numEndpointChans+i]=0.0;
+                                    pf[j*numEndpointChans+i]=0.0f;
                                 }
                             }
                         }
@@ -536,14 +641,22 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         //cerr << "WASAPI thread polling for playback status change...\n";
         Sleep(1);
     }
+    evCnt=0;
     for (unsigned i=0;i<numOutputEndPoints;i++)
     {
         hr=dev->m_outputEndPoints.at(i).m_AudioClient->Stop();
-        CloseHandle(wantDataEvents[i]);
+        CloseHandle(wantDataEvents[evCnt]);
+        evCnt++;
+    }
+    for (unsigned i=0;i<numInputEndPoints;i++)
+    {
+        hr=dev->m_inputEndPoints.at(i).m_AudioClient->Stop();
+        CloseHandle(wantDataEvents[evCnt]);
+        evCnt++;
     }
     CoUninitialize();
     //if (dev->m_glitchCounter>0)
-        cerr << "ended wasapi audio thread. "<<dev->m_glitchCounter<< " glitches detected\n";
+        cerr << "ended wasapi audio thread. "<<dev->m_outputGlitchCounter<< " glitches detected\n";
     return 0;
 }
 
