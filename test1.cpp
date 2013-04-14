@@ -23,7 +23,7 @@ int main()
 						 << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
 	}
 
-	auto asioDevice = myAudioSession.FindDevice("coreaudio","Pertti");
+	auto asioDevice = myAudioSession.FindDevice("coreaudio","pertti");
 
 	if (asioDevice != myAudioSession.end())
 	{
@@ -38,14 +38,14 @@ int main()
 				for(unsigned j(0);j<numOuts;++j)
 				{
 					output[i*numOuts+j] = (float)sin(phase * (2 + double(j)/numOuts)) * 0.8;
-					if (j<numIns) output[i*numOuts+j] = input[i*numIns+j];
+					if (j<numIns) output[i*numOuts+j] *= input[i*numIns+j];
 					phase = phase + 0.01 * M_PI;
 				}
 			}
 		}));
 
 		std::cout << "Actual stream parameters: " <<
-		asioDevice->Open(Stream(myAudioProcess).StereoOutput(0).SampleRate(48000));
+		asioDevice->Open(Stream(myAudioProcess).StereoOutput(0).StereoInput(0).SampleRate(48000));
 		getchar();
 		asioDevice->Close();
         }
