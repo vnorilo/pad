@@ -21,7 +21,8 @@
 		1104D64E170242F700721830 /* padtest.1 in CopyFiles */ = {isa = PBXBuildFile; fileRef = 1104D64D170242F700721830 /* padtest.1 */; };
 		1104D6531702430E00721830 /* test1.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 1104D6521702430E00721830 /* test1.cpp */; };
 		1104D6541702437800721830 /* PAD.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1103FA1D1701EB98005103BA /* PAD.framework */; };
-		11B8B25217024885006E717C /* pad_coreaudio.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 11B8B25017024885006E717C /* pad_coreaudio.cpp */; };
+		111BE4F61717252B00040846 /* pad_coreaudio.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 111BE4F51717252B00040846 /* pad_coreaudio.cpp */; };
+		119C9BDB17171496004AAA50 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 119C9BDA17171496004AAA50 /* Carbon.framework */; };
 		11B8B25B1702568A006E717C /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 11B8B25A1702568A006E717C /* CoreAudio.framework */; };
 		11B8B25D17025691006E717C /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 11B8B25C17025691006E717C /* CoreFoundation.framework */; };
 		779FDC6D17061F2900ADC8AE /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 779FDC6C17061F2900ADC8AE /* AudioToolbox.framework */; };
@@ -62,7 +63,9 @@
 		1104D649170242F700721830 /* padtest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = padtest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1104D64D170242F700721830 /* padtest.1 */ = {isa = PBXFileReference; lastKnownFileType = text.man; path = padtest.1; sourceTree = "<group>"; };
 		1104D6521702430E00721830 /* test1.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = test1.cpp; path = ../../../test1.cpp; sourceTree = "<group>"; };
-		11B8B25017024885006E717C /* pad_coreaudio.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pad_coreaudio.cpp; sourceTree = "<group>"; };
+		111BE4F51717252B00040846 /* pad_coreaudio.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = pad_coreaudio.cpp; path = ../../../pad_coreaudio.cpp; sourceTree = "<group>"; };
+		119C9BD81717148B004AAA50 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/System/Library/Frameworks/Carbon.framework; sourceTree = DEVELOPER_DIR; };
+		119C9BDA17171496004AAA50 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Carbon.framework; path = System/Library/Frameworks/Carbon.framework; sourceTree = SDKROOT; };
 		11B8B2541702562D006E717C /* CoreAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreAudio.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/System/Library/Frameworks/CoreAudio.framework; sourceTree = DEVELOPER_DIR; };
 		11B8B25617025639006E717C /* AudioUnit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioUnit.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/System/Library/Frameworks/AudioUnit.framework; sourceTree = DEVELOPER_DIR; };
 		11B8B25817025650006E717C /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/System/Library/Frameworks/CoreFoundation.framework; sourceTree = DEVELOPER_DIR; };
@@ -78,6 +81,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				119C9BDB17171496004AAA50 /* Carbon.framework in Frameworks */,
 				779FDC6F17061F4500ADC8AE /* AudioUnit.framework in Frameworks */,
 				779FDC6D17061F2900ADC8AE /* AudioToolbox.framework in Frameworks */,
 				11B8B25D17025691006E717C /* CoreFoundation.framework in Frameworks */,
@@ -99,6 +103,8 @@
 		1103FA111701EB98005103BA = {
 			isa = PBXGroup;
 			children = (
+				119C9BDA17171496004AAA50 /* Carbon.framework */,
+				119C9BD81717148B004AAA50 /* Carbon.framework */,
 				779FDC6E17061F4500ADC8AE /* AudioUnit.framework */,
 				779FDC6C17061F2900ADC8AE /* AudioToolbox.framework */,
 				776396EF17061EDA00D5B50B /* CoreAudioKit.framework */,
@@ -144,6 +150,7 @@
 		1103FA261701EB98005103BA /* PAD */ = {
 			isa = PBXGroup;
 			children = (
+				111BE4F51717252B00040846 /* pad_coreaudio.cpp */,
 				1103FA391701EC4C005103BA /* PAD.cpp */,
 				1103FA361701EC4C005103BA /* PAD.h */,
 				1103FA451701EC5A005103BA /* PADErrors.h */,
@@ -154,7 +161,6 @@
 				1103FA3A1701EC4C005103BA /* pad_samples_avx.h */,
 				1103FA3B1701EC4C005103BA /* pad_samples_sse2.h */,
 				1103FA491701EFB2005103BA /* pad_jack.cpp */,
-				11B8B25017024885006E717C /* pad_coreaudio.cpp */,
 				1103FA271701EB98005103BA /* Supporting Files */,
 			);
 			path = PAD;
@@ -279,7 +285,7 @@
 				1103FA401701EC4C005103BA /* PAD.cpp in Sources */,
 				1103FA441701EC55005103BA /* HostAPI.cpp in Sources */,
 				1103FA4A1701EFB2005103BA /* pad_jack.cpp in Sources */,
-				11B8B25217024885006E717C /* pad_coreaudio.cpp in Sources */,
+				111BE4F61717252B00040846 /* pad_coreaudio.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
