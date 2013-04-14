@@ -76,10 +76,11 @@ public:
         m_numInputs(0), m_numOutputs(0), m_audioThreadHandle(0), currentDelegate(0), m_currentState(WASS_Idle),
         m_threadShouldStop(false)
     {
+
     }
     ~WasapiDevice()
     {
-        cerr << "WasapiDevice dtor\n";
+        //cerr << "WasapiDevice dtor\n";
         if (m_audioThreadHandle!=0)
             Close();
     }
