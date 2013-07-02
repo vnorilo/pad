@@ -76,7 +76,6 @@ public:
         m_numInputs(0), m_numOutputs(0), m_audioThreadHandle(0), currentDelegate(0), m_currentState(WASS_Idle),
         m_threadShouldStop(false)
     {
-
     }
     ~WasapiDevice()
     {
@@ -355,7 +354,7 @@ public:
     std::shared_ptr<std::mutex> m_mutex;
     vector<WasapiEndPoint> m_inputEndPoints;
     vector<WasapiEndPoint> m_outputEndPoints;
-    bool m_threadShouldStop;
+    volatile bool m_threadShouldStop;
     std::vector<int> m_supportedSampleRates;
 private:
     HANDLE m_audioThreadHandle;
