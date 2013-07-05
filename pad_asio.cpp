@@ -102,9 +102,9 @@ namespace {
 				State = Prepared;
 				if (to == Prepared) break;
 				THROW_ERROR(DeviceCloseStreamFailure,ASIO().disposeBuffers());
+				callbacks.Release(*this);
 			case Initialized:
 				State = Initialized;
-				callbacks.Release(*this);
 				if (to == Initialized) break;
 			case Loaded:
 				State = Loaded;
@@ -231,7 +231,6 @@ namespace {
 			if (State < Prepared)
 			{
 				long minBuf, maxBuf, prefBuf, bufGran;
-				callbacks.Allocate(*this);
 				THROW_ERROR(DeviceOpenStreamFailure,ASIO().getBufferSize(&minBuf,&maxBuf,&prefBuf,&bufGran));
 				callbackBufferFrames = prefBuf;
 
@@ -260,8 +259,9 @@ namespace {
 				streamNumOutputs = bufferInfos.size() - streamNumInputs;
 				delegateBufferOutput.resize(callbackBufferFrames * streamNumOutputs);
 
-				THROW_ERROR(DeviceOpenStreamFailure,ASIO().createBuffers(bufferInfos.data(),bufferInfos.size(),callbackBufferFrames,callbacks));
+				callbacks.Allocate(*this);
 				State = Prepared;
+				THROW_ERROR(DeviceOpenStreamFailure,ASIO().createBuffers(bufferInfos.data(),bufferInfos.size(),callbackBufferFrames,callbacks));
 
 				channelInfos.clear();
 				channelInfos.resize(bufferInfos.size());
