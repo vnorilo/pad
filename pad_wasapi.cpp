@@ -502,10 +502,10 @@ struct WasapiPublisher : public HostAPIPublisher
                 wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,isDefaultInputDevice,endPointNameString);
             }
         }
-        for(std::map<std::string,WasapiDevice>::iterator iter=wasapiMap.begin(); iter!=wasapiMap.end(); ++iter)
+        for (auto &element : wasapiMap)
         {
-            iter->second.InitDefaultStreamConfigurations();
-            PADInstance.Register(&iter->second);
+            element.second.InitDefaultStreamConfigurations();
+            PADInstance.Register(&element.second);
         }
         high_resolution_clock::time_point t2 = high_resolution_clock::now();
         duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
