@@ -14,6 +14,7 @@ int main()
 		void Catch(HardError e) {std::cerr << "*Hard "<<e.GetCode()<<"* :" << e.what() << "\n";}
 	};
     
+
     ErrorLogger log;	
 	Session myAudioSession(true,&log);
 
@@ -23,7 +24,7 @@ int main()
 						 << "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
 	}
 
-	auto asioDevice = myAudioSession.FindDevice("coreaudio","Pertti");
+	auto asioDevice = myAudioSession.FindDevice("wasapi","idt");
 
 	if (asioDevice != myAudioSession.end())
 	{
@@ -47,7 +48,7 @@ int main()
 		std::cout << "Actual stream parameters: " <<
 		asioDevice->Open(Stream(myAudioProcess).StereoOutput(0).SampleRate(48000));
 		getchar();
-		asioDevice->Close();
+//		asioDevice->Close();
         }
         catch(std::runtime_error e)
         {
