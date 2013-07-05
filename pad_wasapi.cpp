@@ -558,6 +558,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
             const AudioStreamConfiguration curConf=dev->currentConfiguration;
             if (WaitForMultipleObjects(numEndpointEvents,wantDataEvents.data(),TRUE,1000)<WAIT_OBJECT_0+numEndpointEvents)
             {
+                int minFramesInput=65536;
                 for (unsigned ep=0;ep<numInputEndPoints;ep++)
                 {
                     UINT32 nFramesOfPadding;
@@ -571,6 +572,8 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                     hr = dev->m_inputEndPoints.at(ep).m_AudioCaptureClient->GetBuffer(&captureData, &framesInPacket, &bufferStatus, NULL, NULL);
                     if (hr>=0 && captureData!=nullptr)
                     {
+                        if (framesInPacket<minFramesInput)
+                            minFramesInput=framesInPacket;
                         float* pf=(float*)captureData;
                         unsigned numStreamChans=curConf.GetNumStreamInputs();
                         unsigned numEndpointChans=dev->m_inputEndPoints.at(ep).m_numChannels;
@@ -603,10 +606,13 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                     {
                         dev->m_outputGlitchCounter++;
                     }
-                    hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->GetBuffer(nFramesInBuffer - nFramesOfPadding, &renderData);
+                    unsigned framesToOutput=nFramesInBuffer-nFramesOfPadding;
+                    if (minFramesInput!=65536)
+                        framesToOutput=minFramesInput;
+                    hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->GetBuffer(framesToOutput, &renderData);
                     if (hr>=0 && renderData!=nullptr)
                     {
-                        dev->currentDelegate->Process(0,curConf,dev->m_delegateInputBuffer.data(),dev->m_delegateOutputBuffer.data(),nFramesInBuffer - nFramesOfPadding);
+                        dev->currentDelegate->Process(0,curConf,dev->m_delegateInputBuffer.data(),dev->m_delegateOutputBuffer.data(),framesToOutput);
                         float* pf=(float*)renderData;
                         unsigned numStreamChans=curConf.GetNumStreamOutputs();
                         unsigned numEndpointChans=dev->m_outputEndPoints.at(ep).m_numChannels;
@@ -615,20 +621,20 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                         {
                             if (dev->m_enabledDeviceOutputs[i]==true)
                             {
-                                for (unsigned j=0;j<nFramesInBuffer-nFramesOfPadding;j++)
+                                for (unsigned j=0;j<framesToOutput;j++)
                                 {
                                     pf[j*numEndpointChans+i]=dev->m_delegateOutputBuffer[j*numStreamChans+k];
                                 }
                                 k++;
                             } else
                             {
-                                for (unsigned j=0;j<nFramesInBuffer-nFramesOfPadding;j++)
+                                for (unsigned j=0;j<framesToOutput;j++)
                                 {
                                     pf[j*numEndpointChans+i]=0.0f;
                                 }
                             }
                         }
-                        hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->ReleaseBuffer(nFramesInBuffer - nFramesOfPadding, 0);
+                        hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->ReleaseBuffer(framesToOutput, 0);
                     }
                 }
                 counter++;
@@ -655,7 +661,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         evCnt++;
     }
     CoUninitialize();
-    //if (dev->m_glitchCounter>0)
+    if (dev->m_outputGlitchCounter>0)
         cerr << "ended wasapi audio thread. "<<dev->m_outputGlitchCounter<< " glitches detected\n";
     return 0;
 }
