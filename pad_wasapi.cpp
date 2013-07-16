@@ -556,7 +556,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         while (dev->m_currentState==WasapiDevice::WASS_Playing)
         {
             const AudioStreamConfiguration curConf=dev->currentConfiguration;
-            if (WaitForMultipleObjects(numEndpointEvents,wantDataEvents.data(),TRUE,1000)<WAIT_OBJECT_0+numEndpointEvents)
+            if (WaitForMultipleObjects(numEndpointEvents,wantDataEvents.data(),TRUE,10000)<WAIT_OBJECT_0+numEndpointEvents)
             {
                 int minFramesInput=65536;
                 for (unsigned ep=0;ep<numInputEndPoints;ep++)
@@ -640,8 +640,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                 counter++;
             } else
             {
-                cerr << "PAD/WASAPI : Audio thread had to wait too long for data, ending thread\n";
-                break;
+                cerr << "PAD/WASAPI : Audio thread had to wait unusually long for end point events\n";
             }
         }
         //cerr << "WASAPI thread polling for playback status change...\n";
