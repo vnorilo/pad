@@ -142,6 +142,7 @@ public:
 
     virtual bool Supports(const AudioStreamConfiguration&) const
     {
+
         cerr << "Supports() not implemented\n";
         return false;
     }
@@ -389,6 +390,7 @@ struct WasapiPublisher : public HostAPIPublisher
         int samplerates[]={44100,48000,88200,96000};
         WAVEFORMATEXTENSIBLE format; memset(&format,0,sizeof(WAVEFORMATEXTENSIBLE));
         format.SubFormat=KSDATAFORMAT_SUBTYPE_PCM;
+        format.dwChannelMask=KSAUDIO_SPEAKER_STEREO;
         format.Format.wFormatTag=WAVE_FORMAT_EXTENSIBLE;
         format.Format.nChannels=2;
         format.Format.cbSize=sizeof(WAVEFORMATEXTENSIBLE);
@@ -411,12 +413,26 @@ struct WasapiPublisher : public HostAPIPublisher
 
         return result;
     }
+    std::pair<PadComSmartPointer<IMMDevice>,std::string> GetDefaultEndPoint(const PadComSmartPointer<IMMDeviceEnumerator>& enumerator, bool dirInput=false)
+    {
+        std::pair<PadComSmartPointer<IMMDevice>,std::string> result;
+        PadComSmartPointer<IMMDevice> epo;
+        EDataFlow direction=eRender; if (dirInput==true) direction=eCapture;
+        if (CheckHResult(
+            enumerator->GetDefaultAudioEndpoint(direction,eMultimedia,epo.NullAndGetPtrAddress()),
+            "PAD/WASAPI : Could not get default input/output endpoint device"))
+        {
+            WCHAR* deviceId=nullptr;
+            epo->GetId(&deviceId);
+            result.second=WideCharToStdString(deviceId);
+            CoTaskMemFree(deviceId);
+        }
+        result.first=epo;
+        return result;
+    }
 
-    void Publish(Session& PADInstance, DeviceErrorDelegate& errorHandler)
-	{
-        using namespace chrono;
-        high_resolution_clock::time_point t1 = high_resolution_clock::now();
-        CoInitialize(0);
+    void EnumerateEndpoints(bool exclusivemode)
+    {
         HRESULT hr = S_OK;
         PadComSmartPointer<IMMDeviceEnumerator> enumerator;
         hr=enumerator.CoCreateInstance(CLSID_MMDeviceEnumerator,CLSCTX_ALL);
@@ -437,22 +453,10 @@ struct WasapiPublisher : public HostAPIPublisher
             cerr << "pad : wasapi : No endpoints found\n";
             return;
         }
-        std::string defaultOutputDevId;
-        if (CheckHResult(enumerator->GetDefaultAudioEndpoint(eRender,eMultimedia,defaultOutputEndpoint.NullAndGetPtrAddress()),"PAD/WASAPI : Could not get default output endpoint device"))
-        {
-            WCHAR* deviceId=nullptr;
-            defaultOutputEndpoint->GetId(&deviceId);
-            defaultOutputDevId=WideCharToStdString(deviceId);
-            CoTaskMemFree(deviceId);
-        }
-        std::string defaultInputDevId;
-        if (CheckHResult(enumerator->GetDefaultAudioEndpoint(eCapture,eMultimedia,defaultInputEndpoint.NullAndGetPtrAddress()),"PAD/WASAPI : Could not get default input endpoint device"))
-        {
-            WCHAR* deviceId=nullptr;
-            defaultInputEndpoint->GetId(&deviceId);
-            defaultInputDevId=WideCharToStdString(deviceId);
-            CoTaskMemFree(deviceId);
-        }
+        auto defOutputInfo=GetDefaultEndPoint(enumerator,false);
+        auto defInputInfo=GetDefaultEndPoint(enumerator,true);
+        std::string defaultOutputDevId=defOutputInfo.second;
+        std::string defaultInputDevId=defInputInfo.second;
         std::vector<int> sampleRatesToTest;
         sampleRatesToTest.push_back(44100); sampleRatesToTest.push_back(48000); sampleRatesToTest.push_back(88200); sampleRatesToTest.push_back(96000);
         sampleRatesToTest.push_back(176400); sampleRatesToTest.push_back(192000);
@@ -475,12 +479,14 @@ struct WasapiPublisher : public HostAPIPublisher
             hr = props->GetValue(PKEY_DeviceInterface_FriendlyName, adapterName());
             if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint adapter name")==false) continue;
             std::string adapterNameString=WideCharToStdString(adapterName()->pwszVal);
-            wasapiMap[adapterNameString].SetName(adapterNameString);
             MyPropVariant endPointName;
             hr = props->GetValue(PKEY_Device_FriendlyName, endPointName());
             if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint name")==false) continue;
             std::string endPointNameString=WideCharToStdString(endPointName()->pwszVal);
             EDataFlow audioDirection=getAudioDirection(endpoint);
+            //MyPropVariant oemAudioFormatProp;
+            //hr = props->GetValue(PKEY_AudioEngine_OEMFormat,oemAudioFormatProp());
+            //CheckHResult(hr,"PAD/WASAPI : Could not get OEM audio format");
             PadComSmartPointer<IAudioClient> tempClient;
             hr = endpoint->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)tempClient.NullAndGetPtrAddress());
             if (tempClient==nullptr)
@@ -504,18 +510,23 @@ struct WasapiPublisher : public HostAPIPublisher
             CoTaskMemFree(mixFormat);
             int defaultSr=format.Format.nSamplesPerSec;
             unsigned exclusiveModeCount=0;
-            wasapiMap[adapterNameString].m_supportedSampleRates.push_back(defaultSr);
-            //cerr << endPointNameString << " default sr is " << defaultSr << "\n";
             exclusiveModeCount=countSupportedExclusiveFormats(tempClient);
             if (exclusiveModeCount>0)
             {
                 cerr << endPointNameString << " supports exclusive mode\n";
             }
+            wasapiMap[adapterNameString].SetName(adapterNameString);
+            wasapiMap[adapterNameString].m_supportedSampleRates.push_back(defaultSr);
+            //cerr << endPointNameString << " default sr is " << defaultSr << "\n";
+
             int minPeriodSamples=RefTimeToSamples(minPer,defaultSr);
             int defaultPeriodSamples=RefTimeToSamples(defPer,defaultSr);
             //cerr << endPointNameString << " minimum period is " << (double)minPer/10000 << " ms, default period is " << (double)defPer/10000 << " ms\n";
             //cerr << endPointNameString << " minimum buf size is " << minPeriodSamples << " , default buf size is " << defaultPeriodSamples << "\n";
 
+            // This hasn't so far appeared to ever do anything for shared mode devices.
+            // The supported samplerate has always been only the default samplerate, which we've already added
+            // to the supported ones above
             for (int samplerate : sampleRatesToTest)
             {
                 if (samplerate==defaultSr)
@@ -536,7 +547,7 @@ struct WasapiPublisher : public HostAPIPublisher
                     wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,outputDeviceSortID, endPointNameString);
                 } else
                 {
-                    endPointNameString+=" [Exclusive mode]";
+                    //endPointNameString+=" [Exclusive mode]";
                     //cerr << i << " is exclusive output endpoint " << endPointNameString << "\n";
                     outputDeviceSortID=2;
                     wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,outputDeviceSortID, endPointNameString);
@@ -550,13 +561,21 @@ struct WasapiPublisher : public HostAPIPublisher
                     wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,inputDeviceSortID,endPointNameString);
                 } else
                 {
-                    endPointNameString+=" [Exclusive mode]";
+                    //endPointNameString+=" [Exclusive mode]";
                     //cerr << i << " is exclusive input endpoint " << endPointNameString << "\n";
                     inputDeviceSortID=2;
                     wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,inputDeviceSortID,endPointNameString);
                 }
             }
         }
+    }
+
+    void Publish(Session& PADInstance, DeviceErrorDelegate& errorHandler)
+	{
+        using namespace chrono;
+        high_resolution_clock::time_point t1 = high_resolution_clock::now();
+        CoInitialize(0);
+        EnumerateEndpoints(false);
         for (auto &element : wasapiMap)
         {
             element.second.InitDefaultStreamConfigurations();
