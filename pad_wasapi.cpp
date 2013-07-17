@@ -383,11 +383,12 @@ struct WasapiPublisher : public HostAPIPublisher
 {
     std::map<std::string,WasapiDevice> wasapiMap;
 	const char *GetName() const {return "WASAPI";}
+
     int countSupportedExclusiveFormats(const PadComSmartPointer<IAudioClient>& cl)
     {
         int result=0;
         int bitdepths[]={16,24,32};
-        int samplerates[]={44100,48000,88200,96000};
+        int samplerates[]={44100,48000,88200,96000,176400,192000};
         WAVEFORMATEXTENSIBLE format; memset(&format,0,sizeof(WAVEFORMATEXTENSIBLE));
         format.SubFormat=KSDATAFORMAT_SUBTYPE_PCM;
         format.dwChannelMask=KSAUDIO_SPEAKER_STEREO;
@@ -431,6 +432,28 @@ struct WasapiPublisher : public HostAPIPublisher
         return result;
     }
 
+    std::string GetEndPointAdapterName(const PadComSmartPointer<IMMDevice>& epo)
+    {
+        PadComSmartPointer<IPropertyStore> props;
+        HRESULT hr = epo->OpenPropertyStore(STGM_READ, props.NullAndGetPtrAddress());
+        if (CheckHResult(hr,"PAD/WASAPI : Could not open endpoint property store")==false) return std::string();
+        MyPropVariant adapterNameProp;
+        hr = props->GetValue(PKEY_DeviceInterface_FriendlyName, adapterNameProp());
+        if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint adapter name")==false) return std::string();
+        return WideCharToStdString(adapterNameProp()->pwszVal);
+    }
+
+    std::string GetEndPointName(const PadComSmartPointer<IMMDevice>& epo)
+    {
+        PadComSmartPointer<IPropertyStore> props;
+        HRESULT hr = epo->OpenPropertyStore(STGM_READ, props.NullAndGetPtrAddress());
+        if (CheckHResult(hr,"PAD/WASAPI : Could not open endpoint property store")==false) return std::string();
+        MyPropVariant endPointNameProp;
+        hr = props->GetValue(PKEY_Device_FriendlyName, endPointNameProp());
+        if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint name")==false) return std::string();
+        return WideCharToStdString(endPointNameProp()->pwszVal);
+    }
+
     void EnumerateEndpoints(bool exclusivemode)
     {
         HRESULT hr = S_OK;
@@ -439,9 +462,7 @@ struct WasapiPublisher : public HostAPIPublisher
         if (CheckHResult(hr,"PAD/WASAPI : Could not create device enumerator")==false) return;
         PadComSmartPointer<IMMDeviceCollection> collection;
         PadComSmartPointer<IMMDevice> endpoint;
-        PadComSmartPointer<IMMDevice> defaultOutputEndpoint;
-        PadComSmartPointer<IMMDevice> defaultInputEndpoint;
-        PadComSmartPointer<IPropertyStore> props;
+
         //LPWSTR pwszID = NULL;
         hr=enumerator->EnumAudioEndpoints(eAll,DEVICE_STATE_ACTIVE,collection.NullAndGetPtrAddress());
         if (CheckHResult(hr,"PAD/WASAPI : Could not enumerate audio endpoints")==false) return;
@@ -473,16 +494,8 @@ struct WasapiPublisher : public HostAPIPublisher
                 outputDeviceSortID=0;
             if (curDevId==defaultInputDevId)
                 inputDeviceSortID=0;
-            hr = endpoint->OpenPropertyStore(STGM_READ, props.NullAndGetPtrAddress());
-            if (CheckHResult(hr,"PAD/WASAPI : Could not open endpoint property store")==false) continue;
-            MyPropVariant adapterName;
-            hr = props->GetValue(PKEY_DeviceInterface_FriendlyName, adapterName());
-            if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint adapter name")==false) continue;
-            std::string adapterNameString=WideCharToStdString(adapterName()->pwszVal);
-            MyPropVariant endPointName;
-            hr = props->GetValue(PKEY_Device_FriendlyName, endPointName());
-            if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint name")==false) continue;
-            std::string endPointNameString=WideCharToStdString(endPointName()->pwszVal);
+            std::string adapterNameString=GetEndPointAdapterName(endpoint);
+            std::string endPointNameString=GetEndPointName(endpoint);
             EDataFlow audioDirection=getAudioDirection(endpoint);
             //MyPropVariant oemAudioFormatProp;
             //hr = props->GetValue(PKEY_AudioEngine_OEMFormat,oemAudioFormatProp());
