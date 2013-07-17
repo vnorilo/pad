@@ -387,19 +387,20 @@ struct WasapiPublisher : public HostAPIPublisher
         int result=0;
         int bitdepths[]={16,24,32};
         int samplerates[]={44100,48000,88200,96000};
-        WAVEFORMATEX format; memset(&format,0,sizeof(WAVEFORMATEX));
-        format.wFormatTag=WAVE_FORMAT_EXTENSIBLE;
-        format.nChannels=2;
-        format.cbSize=sizeof(WAVEFORMATEX);
+        WAVEFORMATEXTENSIBLE format; memset(&format,0,sizeof(WAVEFORMATEXTENSIBLE));
+        format.SubFormat=KSDATAFORMAT_SUBTYPE_PCM;
+        format.Format.wFormatTag=WAVE_FORMAT_EXTENSIBLE;
+        format.Format.nChannels=2;
+        format.Format.cbSize=sizeof(WAVEFORMATEXTENSIBLE);
         for (int bd : bitdepths)
         {
             for (int sr : samplerates)
             {
                 //cerr << "testing exclusive mode support for samplerate " << sr << " bitdepth " << bd << "\n";
-                format.wBitsPerSample=bd;
-                format.nSamplesPerSec=sr;
-                format.nBlockAlign=(format.nChannels*format.wBitsPerSample)/8;
-                format.nAvgBytesPerSec=format.nSamplesPerSec*format.nBlockAlign;
+                format.Format.wBitsPerSample=bd;
+                format.Format.nSamplesPerSec=sr;
+                format.Format.nBlockAlign=(format.Format.nChannels*format.Format.wBitsPerSample)/8;
+                format.Format.nAvgBytesPerSec=format.Format.nSamplesPerSec*format.Format.nBlockAlign;
                 if (cl->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE,(WAVEFORMATEX*)&format,0)==S_OK)
                 {
                     result++;
