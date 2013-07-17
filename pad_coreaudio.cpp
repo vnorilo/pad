@@ -105,8 +105,7 @@ namespace {
         AudioStreamConfiguration DefaultMono() const {return Conform(AudioStreamConfiguration(44100).Input(0).Output(0));}
         AudioStreamConfiguration DefaultStereo() const {return Conform(AudioStreamConfiguration(44100).StereoInput(0).StereoOutput(0));}
         AudioStreamConfiguration DefaultAllChannels() const {return Conform(AudioStreamConfiguration(44100).Inputs(ChannelRange(0,numInputs)).Outputs(ChannelRange(0,numOutputs)));}
-        
-        
+               
         AudioStreamConfiguration currentConfiguration;
         
         AudioUnit AUHAL;
@@ -124,23 +123,27 @@ namespace {
         
         vector<float> delegateInputBuffer;
        
-        OSStatus AUHALProc(AudioUnitRenderActionFlags* ioFlags, const AudioTimeStamp *timeStamp, UInt32 Bus, UInt32 frames, AudioBufferList *io)
-        {            
-            if (delegateInputBuffer.size() < frames * currentConfiguration.GetNumStreamInputs())
+        OSStatus AUHALProc(AudioUnitRenderActionFlags* ioFlags, const AudioTimeStamp *timeStamp, UInt32 Bus, UInt32 frames, AudioBufferList *io) {
+            if (Bus == 0)
             {
-                delegateInputBuffer.resize(frames*currentConfiguration.GetNumStreamInputs());
+                if (delegateInputBuffer.size() < frames * currentConfiguration.GetNumStreamInputs()) {
+                    delegateInputBuffer.resize(frames*currentConfiguration.GetNumStreamInputs());
+                }
+                
+                if (currentConfiguration.GetNumStreamInputs()>0){
+                    AudioBufferList ab;
+                    ab.mNumberBuffers = 1;
+                    ab.mBuffers[0].mNumberChannels = currentConfiguration.GetNumStreamInputs();
+                    ab.mBuffers[0].mDataByteSize = sizeof(float) * currentConfiguration.GetNumStreamInputs() * frames;
+                    ab.mBuffers[0].mData = delegateInputBuffer.data();
+                    
+                    OSStatus err = AudioUnitRender(AUHAL, ioFlags, timeStamp, 1, frames, &ab);
+                    if (err != noErr) {
+                                            
+                    }
+                }
+                currentConfiguration.GetAudioDelegate().Process(0ll,currentConfiguration,delegateInputBuffer.data(),(float*)io->mBuffers[0].mData,frames);
             }
-            
-            AudioBufferList ab;
-            ab.mNumberBuffers = 1;
-            ab.mBuffers[0].mNumberChannels = currentConfiguration.GetNumStreamInputs();
-            ab.mBuffers[0].mDataByteSize = sizeof(float) * currentConfiguration.GetNumStreamInputs() * frames;
-            ab.mBuffers[0].mData = delegateInputBuffer.data();
-            
-            //OSStatus err = AudioUnitRender(AUHAL, ioFlags, timeStamp, 1, frames,&ab);
-            //if (err != noErr) return err;
-            
-            currentConfiguration.GetAudioDelegate().Process(0ll,currentConfiguration,delegateInputBuffer.data(),(float*)io->mBuffers[0].mData,frames);
             return noErr;
         }
 
@@ -167,19 +170,19 @@ namespace {
             THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL,kAudioOutputUnitProperty_EnableIO,kAudioUnitScope_Output, 0, &enable, sizeof(enable)));
             
             THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL,kAudioOutputUnitProperty_CurrentDevice,kAudioUnitScope_Global,0,&caID,sizeof(caID)));
-                       
+            THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL,kAudioOutputUnitProperty_CurrentDevice,kAudioUnitScope_Global,1,&caID,sizeof(caID)));
+            
             AudioStreamBasicDescription inputFmt = {
                 currentConfiguration.GetSampleRate(), 'lpcm',
                 kLinearPCMFormatFlagIsFloat + kLinearPCMFormatFlagIsPacked,
                 UInt32(sizeof(float)*numInputs), 1,
-                UInt32(sizeof(float)*numInputs), numInputs, 32, 0};
+                UInt32(sizeof(float)*numInputs), numInputs, 32, 0 };
+        
             AudioStreamBasicDescription outputFmt = inputFmt;
             outputFmt.mChannelsPerFrame = numOutputs;
-            outputFmt.mBytesPerPacket = outputFmt.mBytesPerFrame = sizeof(float)*numOutputs;
+            outputFmt.mBytesPerFrame = sizeof(float)*numOutputs;
+            outputFmt.mBytesPerPacket = outputFmt.mBytesPerFrame;
             
-            AURenderCallbackStruct cb = {AUHALCallback, this};
-            THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL,kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &cb,sizeof(AURenderCallbackStruct)));
-
             // AUHAL unit inputs are hardware outputs and vice versa
             THROW_ERROR(DeviceInitializationFailure,AudioUnitSetProperty(AUHAL, kAudioUnitProperty_StreamFormat,kAudioUnitScope_Input,0, &outputFmt,sizeof(AudioStreamBasicDescription)));
             THROW_ERROR(DeviceInitializationFailure,AudioUnitSetProperty(AUHAL, kAudioUnitProperty_StreamFormat,kAudioUnitScope_Output,1,&inputFmt,sizeof(AudioStreamBasicDescription)));
@@ -205,6 +208,8 @@ namespace {
             
             THROW_ERROR(DeviceInitializationFailure,AudioUnitSetProperty(AUHAL,kAudioOutputUnitProperty_ChannelMap,kAudioUnitScope_Input,0,channelMap.data(),UInt32(channelMap.size()*sizeof(SInt32))));
             
+            AURenderCallbackStruct cb = {AUHALCallback, this};
+            THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL,kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &cb,sizeof(AURenderCallbackStruct)));
             
             THROW_ERROR(DeviceInitializationFailure,AudioUnitInitialize(AUHAL));
             
@@ -225,8 +230,7 @@ namespace {
         void Close()
         {
         }
-
-        
+       
         bool Supports(const AudioStreamConfiguration&) const {return false;}
     };
     

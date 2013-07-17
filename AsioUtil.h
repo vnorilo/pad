@@ -1,5 +1,6 @@
 #pragma once
 #include <Windows.h>
+#include "Unknwn.h"
 #undef min
 #undef max
 
