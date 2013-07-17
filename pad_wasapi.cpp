@@ -50,9 +50,9 @@ class WasapiDevice : public AudioDevice
 public:
     struct WasapiEndPoint
     {
-        WasapiEndPoint() : m_numChannels(0), m_sortID(0) {}
-        WasapiEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numch, unsigned sortID, const std::string& name) :
-            m_numChannels(numch), m_name(name), m_Endpoint(ep), m_sortID(sortID)
+        WasapiEndPoint() : m_numChannels(0), m_sortID(0),m_supportsExclusiveMode(false) {}
+        WasapiEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numch, unsigned sortID, const std::string& name, bool supportsExclusive) :
+            m_numChannels(numch), m_name(name), m_Endpoint(ep), m_sortID(sortID),m_supportsExclusiveMode(supportsExclusive)
         {
         }
         PadComSmartPointer<IAudioClient> m_AudioClient;
@@ -62,6 +62,7 @@ public:
         unsigned m_numChannels;
         std::string m_name;
         unsigned m_sortID;
+        bool m_supportsExclusiveMode;
     };
 
     enum WasapiState
@@ -87,24 +88,24 @@ public:
     const char *GetName() const { return m_deviceName.c_str(); }
     const char *GetHostAPI() const { return "WASAPI"; }
     void SetName(const std::string& n) { m_deviceName=n; }
-    void AddInputEndPoint(const PadComSmartPointer<IMMDevice>& ep, unsigned numChannels, unsigned sortID, const std::string& name=std::string())
+    void AddInputEndPoint(const PadComSmartPointer<IMMDevice>& ep, unsigned numChannels, unsigned sortID, bool canDoExclusive,const std::string& name=std::string())
     {
         m_numInputs+=numChannels;
         if (sortID==0)
             cerr << name << " is default input end point\n";
-        WasapiEndPoint wep(ep, numChannels, sortID, name);
+        WasapiEndPoint wep(ep, numChannels, sortID, name,canDoExclusive);
         // I realize this is theoretically inefficient and not really elegant but I hate std::list so much I don't want to use it
         // just to get push_front and to avoid moving the couple of entries around in the std::vector which I prefer to use in the code
         m_inputEndPoints.push_back(wep);
         std::sort(m_inputEndPoints.begin(),m_inputEndPoints.end(),
                   [](const WasapiEndPoint& a,const WasapiEndPoint& b) { return a.m_sortID<b.m_sortID; });
     }
-    void AddOutputEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numChannels, unsigned sortID,const std::string& name=std::string())
+    void AddOutputEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numChannels, unsigned sortID, bool canDoExclusive, const std::string& name=std::string())
     {
         m_numOutputs+=numChannels;
         if (sortID==0)
             cerr << name << " is default output end point\n";
-        WasapiEndPoint wep(ep, numChannels, sortID, name);
+        WasapiEndPoint wep(ep, numChannels, sortID, name,canDoExclusive);
         // I realize this is theoretically inefficient and not really elegant but I hate std::list so much I don't want to use it
         // just to get push_front and to avoid moving the couple of entries around in the std::vector which I prefer to use in the code
         m_outputEndPoints.push_back(wep);
@@ -454,7 +455,7 @@ struct WasapiPublisher : public HostAPIPublisher
         return WideCharToStdString(endPointNameProp()->pwszVal);
     }
 
-    void EnumerateEndpoints(bool exclusivemode)
+    void EnumerateEndpoints(bool enumExclusivemodeSupport)
     {
         HRESULT hr = S_OK;
         PadComSmartPointer<IMMDeviceEnumerator> enumerator;
@@ -496,10 +497,12 @@ struct WasapiPublisher : public HostAPIPublisher
                 inputDeviceSortID=0;
             std::string adapterNameString=GetEndPointAdapterName(endpoint);
             std::string endPointNameString=GetEndPointName(endpoint);
+            if (adapterNameString.size()==0 || endPointNameString.size()==0)
+            {
+                cerr << "PAD/WASAPI : Failed to get adapter/endpoint name strings for device " << i << "\n";
+                continue;
+            }
             EDataFlow audioDirection=getAudioDirection(endpoint);
-            //MyPropVariant oemAudioFormatProp;
-            //hr = props->GetValue(PKEY_AudioEngine_OEMFormat,oemAudioFormatProp());
-            //CheckHResult(hr,"PAD/WASAPI : Could not get OEM audio format");
             PadComSmartPointer<IAudioClient> tempClient;
             hr = endpoint->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)tempClient.NullAndGetPtrAddress());
             if (tempClient==nullptr)
@@ -523,10 +526,14 @@ struct WasapiPublisher : public HostAPIPublisher
             CoTaskMemFree(mixFormat);
             int defaultSr=format.Format.nSamplesPerSec;
             unsigned exclusiveModeCount=0;
-            exclusiveModeCount=countSupportedExclusiveFormats(tempClient);
-            if (exclusiveModeCount>0)
+            if (enumExclusivemodeSupport==true)
             {
-                cerr << endPointNameString << " supports exclusive mode\n";
+                exclusiveModeCount=countSupportedExclusiveFormats(tempClient);
+                if (exclusiveModeCount>0)
+                {
+                    cerr << endPointNameString << " supports exclusive mode\n";
+                    adapterNameString+=" [Exclusive]";
+                }
             }
             wasapiMap[adapterNameString].SetName(adapterNameString);
             wasapiMap[adapterNameString].m_supportedSampleRates.push_back(defaultSr);
@@ -557,13 +564,13 @@ struct WasapiPublisher : public HostAPIPublisher
                 if (exclusiveModeCount==0)
                 {
                     //cerr << i << " is shared output endpoint " << endPointNameString << "\n";
-                    wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,outputDeviceSortID, endPointNameString);
+                    wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,outputDeviceSortID, false, endPointNameString);
                 } else
                 {
                     //endPointNameString+=" [Exclusive mode]";
                     //cerr << i << " is exclusive output endpoint " << endPointNameString << "\n";
                     outputDeviceSortID=2;
-                    wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,outputDeviceSortID, endPointNameString);
+                    wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,outputDeviceSortID, true, endPointNameString);
                 }
             }
             else if (audioDirection==eCapture)
@@ -571,13 +578,13 @@ struct WasapiPublisher : public HostAPIPublisher
                 if (exclusiveModeCount==0)
                 {
                     //cerr << i << " is shared input endpoint " << endPointNameString << "\n";
-                    wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,inputDeviceSortID,endPointNameString);
+                    wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,inputDeviceSortID, false, endPointNameString);
                 } else
                 {
                     //endPointNameString+=" [Exclusive mode]";
                     //cerr << i << " is exclusive input endpoint " << endPointNameString << "\n";
                     inputDeviceSortID=2;
-                    wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,inputDeviceSortID,endPointNameString);
+                    wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,inputDeviceSortID, true, endPointNameString);
                 }
             }
         }
@@ -589,6 +596,7 @@ struct WasapiPublisher : public HostAPIPublisher
         high_resolution_clock::time_point t1 = high_resolution_clock::now();
         CoInitialize(0);
         EnumerateEndpoints(false);
+        EnumerateEndpoints(true);
         for (auto &element : wasapiMap)
         {
             element.second.InitDefaultStreamConfigurations();
