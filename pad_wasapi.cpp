@@ -50,9 +50,9 @@ class WasapiDevice : public AudioDevice
 public:
     struct WasapiEndPoint
     {
-        WasapiEndPoint() : m_numChannels(0), m_isDefault(0) {}
-        WasapiEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numch, unsigned isDefault, const std::string& name) :
-            m_numChannels(numch), m_name(name), m_Endpoint(ep), m_isDefault(isDefault)
+        WasapiEndPoint() : m_numChannels(0), m_sortID(0) {}
+        WasapiEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numch, unsigned sortID, const std::string& name) :
+            m_numChannels(numch), m_name(name), m_Endpoint(ep), m_sortID(sortID)
         {
         }
         PadComSmartPointer<IAudioClient> m_AudioClient;
@@ -61,7 +61,7 @@ public:
         PadComSmartPointer<IMMDevice> m_Endpoint;
         unsigned m_numChannels;
         std::string m_name;
-        unsigned m_isDefault;
+        unsigned m_sortID;
     };
 
     enum WasapiState
@@ -87,31 +87,29 @@ public:
     const char *GetName() const { return m_deviceName.c_str(); }
     const char *GetHostAPI() const { return "WASAPI"; }
     void SetName(const std::string& n) { m_deviceName=n; }
-    void AddInputEndPoint(const PadComSmartPointer<IMMDevice>& ep, unsigned numChannels, bool isDefault, const std::string& name=std::string())
+    void AddInputEndPoint(const PadComSmartPointer<IMMDevice>& ep, unsigned numChannels, unsigned sortID, const std::string& name=std::string())
     {
         m_numInputs+=numChannels;
-        unsigned foo=1; if (isDefault==true) foo=0;
-        if (isDefault==true)
+        if (sortID==0)
             cerr << name << " is default input end point\n";
-        WasapiEndPoint wep(ep, numChannels, foo, name);
+        WasapiEndPoint wep(ep, numChannels, sortID, name);
         // I realize this is theoretically inefficient and not really elegant but I hate std::list so much I don't want to use it
         // just to get push_front and to avoid moving the couple of entries around in the std::vector which I prefer to use in the code
         m_inputEndPoints.push_back(wep);
         std::sort(m_inputEndPoints.begin(),m_inputEndPoints.end(),
-                  [](const WasapiEndPoint& a,const WasapiEndPoint& b) { return a.m_isDefault<b.m_isDefault; });
+                  [](const WasapiEndPoint& a,const WasapiEndPoint& b) { return a.m_sortID<b.m_sortID; });
     }
-    void AddOutputEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numChannels, bool isDefault,const std::string& name=std::string())
+    void AddOutputEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numChannels, unsigned sortID,const std::string& name=std::string())
     {
         m_numOutputs+=numChannels;
-        unsigned foo=1; if (isDefault==true) foo=0;
-        if (isDefault==true)
+        if (sortID==0)
             cerr << name << " is default output end point\n";
-        WasapiEndPoint wep(ep, numChannels, foo, name);
+        WasapiEndPoint wep(ep, numChannels, sortID, name);
         // I realize this is theoretically inefficient and not really elegant but I hate std::list so much I don't want to use it
         // just to get push_front and to avoid moving the couple of entries around in the std::vector which I prefer to use in the code
         m_outputEndPoints.push_back(wep);
         std::sort(m_outputEndPoints.begin(),m_outputEndPoints.end(),
-                  [](const WasapiEndPoint& a,const WasapiEndPoint& b) { return a.m_isDefault<b.m_isDefault; });
+                  [](const WasapiEndPoint& a,const WasapiEndPoint& b) { return a.m_sortID<b.m_sortID; });
     }
     unsigned GetNumInputs() const {return m_numInputs;}
     unsigned GetNumOutputs() const {return m_numOutputs;}
@@ -384,6 +382,35 @@ struct WasapiPublisher : public HostAPIPublisher
 {
     std::map<std::string,WasapiDevice> wasapiMap;
 	const char *GetName() const {return "WASAPI";}
+    int countSupportedExclusiveFormats(const PadComSmartPointer<IAudioClient>& cl)
+    {
+        int result=0;
+        int bitdepths[]={16,24,32};
+        int samplerates[]={44100,48000,88200,96000};
+        WAVEFORMATEX format; memset(&format,0,sizeof(WAVEFORMATEX));
+        format.wFormatTag=WAVE_FORMAT_EXTENSIBLE;
+        format.nChannels=2;
+        format.cbSize=sizeof(WAVEFORMATEX);
+        for (int bd : bitdepths)
+        {
+            for (int sr : samplerates)
+            {
+                //cerr << "testing exclusive mode support for samplerate " << sr << " bitdepth " << bd << "\n";
+                format.wBitsPerSample=bd;
+                format.nSamplesPerSec=sr;
+                format.nBlockAlign=(format.nChannels*format.wBitsPerSample)/8;
+                format.nAvgBytesPerSec=format.nSamplesPerSec*format.nBlockAlign;
+                if (cl->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE,(WAVEFORMATEX*)&format,0)==S_OK)
+                {
+                    result++;
+                    cerr << "Exclusive mode supported for " << bd << " " << sr << "\n";
+                }
+            }
+        }
+
+        return result;
+    }
+
     void Publish(Session& PADInstance, DeviceErrorDelegate& errorHandler)
 	{
         using namespace chrono;
@@ -430,7 +457,7 @@ struct WasapiPublisher : public HostAPIPublisher
         sampleRatesToTest.push_back(176400); sampleRatesToTest.push_back(192000);
         for (unsigned i=0;i<count;i++)
         {
-            bool isDefaultOutputDevice=false; bool isDefaultInputDevice=false;
+            unsigned outputDeviceSortID=1; unsigned inputDeviceSortID=1;
             hr = collection->Item(i, endpoint.NullAndGetPtrAddress());
             if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint collection item")==false) continue;
             WCHAR* deviceId=nullptr;
@@ -438,9 +465,9 @@ struct WasapiPublisher : public HostAPIPublisher
             std::string curDevId=WideCharToStdString(deviceId);
             CoTaskMemFree(deviceId);
             if (curDevId==defaultOutputDevId)
-                isDefaultOutputDevice=true;
+                outputDeviceSortID=0;
             if (curDevId==defaultInputDevId)
-                isDefaultInputDevice=true;
+                inputDeviceSortID=0;
             hr = endpoint->OpenPropertyStore(STGM_READ, props.NullAndGetPtrAddress());
             if (CheckHResult(hr,"PAD/WASAPI : Could not open endpoint property store")==false) continue;
             MyPropVariant adapterName;
@@ -475,12 +502,19 @@ struct WasapiPublisher : public HostAPIPublisher
             //cout << "endpoint " << i << " format is " << mixFormat->wFormatTag << "\n";
             CoTaskMemFree(mixFormat);
             int defaultSr=format.Format.nSamplesPerSec;
+            unsigned exclusiveModeCount=0;
             wasapiMap[adapterNameString].m_supportedSampleRates.push_back(defaultSr);
             //cerr << endPointNameString << " default sr is " << defaultSr << "\n";
+            exclusiveModeCount=countSupportedExclusiveFormats(tempClient);
+            if (exclusiveModeCount>0)
+            {
+                cerr << endPointNameString << " supports exclusive mode\n";
+            }
             int minPeriodSamples=RefTimeToSamples(minPer,defaultSr);
             int defaultPeriodSamples=RefTimeToSamples(defPer,defaultSr);
             //cerr << endPointNameString << " minimum period is " << (double)minPer/10000 << " ms, default period is " << (double)defPer/10000 << " ms\n";
             //cerr << endPointNameString << " minimum buf size is " << minPeriodSamples << " , default buf size is " << defaultPeriodSamples << "\n";
+
             for (int samplerate : sampleRatesToTest)
             {
                 if (samplerate==defaultSr)
@@ -488,18 +522,38 @@ struct WasapiPublisher : public HostAPIPublisher
                 format.Format.nSamplesPerSec=(DWORD)samplerate;
                 if (tempClient->IsFormatSupported(AUDCLNT_SHAREMODE_SHARED,(WAVEFORMATEX*)&format,0)>=0)
                 {
-                    cerr << endPointNameString << " supports " << samplerate << " hz\n";
+                    cerr << endPointNameString << " supports " << samplerate << " hz in shared mode\n";
                     wasapiMap[adapterNameString].m_supportedSampleRates.push_back(samplerate);
                 }
+
             }
             if (audioDirection==eRender)
             {
-                cerr << i << " " << endPointNameString << "\n";
-                wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,isDefaultOutputDevice, endPointNameString);
+                if (exclusiveModeCount==0)
+                {
+                    //cerr << i << " is shared output endpoint " << endPointNameString << "\n";
+                    wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,outputDeviceSortID, endPointNameString);
+                } else
+                {
+                    endPointNameString+=" [Exclusive mode]";
+                    //cerr << i << " is exclusive output endpoint " << endPointNameString << "\n";
+                    outputDeviceSortID=2;
+                    wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,outputDeviceSortID, endPointNameString);
+                }
             }
             else if (audioDirection==eCapture)
             {
-                wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,isDefaultInputDevice,endPointNameString);
+                if (exclusiveModeCount==0)
+                {
+                    //cerr << i << " is shared input endpoint " << endPointNameString << "\n";
+                    wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,inputDeviceSortID,endPointNameString);
+                } else
+                {
+                    endPointNameString+=" [Exclusive mode]";
+                    //cerr << i << " is exclusive input endpoint " << endPointNameString << "\n";
+                    inputDeviceSortID=2;
+                    wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,inputDeviceSortID,endPointNameString);
+                }
             }
         }
         for (auto &element : wasapiMap)
