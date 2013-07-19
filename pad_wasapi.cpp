@@ -15,6 +15,7 @@
 #include <algorithm>
 #include "Avrt.h"
 #include <cmath>
+#include <functional>
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
@@ -50,9 +51,9 @@ class WasapiDevice : public AudioDevice
 public:
     struct WasapiEndPoint
     {
-        WasapiEndPoint() : m_numChannels(0), m_sortID(0),m_supportsExclusiveMode(false) {}
+        WasapiEndPoint() : m_numChannels(0), m_sortID(0),m_isExclusiveMode(false) {}
         WasapiEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numch, unsigned sortID, const std::string& name, bool supportsExclusive) :
-            m_numChannels(numch), m_name(name), m_Endpoint(ep), m_sortID(sortID),m_supportsExclusiveMode(supportsExclusive)
+            m_numChannels(numch), m_name(name), m_Endpoint(ep), m_sortID(sortID),m_isExclusiveMode(supportsExclusive)
         {
         }
         PadComSmartPointer<IAudioClient> m_AudioClient;
@@ -62,7 +63,7 @@ public:
         unsigned m_numChannels;
         std::string m_name;
         unsigned m_sortID;
-        bool m_supportsExclusiveMode;
+        bool m_isExclusiveMode;
     };
 
     enum WasapiState
@@ -161,6 +162,7 @@ public:
         m_outputGlitchCounter=0;
         currentDelegate = &conf.GetAudioDelegate();
         currentConfiguration=conf;
+        currentConfiguration.SetValid(false);
         if (m_currentState==WASS_Closed || m_currentState==WASS_Idle)
         {
             HRESULT hr=0;
@@ -177,9 +179,32 @@ public:
                 {
                     if (theClient)
                     {
+
                         WAVEFORMATEX *pMixformat=nullptr;
                         hr = theClient->GetMixFormat(&pMixformat);
-                        hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pMixformat, NULL);
+                        if (m_outputEndPoints.at(endPointToActivate).m_isExclusiveMode==true)
+                        {
+                            REFERENCE_TIME hnsRequestedDuration = 0;
+                            WAVEFORMATEXTENSIBLE format;
+                            memset(&format,0,sizeof(WAVEFORMATEXTENSIBLE));
+                            format.SubFormat=KSDATAFORMAT_SUBTYPE_PCM;
+                            format.dwChannelMask=KSAUDIO_SPEAKER_STEREO;
+                            format.Format.wFormatTag=WAVE_FORMAT_PCM;
+                            format.Format.nChannels=2;
+                            format.Format.cbSize=0; //sizeof(WAVEFORMATEXTENSIBLE);
+                            format.Format.nSamplesPerSec=44100;
+                            format.Format.wBitsPerSample=16;
+                            format.Format.nBlockAlign=(format.Format.nChannels*format.Format.wBitsPerSample)/8;
+                            format.Format.nAvgBytesPerSec=format.Format.nSamplesPerSec*format.Format.nBlockAlign;
+                            hr = theClient->GetDevicePeriod(NULL, &hnsRequestedDuration);
+                            hr = theClient->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                                                       hnsRequestedDuration,hnsRequestedDuration,(WAVEFORMATEX*)&format, NULL);
+                            if (hr<0)
+                                cerr << "PAD/WASAPI : Exclusive init error " << hr << "\n";
+                        } else
+                        {
+                            hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pMixformat, NULL);
+                        }
                         if (CheckHResult(hr,"PAD/WASAPI : Initialize audio render client")==true)
                         {
                             UINT32 nFramesInBuffer=0;
@@ -204,7 +229,7 @@ public:
                     } else cerr << "PAD/WASAPI : Could not initialize IAudioClient\n";
                 }
             }
-            if (m_inputEndPoints.size()>0)
+            if (m_inputEndPoints.size()>0 && m_currentState==WASS_Open)
             {
                 //if (currentConfiguration.GetNumStreamInputs()>m_inputEndPoints.at(endPointToActivate).m_numChannels)
                 //{
@@ -219,7 +244,27 @@ public:
                     {
                         WAVEFORMATEX *pMixformat=nullptr;
                         hr = theClient->GetMixFormat(&pMixformat);
-                        hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pMixformat, NULL);
+                        if (m_inputEndPoints.at(endPointToActivate).m_isExclusiveMode==true)
+                        {
+                            REFERENCE_TIME hnsRequestedDuration = 0;
+                            WAVEFORMATEXTENSIBLE format;
+                            memset(&format,0,sizeof(WAVEFORMATEXTENSIBLE));
+                            format.SubFormat=KSDATAFORMAT_SUBTYPE_PCM;
+                            format.dwChannelMask=KSAUDIO_SPEAKER_STEREO;
+                            format.Format.wFormatTag=WAVE_FORMAT_PCM;
+                            format.Format.nChannels=2;
+                            format.Format.cbSize=0; //sizeof(WAVEFORMATEXTENSIBLE);
+                            format.Format.nSamplesPerSec=44100;
+                            format.Format.wBitsPerSample=16;
+                            format.Format.nBlockAlign=(format.Format.nChannels*format.Format.wBitsPerSample)/8;
+                            format.Format.nAvgBytesPerSec=format.Format.nSamplesPerSec*format.Format.nBlockAlign;
+                            hr = theClient->GetDevicePeriod(NULL, &hnsRequestedDuration);
+                            hr = theClient->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                                                       hnsRequestedDuration,hnsRequestedDuration,(WAVEFORMATEX*)&format, NULL);
+                        } else
+                        {
+                            hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pMixformat, NULL);
+                        }
                         if (CheckHResult(hr,"PAD/WASAPI : Initialize audio capture client")==true)
                         {
                             UINT32 nFramesInBuffer=0;
@@ -245,11 +290,14 @@ public:
                 }
             }
         }
+        if (m_currentState!=WASS_Open)
+            return currentConfiguration;
         if (currentDelegate)
             currentDelegate->AboutToBeginStream(currentConfiguration,*this);
         if (m_currentState==WASS_Open)
             InitAudioThread();
         if (m_currentState==WASS_Open && conf.HasSuspendOnStartup() == false) Run();
+        currentConfiguration.SetValid(true);
         return currentConfiguration;
     }
     void InitAudioThread()
@@ -532,7 +580,7 @@ struct WasapiPublisher : public HostAPIPublisher
                 if (exclusiveModeCount>0)
                 {
                     cerr << endPointNameString << " supports exclusive mode\n";
-                    adapterNameString+=" [Exclusive]";
+                    adapterNameString+=" Exclusive";
                 }
             }
             wasapiMap[adapterNameString].SetName(adapterNameString);
