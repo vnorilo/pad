@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 #include <list>
-#include "utils/pad_com_smartpointer.h"
+#include "utils/resourcemanagement.h"
 #include "winerror.h"
 #include "Mmdeviceapi.h"
 #include "Functiondiscoverykeys_devpkey.h"
@@ -662,12 +662,17 @@ class WinEventContainer
 public:
     ~WinEventContainer()
     {
+        clearHandles();
+    }
+    void clearHandles()
+    {
         int failcount=0;
         for (auto &e : m_events)
             if (!CloseHandle(e))
                 failcount++;
         if (failcount>0)
             std::cerr << "WinEventContainer couldn't close all open event handles\n";
+        m_events.clear();
     }
     HANDLE addEvent()
     {
@@ -691,7 +696,6 @@ public:
             return true;
         return false;
     }
-
 private:
     std::vector<HANDLE> m_events;
 };
@@ -710,8 +714,6 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     // 1 is used as a hack until rendering multiple endpoints can be properly tested
     const unsigned numOutputEndPoints=1; //dev->m_outputEndPoints.size();
     const unsigned numInputEndPoints=1;
-    const unsigned numEndpointEvents=numOutputEndPoints+numInputEndPoints;
-    //wantDataEvents.resize(numEndpointEvents);
     HRESULT hr=0;
     for (unsigned int i=0;i<numOutputEndPoints;i++)
     {
@@ -732,7 +734,6 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     BYTE* captureData=0;
     BYTE* renderData=0;
     std::vector<float> inputConvertBuffer(4096);
-    std::vector<float> outputConvertBuffer(4096);
     while (dev->m_threadShouldStop==false)
     {
         while (dev->m_currentState==WasapiDevice::WASS_Playing)
