@@ -197,6 +197,7 @@ public:
                             format.Format.nBlockAlign=(format.Format.nChannels*format.Format.wBitsPerSample)/8;
                             format.Format.nAvgBytesPerSec=format.Format.nSamplesPerSec*format.Format.nBlockAlign;
                             hr = theClient->GetDevicePeriod(NULL, &hnsRequestedDuration);
+                            cerr << "Device default period is " << hnsRequestedDuration << "\n";
                             hr = theClient->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
                                                        hnsRequestedDuration,hnsRequestedDuration,(WAVEFORMATEX*)&format, NULL);
                             if (hr<0)
@@ -656,6 +657,37 @@ struct WasapiPublisher : public HostAPIPublisher
     }
 } publisher;
 
+class WinEventContainer
+{
+public:
+    ~WinEventContainer()
+    {
+        int failcount=0;
+        for (auto &e : m_events)
+            if (!CloseHandle(e))
+                failcount++;
+        if (failcount>0)
+            std::cerr << "WinEventContainer couldn't close all open event handles\n";
+    }
+    HANDLE addEvent()
+    {
+        HANDLE h=CreateEvent(NULL,FALSE,FALSE,NULL);
+        if (h!=NULL)
+            m_events.push_back(h);
+        return h;
+    }
+    size_t size() const { return m_events.size(); }
+    HANDLE getEvent(size_t index) const
+    {
+        if (index>=m_events.size())
+            return NULL;
+        return m_events[index];
+    }
+    HANDLE* getEvents() { return m_events.data(); }
+private:
+    std::vector<HANDLE> m_events;
+};
+
 DWORD WINAPI WasapiThreadFunction(LPVOID params)
 {
     WasapiDevice* dev=(WasapiDevice*)params;
@@ -667,6 +699,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     dev->EnableMultiMediaThreadPriority(true);
     //cout << "*** Starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
     std::vector<HANDLE> wantDataEvents;
+    WinEventContainer waitEvents;
     // 1 is used as a hack until rendering multiple endpoints can be properly tested
     const unsigned numOutputEndPoints=1; //dev->m_outputEndPoints.size();
     const unsigned numInputEndPoints=1;
@@ -694,6 +727,8 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     int nFramesInBuffer=dev->currentConfiguration.GetBufferSize();
     BYTE* captureData=0;
     BYTE* renderData=0;
+    std::vector<float> inputConvertBuffer(4096);
+    std::vector<float> outputConvertBuffer(4096);
     while (dev->m_threadShouldStop==false)
     {
         while (dev->m_currentState==WasapiDevice::WASS_Playing)
@@ -721,20 +756,41 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                         unsigned numStreamChans=curConf.GetNumStreamInputs();
                         unsigned numEndpointChans=dev->m_inputEndPoints.at(ep).m_numChannels;
                         unsigned k=0;
+                        float* wasapiInputBuffer=pf;
+                        short* baz=(short*)captureData;
+                        if (dev->m_inputEndPoints.at(ep).m_isExclusiveMode==true)
+                        {
+                            wasapiInputBuffer=inputConvertBuffer.data();
+                            // as a hack handles just 16 bit format now
+
+                            for (unsigned i=0;i<framesInPacket*numEndpointChans;i++)
+                            {
+                                wasapiInputBuffer[i]=-1.0+(1.0/65535)*baz[i];
+                            }
+                        }
                         for (unsigned i=0;i<numEndpointChans;i++)
                         {
                             if (dev->m_enabledDeviceInputs.at(i)==true)
                             {
                                 for (unsigned j=0;j<framesInPacket;j++)
                                 {
-                                    dev->m_delegateInputBuffer[j*numStreamChans+k]=pf[j*numEndpointChans+i];
+                                    dev->m_delegateInputBuffer[j*numStreamChans+k]=wasapiInputBuffer[j*numEndpointChans+i];
                                 }
                                 k++;
                             } else
                             {
-                                for (unsigned j=0;j<framesInPacket;j++)
+                                if (dev->m_inputEndPoints.at(ep).m_isExclusiveMode==false)
                                 {
-                                    dev->m_delegateInputBuffer[j*numStreamChans+k]=0.0f;
+                                    for (unsigned j=0;j<framesInPacket;j++)
+                                    {
+                                        dev->m_delegateInputBuffer[j*numStreamChans+k]=0.0f;
+                                    }
+                                } else
+                                {
+                                    for (unsigned j=0;j<framesInPacket;j++)
+                                    {
+                                        baz[j*numStreamChans+k]=0;
+                                    }
                                 }
                             }
                         }
@@ -760,20 +816,41 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                         unsigned numStreamChans=curConf.GetNumStreamOutputs();
                         unsigned numEndpointChans=dev->m_outputEndPoints.at(ep).m_numChannels;
                         unsigned k=0;
+                        short* wasapiOutput=(short*)renderData;
                         for (unsigned i=0;i<numEndpointChans;i++)
                         {
                             if (dev->m_enabledDeviceOutputs[i]==true)
                             {
-                                for (unsigned j=0;j<framesToOutput;j++)
+                                if (dev->m_outputEndPoints.at(ep).m_isExclusiveMode==false)
                                 {
-                                    pf[j*numEndpointChans+i]=dev->m_delegateOutputBuffer[j*numStreamChans+k];
+                                    for (unsigned j=0;j<framesToOutput;j++)
+                                    {
+                                        pf[j*numEndpointChans+i]=dev->m_delegateOutputBuffer[j*numStreamChans+k];
+                                    }
+                                } else
+                                {
+                                    // hack, handles only 16 bit format
+
+                                    for (unsigned j=0;j<framesToOutput;j++)
+                                    {
+                                        wasapiOutput[j*numEndpointChans+i]=4095*dev->m_delegateOutputBuffer[j*numStreamChans+k];
+                                    }
                                 }
                                 k++;
                             } else
                             {
-                                for (unsigned j=0;j<framesToOutput;j++)
+                                if (dev->m_outputEndPoints.at(ep).m_isExclusiveMode==false)
                                 {
-                                    pf[j*numEndpointChans+i]=0.0f;
+                                    for (unsigned j=0;j<framesToOutput;j++)
+                                    {
+                                        pf[j*numEndpointChans+i]=0.0f;
+                                    }
+                                } else
+                                {
+                                    for (unsigned j=0;j<framesToOutput;j++)
+                                    {
+                                        wasapiOutput[j*numEndpointChans+i]=0;
+                                    }
                                 }
                             }
                         }

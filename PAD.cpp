@@ -5,7 +5,7 @@
 
 namespace PAD {
 	using namespace std;
-	const char* VersionString() { return "0.0.0"; }
+    const char* VersionString() { return "1.0.0"; }
 
 	AudioStreamConfiguration::AudioStreamConfiguration(double samplerate, bool valid)
 		:sampleRate(samplerate),valid(valid),startSuspended(false),numStreamIns(0),numStreamOuts(0),audioDelegate(NULL)
