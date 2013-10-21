@@ -706,7 +706,6 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     CheckHResult(CoInitialize(0),"Wasapi audio thread could not init COM");
     dev->EnableMultiMediaThreadPriority(true);
     //cout << "*** Starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
-    //std::vector<HANDLE> wantDataEvents;
     WinEventContainer waitEvents;
     // 1 is used as a hack until rendering multiple endpoints can be properly tested
     const unsigned numOutputEndPoints=1; //dev->m_outputEndPoints.size();
@@ -714,24 +713,19 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     const unsigned numEndpointEvents=numOutputEndPoints+numInputEndPoints;
     //wantDataEvents.resize(numEndpointEvents);
     HRESULT hr=0;
-    unsigned evCnt=0;
     for (unsigned int i=0;i<numOutputEndPoints;i++)
     {
         HANDLE h=waitEvents.addEvent();
-        //wantDataEvents[evCnt]=CreateEvent(NULL,FALSE,FALSE,NULL);
         dev->m_outputEndPoints.at(i).m_AudioClient->SetEventHandle(h);
         hr=dev->m_outputEndPoints.at(i).m_AudioClient->Start();
         CheckHResult(hr,"Wasapi Output Start audio");
-        evCnt++;
     }
     for (unsigned int i=0;i<numInputEndPoints;i++)
     {
         HANDLE h=waitEvents.addEvent();
-        //wantDataEvents[evCnt]=CreateEvent(NULL,FALSE,FALSE,NULL);
         dev->m_inputEndPoints.at(i).m_AudioClient->SetEventHandle(h);
         hr=dev->m_inputEndPoints.at(i).m_AudioClient->Start();
         CheckHResult(hr,"Wasapi Input Start audio");
-        evCnt++;
     }
     int counter=0;
     int nFramesInBuffer=dev->currentConfiguration.GetBufferSize();
@@ -744,7 +738,6 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         while (dev->m_currentState==WasapiDevice::WASS_Playing)
         {
             const AudioStreamConfiguration curConf=dev->currentConfiguration;
-            //if (WaitForMultipleObjects(numEndpointEvents,wantDataEvents.data(),TRUE,10000)<WAIT_OBJECT_0+numEndpointEvents)
             if (waitEvents.waitForEvents(10000)==true)
             {
                 int minFramesInput=65536;
@@ -877,18 +870,13 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         //cerr << "WASAPI thread polling for playback status change...\n";
         Sleep(1);
     }
-    evCnt=0;
     for (unsigned i=0;i<numOutputEndPoints;i++)
     {
         hr=dev->m_outputEndPoints.at(i).m_AudioClient->Stop();
-        //CloseHandle(wantDataEvents[evCnt]);
-        evCnt++;
     }
     for (unsigned i=0;i<numInputEndPoints;i++)
     {
         hr=dev->m_inputEndPoints.at(i).m_AudioClient->Stop();
-        //CloseHandle(wantDataEvents[evCnt]);
-        evCnt++;
     }
     CoUninitialize();
     if (dev->m_outputGlitchCounter>0)
