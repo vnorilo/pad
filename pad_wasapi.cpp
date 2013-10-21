@@ -684,6 +684,14 @@ public:
         return m_events[index];
     }
     HANDLE* getEvents() { return m_events.data(); }
+    bool waitForEvents(int maxwait_ms)
+    {
+        DWORD result=WaitForMultipleObjects(m_events.size(),m_events.data(),TRUE,maxwait_ms);
+        if (result<WAIT_OBJECT_0+m_events.size())
+            return true;
+        return false;
+    }
+
 private:
     std::vector<HANDLE> m_events;
 };
@@ -698,27 +706,29 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     CheckHResult(CoInitialize(0),"Wasapi audio thread could not init COM");
     dev->EnableMultiMediaThreadPriority(true);
     //cout << "*** Starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
-    std::vector<HANDLE> wantDataEvents;
+    //std::vector<HANDLE> wantDataEvents;
     WinEventContainer waitEvents;
     // 1 is used as a hack until rendering multiple endpoints can be properly tested
     const unsigned numOutputEndPoints=1; //dev->m_outputEndPoints.size();
     const unsigned numInputEndPoints=1;
     const unsigned numEndpointEvents=numOutputEndPoints+numInputEndPoints;
-    wantDataEvents.resize(numEndpointEvents);
+    //wantDataEvents.resize(numEndpointEvents);
     HRESULT hr=0;
     unsigned evCnt=0;
     for (unsigned int i=0;i<numOutputEndPoints;i++)
     {
-        wantDataEvents[evCnt]=CreateEvent(NULL,FALSE,FALSE,NULL);
-        dev->m_outputEndPoints.at(i).m_AudioClient->SetEventHandle(wantDataEvents[evCnt]);
+        HANDLE h=waitEvents.addEvent();
+        //wantDataEvents[evCnt]=CreateEvent(NULL,FALSE,FALSE,NULL);
+        dev->m_outputEndPoints.at(i).m_AudioClient->SetEventHandle(h);
         hr=dev->m_outputEndPoints.at(i).m_AudioClient->Start();
         CheckHResult(hr,"Wasapi Output Start audio");
         evCnt++;
     }
     for (unsigned int i=0;i<numInputEndPoints;i++)
     {
-        wantDataEvents[evCnt]=CreateEvent(NULL,FALSE,FALSE,NULL);
-        dev->m_inputEndPoints.at(i).m_AudioClient->SetEventHandle(wantDataEvents[evCnt]);
+        HANDLE h=waitEvents.addEvent();
+        //wantDataEvents[evCnt]=CreateEvent(NULL,FALSE,FALSE,NULL);
+        dev->m_inputEndPoints.at(i).m_AudioClient->SetEventHandle(h);
         hr=dev->m_inputEndPoints.at(i).m_AudioClient->Start();
         CheckHResult(hr,"Wasapi Input Start audio");
         evCnt++;
@@ -734,7 +744,8 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         while (dev->m_currentState==WasapiDevice::WASS_Playing)
         {
             const AudioStreamConfiguration curConf=dev->currentConfiguration;
-            if (WaitForMultipleObjects(numEndpointEvents,wantDataEvents.data(),TRUE,10000)<WAIT_OBJECT_0+numEndpointEvents)
+            //if (WaitForMultipleObjects(numEndpointEvents,wantDataEvents.data(),TRUE,10000)<WAIT_OBJECT_0+numEndpointEvents)
+            if (waitEvents.waitForEvents(10000)==true)
             {
                 int minFramesInput=65536;
                 for (unsigned ep=0;ep<numInputEndPoints;ep++)
@@ -870,13 +881,13 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     for (unsigned i=0;i<numOutputEndPoints;i++)
     {
         hr=dev->m_outputEndPoints.at(i).m_AudioClient->Stop();
-        CloseHandle(wantDataEvents[evCnt]);
+        //CloseHandle(wantDataEvents[evCnt]);
         evCnt++;
     }
     for (unsigned i=0;i<numInputEndPoints;i++)
     {
         hr=dev->m_inputEndPoints.at(i).m_AudioClient->Stop();
-        CloseHandle(wantDataEvents[evCnt]);
+        //CloseHandle(wantDataEvents[evCnt]);
         evCnt++;
     }
     CoUninitialize();
