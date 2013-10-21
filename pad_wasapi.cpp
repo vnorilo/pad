@@ -769,7 +769,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
 
                             for (unsigned i=0;i<framesInPacket*numEndpointChans;i++)
                             {
-                                wasapiInputBuffer[i]=-1.0+(1.0/65535)*baz[i];
+                                wasapiInputBuffer[i]=-1.0+(2.0/32767)*baz[i];
                             }
                         }
                         for (unsigned i=0;i<numEndpointChans;i++)
