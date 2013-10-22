@@ -174,9 +174,8 @@ class COMPointer
 public:
     COMPointer() : m_p(nullptr) {}
     COMPointer(T* ptr) : m_p(ptr) {}
-    COMPointer(COMPointer&& other)
+    COMPointer(COMPointer&& other) : m_p(other.m_p)
     {
-        m_p=other.m_p;
         other.m_p=nullptr;
     }
     COMPointer& operator=(COMPointer&& other)
@@ -184,11 +183,7 @@ public:
         std::swap(m_p,other.m_p);
         return *this;
     }
-    ~COMPointer()
-    {
-        if (m_p!=nullptr)
-            CoTaskMemFree((LPVOID)m_p);
-    }
+    ~COMPointer() { CoTaskMemFree((LPVOID)m_p); }
     operator T*() const { return m_p; }
     // this is very handy to have, but is it safe? ie, does it conflict with operator T*?
     operator T**() { return &m_p; }
