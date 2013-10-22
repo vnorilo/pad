@@ -473,10 +473,10 @@ struct WasapiPublisher : public HostAPIPublisher
             enumerator->GetDefaultAudioEndpoint(direction,eMultimedia,epo.NullAndGetPtrAddress()),
             "PAD/WASAPI : Could not get default input/output endpoint device"))
         {
-            WCHAR* deviceId=nullptr;
-            epo->GetId(&deviceId);
+            COMPointer<WCHAR> deviceId;
+            epo->GetId(deviceId);
             result.second=WideCharToStdString(deviceId);
-            CoTaskMemFree(deviceId);
+            //CoTaskMemFree(deviceId);
         }
         result.first=epo;
         return result;
