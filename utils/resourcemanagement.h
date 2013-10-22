@@ -165,29 +165,39 @@ static bool CheckHResult(HRESULT r,const std::string& context=std::string())
     return true;
 }
 
-/* not really useful yet...this should wrap crap that needs to be deallocated with CoTaskMemFree etc
+// RAII helper for things that need to be freed with CoTaskMemFree.
+// Can be moved but not copied around because we don't have a generic way to copy
+// and copies could be harmful anyway.
 template <class T>
 class COMPointer
 {
 public:
-    COMPointer()
-    {
-        m_p=nullptr;
-    }
+    COMPointer() : m_p(nullptr) {}
     COMPointer(T* ptr)
     {
         m_p=ptr;
     }
+    COMPointer(COMPointer&& other)
+    {
+        m_p=other.m_p;
+        other.m_p=nullptr;
+    }
+    COMPointer& operator=(COMPointer&& other)
+    {
+        std::swap(m_p,other.m_p);
+        return *this;
+    }
     ~COMPointer()
     {
-        if (m_p)
+        if (m_p!=nullptr)
             CoTaskMemFree((LPVOID)m_p);
     }
-    T* operator ()()
-    {
-        return &m_p;
-    }
+    operator T*() const { return m_p; }
+    // this is very handy to have, but is it safe? ie, does it conflict with operator T*?
+    operator T**() { return &m_p; }
 private:
+    COMPointer(const COMPointer&); // prevent copy construction
+    COMPointer& operator=(const COMPointer&); // prevent copy assignment
     T* m_p;
 };
-*/
+
