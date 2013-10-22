@@ -173,10 +173,7 @@ class COMPointer
 {
 public:
     COMPointer() : m_p(nullptr) {}
-    COMPointer(T* ptr)
-    {
-        m_p=ptr;
-    }
+    COMPointer(T* ptr) : m_p(ptr) {}
     COMPointer(COMPointer&& other)
     {
         m_p=other.m_p;
