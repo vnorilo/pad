@@ -94,20 +94,10 @@ private:
 class MyPropVariant
 {
 public:
-    MyPropVariant()
-    {
-        PropVariantInit(&m_variant);
-    }
-    ~MyPropVariant()
-    {
-        //std::cerr << "MyPropVariant dtor\n";
-        PropVariantClear(&m_variant);
-    }
-    MyPropVariant(const MyPropVariant& other)
-    {
-        //std::cerr << "MyPropVariant copy ctor\n";
-        PropVariantCopy(&m_variant,&other.m_variant);
-    }
+    MyPropVariant() { PropVariantInit(&m_variant); }
+    ~MyPropVariant() { PropVariantClear(&m_variant); }
+    MyPropVariant(const MyPropVariant& other) { PropVariantCopy(&m_variant,&other.m_variant); }
+
     /* For completeness these probably should be implemented, but "meh" for now...
     bool operator==(const MyPropVariant & other) const
     {
@@ -119,7 +109,7 @@ public:
         return !(*this==other);
     }
     */
-    MyPropVariant & operator= (const MyPropVariant & other)
+    MyPropVariant & operator=(const MyPropVariant & other)
     {
         //std::cerr << "MyPropVariant =\n";
         if (&this->m_variant!=&other.m_variant)
@@ -137,7 +127,7 @@ private:
     PROPVARIANT m_variant;
 };
 
-// this might be slow, so before it is benchmarked, should avoid using in tight loops
+// this might be slow, should avoid using in tight loops before it has been benchmarked
 static std::string WideCharToStdString(LPWSTR input)
 {
     int sizeNeeded=WideCharToMultiByte(CP_UTF8,WC_ERR_INVALID_CHARS,input,-1,0,0,NULL,NULL);

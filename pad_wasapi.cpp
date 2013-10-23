@@ -476,7 +476,6 @@ struct WasapiPublisher : public HostAPIPublisher
             COMPointer<WCHAR> deviceId;
             epo->GetId(deviceId);
             result.second=WideCharToStdString(deviceId);
-            //CoTaskMemFree(deviceId);
         }
         result.first=epo;
         return result;
@@ -536,10 +535,9 @@ struct WasapiPublisher : public HostAPIPublisher
             unsigned outputDeviceSortID=1; unsigned inputDeviceSortID=1;
             hr = collection->Item(i, endpoint.NullAndGetPtrAddress());
             if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint collection item")==false) continue;
-            WCHAR* deviceId=nullptr;
-            endpoint->GetId(&deviceId);
+            COMPointer<WCHAR> deviceId;
+            endpoint->GetId(deviceId);
             std::string curDevId=WideCharToStdString(deviceId);
-            CoTaskMemFree(deviceId);
             if (curDevId==defaultOutputDevId)
                 outputDeviceSortID=0;
             if (curDevId==defaultInputDevId)
@@ -565,14 +563,13 @@ struct WasapiPublisher : public HostAPIPublisher
                 cerr << "PAD/WASAPI : could not get device default/min period for " << endPointNameString << "\n";
                 continue;
             }
-            WAVEFORMATEX* mixFormat = nullptr;
-            hr=tempClient->GetMixFormat(&mixFormat);
+            COMPointer<WAVEFORMATEX> mixFormat;
+            hr=tempClient->GetMixFormat(mixFormat);
             if (CheckHResult(hr,"PAD/WASAPI : Could not get mix format")==false) continue;
             WAVEFORMATEXTENSIBLE format;
             CopyWavFormat(format, mixFormat);
             //WAVE_FORMAT_IEEE_FLOAT
             //cout << "endpoint " << i << " format is " << mixFormat->wFormatTag << "\n";
-            CoTaskMemFree(mixFormat);
             int defaultSr=format.Format.nSamplesPerSec;
             unsigned exclusiveModeCount=0;
             if (enumExclusivemodeSupport==true)
