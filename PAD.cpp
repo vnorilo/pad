@@ -2,6 +2,7 @@
 #include <functional>
 #include <numeric>
 #include <ostream>
+#include <algorithm>
 
 namespace PAD {
 	using namespace std;
@@ -160,7 +161,7 @@ namespace PAD {
 		{
 			if (cr.begin() < maxCh) 
 			{
-				newChannelRange.push_back(ChannelRange(cr.begin(),min(cr.end(),maxCh)));
+                newChannelRange.push_back(ChannelRange(cr.begin(),min(cr.end(),maxCh)));
 			}			
 		}
 
