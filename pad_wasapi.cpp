@@ -20,6 +20,13 @@
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
 
+inline double scale_value_from_range_to_range(double v, double inputmin, double inputmax, double outputmin, double outputmax)
+{
+    double range1=inputmax-inputmin;
+    double range2=outputmax-outputmin;
+    return outputmin+range2/range1*v;
+}
+
 void CopyWavFormat(WAVEFORMATEXTENSIBLE& dest, const WAVEFORMATEX* const src)
 {
     if (src->wFormatTag==WAVE_FORMAT_EXTENSIBLE)
@@ -437,17 +444,15 @@ struct WasapiPublisher : public HostAPIPublisher
     int countSupportedExclusiveFormats(const PadComSmartPointer<IAudioClient>& cl)
     {
         int result=0;
-        int bitdepths[]={16,24,32};
-        int samplerates[]={44100,48000,88200,96000,176400,192000};
         WAVEFORMATEXTENSIBLE format; memset(&format,0,sizeof(WAVEFORMATEXTENSIBLE));
         format.SubFormat=KSDATAFORMAT_SUBTYPE_PCM;
         format.dwChannelMask=KSAUDIO_SPEAKER_STEREO;
         format.Format.wFormatTag=WAVE_FORMAT_EXTENSIBLE;
         format.Format.nChannels=2;
         format.Format.cbSize=sizeof(WAVEFORMATEXTENSIBLE);
-        for (int bd : bitdepths)
+        for (int bd : {16,24,32})
         {
-            for (int sr : samplerates)
+            for (int sr : {44100,48000,88200,96000,176400,192000})
             {
                 //cerr << "testing exclusive mode support for samplerate " << sr << " bitdepth " << bd << "\n";
                 format.Format.wBitsPerSample=bd;
@@ -767,7 +772,8 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
 
                             for (unsigned i=0;i<framesInPacket*numEndpointChans;i++)
                             {
-                                wasapiInputBuffer[i]=-1.0+(2.0/32767)*baz[i];
+                                wasapiInputBuffer[i]=scale_value_from_range_to_range(baz[i],-32768,32767,-1.0,1.0);
+                                //wasapiInputBuffer[i]=-1.0+(2.0/32767)*baz[i];
                             }
                         }
                         for (unsigned i=0;i<numEndpointChans;i++)
@@ -835,7 +841,9 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
 
                                     for (unsigned j=0;j<framesToOutput;j++)
                                     {
-                                        wasapiOutput[j*numEndpointChans+i]=4095*dev->m_delegateOutputBuffer[j*numStreamChans+k];
+                                        float tempsample=dev->m_delegateOutputBuffer[j*numStreamChans+k];
+                                        wasapiOutput[j*numEndpointChans+i]=scale_value_from_range_to_range(tempsample,-1.0,1.0,-32768.0,32767.0);
+                                        //wasapiOutput[j*numEndpointChans+i]=4095*dev->m_delegateOutputBuffer[j*numStreamChans+k];
                                     }
                                 }
                                 k++;
