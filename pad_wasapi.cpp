@@ -696,6 +696,30 @@ private:
     std::vector<HANDLE> m_events;
 };
 
+class COMInitRAIIHelper
+{
+public:
+    COMInitRAIIHelper()
+    {
+        if (CoInitialize(0)>=0)
+        {
+            m_inited=true;
+            std::cerr << "PAD/WASAPI : COM was succesfully initialized in thread " << std::this_thread::get_id() << "\n";
+        }
+        else std::cerr << "PAD/WASAPI : COM could not be initialized in thread " << std::this_thread::get_id() << "\n";
+    }
+    ~COMInitRAIIHelper()
+    {
+        if (m_inited==true)
+        {
+            std::cerr << "PAD/WASAPI : Unitializing COM in thread " << std::this_thread::get_id() << "\n";
+            CoUninitialize();
+        }
+    }
+private:
+    bool m_inited=false;
+};
+
 DWORD WINAPI WasapiThreadFunction(LPVOID params)
 {
     WasapiDevice* dev=(WasapiDevice*)params;
@@ -703,7 +727,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     {
         return 0;
     }
-    CheckHResult(CoInitialize(0),"Wasapi audio thread could not init COM");
+    COMInitRAIIHelper com_initer;
     dev->EnableMultiMediaThreadPriority(true);
     //cout << "*** Starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
     WinEventContainer waitEvents;
@@ -878,7 +902,6 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
     {
         hr=dev->m_inputEndPoints.at(i).m_AudioClient->Stop();
     }
-    CoUninitialize();
     if (dev->m_outputGlitchCounter>0)
         cerr << "ended wasapi audio thread. "<<dev->m_outputGlitchCounter<< " glitches detected\n";
     return 0;
