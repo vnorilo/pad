@@ -81,11 +81,8 @@ public:
         WASS_Closed
     };
 
-    WasapiDevice() : m_deviceName("Invalid"),
-        m_numInputs(0), m_numOutputs(0), m_audioThreadHandle(0), currentDelegate(0), m_currentState(WASS_Idle),
-        m_threadShouldStop(false)
-    {
-    }
+    WasapiDevice() :
+        m_numInputs(0), m_numOutputs(0), m_currentState(WASS_Idle) {}
     ~WasapiDevice()
     {
         //cerr << "WasapiDevice dtor\n";
@@ -398,7 +395,7 @@ public:
         } else cerr << "Could not load avrt.dll\n";
     }
 
-    AudioCallbackDelegate* currentDelegate;
+    AudioCallbackDelegate* currentDelegate=nullptr;
     AudioStreamConfiguration currentConfiguration;
     vector<float> m_delegateOutputBuffer;
     vector<float> m_delegateInputBuffer;
@@ -410,11 +407,11 @@ public:
     std::shared_ptr<std::mutex> m_mutex;
     vector<WasapiEndPoint> m_inputEndPoints;
     vector<WasapiEndPoint> m_outputEndPoints;
-    volatile bool m_threadShouldStop;
+    volatile bool m_threadShouldStop=false;
     std::vector<int> m_supportedSampleRates;
 private:
-    HANDLE m_audioThreadHandle;
-    string m_deviceName;
+    HANDLE m_audioThreadHandle=NULL;
+    string m_deviceName="Invalid";
     unsigned m_numInputs;
     unsigned m_numOutputs;
     AudioStreamConfiguration m_defaultMono, m_defaultStereo, m_defaultAll;
@@ -532,9 +529,6 @@ struct WasapiPublisher : public HostAPIPublisher
         auto defInputInfo=GetDefaultEndPoint(enumerator,true);
         std::string defaultOutputDevId=defOutputInfo.second;
         std::string defaultInputDevId=defInputInfo.second;
-        std::vector<int> sampleRatesToTest;
-        sampleRatesToTest.push_back(44100); sampleRatesToTest.push_back(48000); sampleRatesToTest.push_back(88200); sampleRatesToTest.push_back(96000);
-        sampleRatesToTest.push_back(176400); sampleRatesToTest.push_back(192000);
         for (unsigned i=0;i<count;i++)
         {
             unsigned outputDeviceSortID=1; unsigned inputDeviceSortID=1;
@@ -584,7 +578,7 @@ struct WasapiPublisher : public HostAPIPublisher
                 {
                     cerr << endPointNameString << " supports exclusive mode\n";
                     adapterNameString+=" Exclusive";
-                }
+                } else cerr << endPointNameString << " does not support exclusive mode\n";
             }
             wasapiMap[adapterNameString].SetName(adapterNameString);
             wasapiMap[adapterNameString].m_supportedSampleRates.push_back(defaultSr);
@@ -598,7 +592,7 @@ struct WasapiPublisher : public HostAPIPublisher
             // This hasn't so far appeared to ever do anything for shared mode devices.
             // The supported samplerate has always been only the default samplerate, which we've already added
             // to the supported ones above
-            for (int samplerate : sampleRatesToTest)
+            for (int samplerate : {44100,48000,88200,96000,176400,192000})
             {
                 if (samplerate==defaultSr)
                     continue;
