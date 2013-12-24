@@ -1,6 +1,10 @@
 #include <functional>
 #include "AsioUtil.h"
 
+#pragma comment(lib,"User32.lib")
+#pragma comment(lib,"Advapi32.lib")
+#pragma comment(lib,"Ole32.lib")
+
 #define ASIODRV_DESC		"description"
 #define INPROC_SERVER		"InprocServer32"
 #define ASIO_PATH			"software\\asio"
