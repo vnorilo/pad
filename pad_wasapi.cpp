@@ -898,7 +898,6 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                     cerr << "PAD/WASAPI : Audio thread had to wait unusually long for end point events\n";
                 }
             }
-            //cerr << "WASAPI thread polling for playback status change...\n";
             Sleep(1);
         }
         for (unsigned i=0;i<numOutputEndPoints;i++)
