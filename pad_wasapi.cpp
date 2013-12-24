@@ -97,7 +97,7 @@ public:
     void AddInputEndPoint(const PadComSmartPointer<IMMDevice>& ep, unsigned numChannels, unsigned sortID, bool canDoExclusive,const std::string& name=std::string())
     {
         m_numInputs+=numChannels;
-        if (sortID==0)
+        if (m_console_spam_enabled==true && sortID==0)
             cerr << name << " is default input end point\n";
         WasapiEndPoint wep(ep, numChannels, sortID, name,canDoExclusive);
         // I realize this is theoretically inefficient and not really elegant but I hate std::list so much I don't want to use it
@@ -109,7 +109,7 @@ public:
     void AddOutputEndPoint(const PadComSmartPointer<IMMDevice>& ep,unsigned numChannels, unsigned sortID, bool canDoExclusive, const std::string& name=std::string())
     {
         m_numOutputs+=numChannels;
-        if (sortID==0)
+        if (m_console_spam_enabled==true && sortID==0)
             cerr << name << " is default output end point\n";
         WasapiEndPoint wep(ep, numChannels, sortID, name,canDoExclusive);
         // I realize this is theoretically inefficient and not really elegant but I hate std::list so much I don't want to use it
@@ -410,6 +410,7 @@ public:
     vector<WasapiEndPoint> m_outputEndPoints;
     volatile bool m_threadShouldStop=false;
     std::vector<int> m_supportedSampleRates;
+    bool m_console_spam_enabled=false;
 private:
     HANDLE m_audioThreadHandle=NULL;
     string m_deviceName="Invalid";
@@ -460,7 +461,7 @@ struct WasapiPublisher : public HostAPIPublisher
                 if (cl->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE,(WAVEFORMATEX*)&format,0)==S_OK)
                 {
                     result++;
-                    cerr << "Exclusive mode supported for " << bd << " " << sr << "\n";
+                    //cerr << "Exclusive mode supported for " << bd << " " << sr << "\n";
                 }
             }
         }
@@ -577,9 +578,9 @@ struct WasapiPublisher : public HostAPIPublisher
                 exclusiveModeCount=countSupportedExclusiveFormats(tempClient);
                 if (exclusiveModeCount>0)
                 {
-                    cerr << endPointNameString << " supports exclusive mode\n";
+                    //cerr << endPointNameString << " supports exclusive mode\n";
                     adapterNameString+=" Exclusive";
-                } else cerr << endPointNameString << " does not support exclusive mode\n";
+                } //else cerr << endPointNameString << " does not support exclusive mode\n";
             }
             wasapiMap[adapterNameString].SetName(adapterNameString);
             wasapiMap[adapterNameString].m_supportedSampleRates.push_back(defaultSr);
@@ -650,7 +651,7 @@ struct WasapiPublisher : public HostAPIPublisher
         }
         high_resolution_clock::time_point t2 = high_resolution_clock::now();
         duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
-        std::cerr << "Enumerating WASAPI devices took " << time_span.count()*1000.0 << " ms\n";
+        //std::cerr << "Enumerating WASAPI devices took " << time_span.count()*1000.0 << " ms\n";
     }
 } publisher;
 
@@ -668,7 +669,7 @@ public:
             if (!CloseHandle(e))
                 failcount++;
         if (failcount>0)
-            std::cerr << "WinEventContainer couldn't close all open event handles\n";
+            std::cerr << "PAD/WASAPI : WinEventContainer couldn't close all open event handles\n";
         m_events.clear();
     }
     HANDLE addEvent()
