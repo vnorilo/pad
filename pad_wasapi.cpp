@@ -15,7 +15,8 @@
 #include <algorithm>
 #include "Avrt.h"
 #include <cmath>
-#include <functional>
+
+#pragma comment(lib,"Ole32.lib")
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
@@ -716,6 +717,7 @@ public:
             CoUninitialize();
         }
     }
+    bool didInitialize() const { return m_inited; }
 private:
     bool m_inited=false;
 };
@@ -723,187 +725,194 @@ private:
 DWORD WINAPI WasapiThreadFunction(LPVOID params)
 {
     WasapiDevice* dev=(WasapiDevice*)params;
-    if (dev->m_outputEndPoints.size()==0)
+    try
     {
-        return 0;
-    }
-    COMInitRAIIHelper com_initer;
-    dev->EnableMultiMediaThreadPriority(true);
-    //cout << "*** Starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
-    WinEventContainer waitEvents;
-    // 1 is used as a hack until rendering multiple endpoints can be properly tested
-    const unsigned numOutputEndPoints=1; //dev->m_outputEndPoints.size();
-    const unsigned numInputEndPoints=1;
-    HRESULT hr=0;
-    for (unsigned int i=0;i<numOutputEndPoints;i++)
-    {
-        HANDLE h=waitEvents.addEvent();
-        dev->m_outputEndPoints.at(i).m_AudioClient->SetEventHandle(h);
-        hr=dev->m_outputEndPoints.at(i).m_AudioClient->Start();
-        CheckHResult(hr,"Wasapi Output Start audio");
-    }
-    for (unsigned int i=0;i<numInputEndPoints;i++)
-    {
-        HANDLE h=waitEvents.addEvent();
-        dev->m_inputEndPoints.at(i).m_AudioClient->SetEventHandle(h);
-        hr=dev->m_inputEndPoints.at(i).m_AudioClient->Start();
-        CheckHResult(hr,"Wasapi Input Start audio");
-    }
-    int counter=0;
-    int nFramesInBuffer=dev->currentConfiguration.GetBufferSize();
-    BYTE* captureData=0;
-    BYTE* renderData=0;
-    std::vector<float> inputConvertBuffer(4096);
-    while (dev->m_threadShouldStop==false)
-    {
-        while (dev->m_currentState==WasapiDevice::WASS_Playing)
+        if (dev->m_outputEndPoints.size()==0)
         {
-            const AudioStreamConfiguration curConf=dev->currentConfiguration;
-            if (waitEvents.waitForEvents(10000)==true)
-            {
-                int minFramesInput=65536;
-                for (unsigned ep=0;ep<numInputEndPoints;ep++)
-                {
-                    UINT32 nFramesOfPadding;
-                    hr = dev->m_inputEndPoints.at(ep).m_AudioClient->GetCurrentPadding(&nFramesOfPadding);
-                    if (nFramesOfPadding==nFramesInBuffer)
-                    {
-                        dev->m_inputGlitchCounter++;
-                    }
-                    UINT32 framesInPacket=0;
-                    DWORD bufferStatus=0;
-                    hr = dev->m_inputEndPoints.at(ep).m_AudioCaptureClient->GetBuffer(&captureData, &framesInPacket, &bufferStatus, NULL, NULL);
-                    if (hr>=0 && captureData!=nullptr)
-                    {
-                        if (framesInPacket<minFramesInput)
-                            minFramesInput=framesInPacket;
-                        float* pf=(float*)captureData;
-                        unsigned numStreamChans=curConf.GetNumStreamInputs();
-                        unsigned numEndpointChans=dev->m_inputEndPoints.at(ep).m_numChannels;
-                        unsigned k=0;
-                        float* wasapiInputBuffer=pf;
-                        short* baz=(short*)captureData;
-                        if (dev->m_inputEndPoints.at(ep).m_isExclusiveMode==true)
-                        {
-                            wasapiInputBuffer=inputConvertBuffer.data();
-                            // as a hack handles just 16 bit format now
-
-                            for (unsigned i=0;i<framesInPacket*numEndpointChans;i++)
-                            {
-                                wasapiInputBuffer[i]=scale_value_from_range_to_range(baz[i],-32768,32767,-1.0,1.0);
-                                //wasapiInputBuffer[i]=-1.0+(2.0/32767)*baz[i];
-                            }
-                        }
-                        for (unsigned i=0;i<numEndpointChans;i++)
-                        {
-                            if (dev->m_enabledDeviceInputs.at(i)==true)
-                            {
-                                for (unsigned j=0;j<framesInPacket;j++)
-                                {
-                                    dev->m_delegateInputBuffer[j*numStreamChans+k]=wasapiInputBuffer[j*numEndpointChans+i];
-                                }
-                                k++;
-                            } else
-                            {
-                                if (dev->m_inputEndPoints.at(ep).m_isExclusiveMode==false)
-                                {
-                                    for (unsigned j=0;j<framesInPacket;j++)
-                                    {
-                                        dev->m_delegateInputBuffer[j*numStreamChans+k]=0.0f;
-                                    }
-                                } else
-                                {
-                                    for (unsigned j=0;j<framesInPacket;j++)
-                                    {
-                                        baz[j*numStreamChans+k]=0;
-                                    }
-                                }
-                            }
-                        }
-                        hr = dev->m_inputEndPoints.at(ep).m_AudioCaptureClient->ReleaseBuffer(framesInPacket);
-                    }
-                }
-                for (unsigned ep=0;ep<numOutputEndPoints;ep++)
-                {
-                    UINT32 nFramesOfPadding;
-                    hr = dev->m_outputEndPoints.at(ep).m_AudioClient->GetCurrentPadding(&nFramesOfPadding);
-                    if (nFramesOfPadding==nFramesInBuffer)
-                    {
-                        dev->m_outputGlitchCounter++;
-                    }
-                    unsigned framesToOutput=nFramesInBuffer-nFramesOfPadding;
-                    if (minFramesInput!=65536)
-                        framesToOutput=minFramesInput;
-                    hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->GetBuffer(framesToOutput, &renderData);
-                    if (hr>=0 && renderData!=nullptr)
-                    {
-                        dev->currentDelegate->Process(0,curConf,dev->m_delegateInputBuffer.data(),dev->m_delegateOutputBuffer.data(),framesToOutput);
-                        float* pf=(float*)renderData;
-                        unsigned numStreamChans=curConf.GetNumStreamOutputs();
-                        unsigned numEndpointChans=dev->m_outputEndPoints.at(ep).m_numChannels;
-                        unsigned k=0;
-                        short* wasapiOutput=(short*)renderData;
-                        for (unsigned i=0;i<numEndpointChans;i++)
-                        {
-                            if (dev->m_enabledDeviceOutputs[i]==true)
-                            {
-                                if (dev->m_outputEndPoints.at(ep).m_isExclusiveMode==false)
-                                {
-                                    for (unsigned j=0;j<framesToOutput;j++)
-                                    {
-                                        pf[j*numEndpointChans+i]=dev->m_delegateOutputBuffer[j*numStreamChans+k];
-                                    }
-                                } else
-                                {
-                                    // hack, handles only 16 bit format
-
-                                    for (unsigned j=0;j<framesToOutput;j++)
-                                    {
-                                        float tempsample=dev->m_delegateOutputBuffer[j*numStreamChans+k];
-                                        wasapiOutput[j*numEndpointChans+i]=scale_value_from_range_to_range(tempsample,-1.0,1.0,-32768.0,32767.0);
-                                        //wasapiOutput[j*numEndpointChans+i]=4095*dev->m_delegateOutputBuffer[j*numStreamChans+k];
-                                    }
-                                }
-                                k++;
-                            } else
-                            {
-                                if (dev->m_outputEndPoints.at(ep).m_isExclusiveMode==false)
-                                {
-                                    for (unsigned j=0;j<framesToOutput;j++)
-                                    {
-                                        pf[j*numEndpointChans+i]=0.0f;
-                                    }
-                                } else
-                                {
-                                    for (unsigned j=0;j<framesToOutput;j++)
-                                    {
-                                        wasapiOutput[j*numEndpointChans+i]=0;
-                                    }
-                                }
-                            }
-                        }
-                        hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->ReleaseBuffer(framesToOutput, 0);
-                    }
-                }
-                counter++;
-            } else
-            {
-                cerr << "PAD/WASAPI : Audio thread had to wait unusually long for end point events\n";
-            }
+            return 0;
         }
-        //cerr << "WASAPI thread polling for playback status change...\n";
-        Sleep(1);
+        COMInitRAIIHelper com_initer;
+        if (com_initer.didInitialize()==false)
+            return 0;
+        dev->EnableMultiMediaThreadPriority(true);
+        //cout << "*** Starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
+        WinEventContainer waitEvents;
+        // 1 is used as a hack until rendering multiple endpoints can be properly tested
+        const unsigned numOutputEndPoints=1; //dev->m_outputEndPoints.size();
+        const unsigned numInputEndPoints=1;
+        HRESULT hr=0;
+        for (unsigned int i=0;i<numOutputEndPoints;i++)
+        {
+            HANDLE h=waitEvents.addEvent();
+            dev->m_outputEndPoints.at(i).m_AudioClient->SetEventHandle(h);
+            hr=dev->m_outputEndPoints.at(i).m_AudioClient->Start();
+            CheckHResult(hr,"Wasapi Output Start audio");
+        }
+        for (unsigned int i=0;i<numInputEndPoints;i++)
+        {
+            HANDLE h=waitEvents.addEvent();
+            dev->m_inputEndPoints.at(i).m_AudioClient->SetEventHandle(h);
+            hr=dev->m_inputEndPoints.at(i).m_AudioClient->Start();
+            CheckHResult(hr,"Wasapi Input Start audio");
+        }
+        int counter=0;
+        int nFramesInBuffer=dev->currentConfiguration.GetBufferSize();
+        BYTE* captureData=0;
+        BYTE* renderData=0;
+        std::vector<float> inputConvertBuffer(4096);
+        //throw std::exception("test pad exceptioopn");
+        while (dev->m_threadShouldStop==false)
+        {
+            while (dev->m_currentState==WasapiDevice::WASS_Playing)
+            {
+                const AudioStreamConfiguration curConf=dev->currentConfiguration;
+                if (waitEvents.waitForEvents(10000)==true)
+                {
+                    int minFramesInput=65536;
+                    for (unsigned ep=0;ep<numInputEndPoints;ep++)
+                    {
+                        UINT32 nFramesOfPadding;
+                        hr = dev->m_inputEndPoints.at(ep).m_AudioClient->GetCurrentPadding(&nFramesOfPadding);
+                        if (nFramesOfPadding==nFramesInBuffer)
+                        {
+                            dev->m_inputGlitchCounter++;
+                        }
+                        UINT32 framesInPacket=0;
+                        DWORD bufferStatus=0;
+                        hr = dev->m_inputEndPoints.at(ep).m_AudioCaptureClient->GetBuffer(&captureData, &framesInPacket, &bufferStatus, NULL, NULL);
+                        if (hr>=0 && captureData!=nullptr)
+                        {
+                            if (framesInPacket<minFramesInput)
+                                minFramesInput=framesInPacket;
+                            float* pf=(float*)captureData;
+                            unsigned numStreamChans=curConf.GetNumStreamInputs();
+                            unsigned numEndpointChans=dev->m_inputEndPoints.at(ep).m_numChannels;
+                            unsigned k=0;
+                            float* wasapiInputBuffer=pf;
+                            short* baz=(short*)captureData;
+                            if (dev->m_inputEndPoints.at(ep).m_isExclusiveMode==true)
+                            {
+                                wasapiInputBuffer=inputConvertBuffer.data();
+                                // as a hack handles just 16 bit format now
+
+                                for (unsigned i=0;i<framesInPacket*numEndpointChans;i++)
+                                {
+                                    wasapiInputBuffer[i]=scale_value_from_range_to_range(baz[i],-32768,32767,-1.0,1.0);
+                                    //wasapiInputBuffer[i]=-1.0+(2.0/32767)*baz[i];
+                                }
+                            }
+                            for (unsigned i=0;i<numEndpointChans;i++)
+                            {
+                                if (dev->m_enabledDeviceInputs.at(i)==true)
+                                {
+                                    for (unsigned j=0;j<framesInPacket;j++)
+                                    {
+                                        dev->m_delegateInputBuffer[j*numStreamChans+k]=wasapiInputBuffer[j*numEndpointChans+i];
+                                    }
+                                    k++;
+                                } else
+                                {
+                                    if (dev->m_inputEndPoints.at(ep).m_isExclusiveMode==false)
+                                    {
+                                        for (unsigned j=0;j<framesInPacket;j++)
+                                        {
+                                            dev->m_delegateInputBuffer[j*numStreamChans+k]=0.0f;
+                                        }
+                                    } else
+                                    {
+                                        for (unsigned j=0;j<framesInPacket;j++)
+                                        {
+                                            baz[j*numStreamChans+k]=0;
+                                        }
+                                    }
+                                }
+                            }
+                            hr = dev->m_inputEndPoints.at(ep).m_AudioCaptureClient->ReleaseBuffer(framesInPacket);
+                        }
+                    }
+                    for (unsigned ep=0;ep<numOutputEndPoints;ep++)
+                    {
+                        UINT32 nFramesOfPadding;
+                        hr = dev->m_outputEndPoints.at(ep).m_AudioClient->GetCurrentPadding(&nFramesOfPadding);
+                        if (nFramesOfPadding==nFramesInBuffer)
+                        {
+                            dev->m_outputGlitchCounter++;
+                        }
+                        unsigned framesToOutput=nFramesInBuffer-nFramesOfPadding;
+                        if (minFramesInput!=65536)
+                            framesToOutput=minFramesInput;
+                        hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->GetBuffer(framesToOutput, &renderData);
+                        if (hr>=0 && renderData!=nullptr)
+                        {
+                            dev->currentDelegate->Process(0,curConf,dev->m_delegateInputBuffer.data(),dev->m_delegateOutputBuffer.data(),framesToOutput);
+                            float* pf=(float*)renderData;
+                            unsigned numStreamChans=curConf.GetNumStreamOutputs();
+                            unsigned numEndpointChans=dev->m_outputEndPoints.at(ep).m_numChannels;
+                            unsigned k=0;
+                            short* wasapiOutput=(short*)renderData;
+                            for (unsigned i=0;i<numEndpointChans;i++)
+                            {
+                                if (dev->m_enabledDeviceOutputs[i]==true)
+                                {
+                                    if (dev->m_outputEndPoints.at(ep).m_isExclusiveMode==false)
+                                    {
+                                        for (unsigned j=0;j<framesToOutput;j++)
+                                        {
+                                            pf[j*numEndpointChans+i]=dev->m_delegateOutputBuffer[j*numStreamChans+k];
+                                        }
+                                    } else
+                                    {
+                                        // hack, handles only 16 bit format
+
+                                        for (unsigned j=0;j<framesToOutput;j++)
+                                        {
+                                            float tempsample=dev->m_delegateOutputBuffer[j*numStreamChans+k];
+                                            wasapiOutput[j*numEndpointChans+i]=scale_value_from_range_to_range(tempsample,-1.0,1.0,-32768.0,32767.0);
+                                            //wasapiOutput[j*numEndpointChans+i]=4095*dev->m_delegateOutputBuffer[j*numStreamChans+k];
+                                        }
+                                    }
+                                    k++;
+                                } else
+                                {
+                                    if (dev->m_outputEndPoints.at(ep).m_isExclusiveMode==false)
+                                    {
+                                        for (unsigned j=0;j<framesToOutput;j++)
+                                        {
+                                            pf[j*numEndpointChans+i]=0.0f;
+                                        }
+                                    } else
+                                    {
+                                        for (unsigned j=0;j<framesToOutput;j++)
+                                        {
+                                            wasapiOutput[j*numEndpointChans+i]=0;
+                                        }
+                                    }
+                                }
+                            }
+                            hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->ReleaseBuffer(framesToOutput, 0);
+                        }
+                    }
+                    counter++;
+                } else
+                {
+                    cerr << "PAD/WASAPI : Audio thread had to wait unusually long for end point events\n";
+                }
+            }
+            //cerr << "WASAPI thread polling for playback status change...\n";
+            Sleep(1);
+        }
+        for (unsigned i=0;i<numOutputEndPoints;i++)
+        {
+            hr=dev->m_outputEndPoints.at(i).m_AudioClient->Stop();
+        }
+        for (unsigned i=0;i<numInputEndPoints;i++)
+        {
+            hr=dev->m_inputEndPoints.at(i).m_AudioClient->Stop();
+        }
+        if (dev->m_outputGlitchCounter>0)
+            cerr << "ended wasapi audio thread. "<<dev->m_outputGlitchCounter<< " glitches detected\n";
     }
-    for (unsigned i=0;i<numOutputEndPoints;i++)
-    {
-        hr=dev->m_outputEndPoints.at(i).m_AudioClient->Stop();
-    }
-    for (unsigned i=0;i<numInputEndPoints;i++)
-    {
-        hr=dev->m_inputEndPoints.at(i).m_AudioClient->Stop();
-    }
-    if (dev->m_outputGlitchCounter>0)
-        cerr << "ended wasapi audio thread. "<<dev->m_outputGlitchCounter<< " glitches detected\n";
+    catch (std::exception& ex) { std::cerr << "PAD WASAPI audio thread exception : " << ex.what() << "\n"; }
     return 0;
 }
 
