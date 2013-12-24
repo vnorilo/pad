@@ -18,7 +18,12 @@
 #include <jack/jack.h>
 
 #ifdef WIN32
-#include "utils/pad_com_smartpointer.h"
+#include "utils/resourcemanagement.h"
+#ifdef _WIN64
+#pragma comment(lib,"C:/Program Files (x86)/Jack/lib/libjack64.lib")
+#else
+#pragma comment(lib,"C:/Program Files (x86)/Jack/lib/libjack.lib")
+#endif
 #endif
 
 #undef min
