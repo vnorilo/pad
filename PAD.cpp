@@ -9,9 +9,8 @@ namespace PAD {
     const char* VersionString() { return "1.0.0"; }
 
 	AudioStreamConfiguration::AudioStreamConfiguration(double samplerate, bool valid)
-		:sampleRate(samplerate),valid(valid),startSuspended(false),numStreamIns(0),numStreamOuts(0),audioDelegate(NULL)
-	{
-	}
+		:sampleRate(samplerate),valid(valid),startSuspended(false),numStreamIns(0),numStreamOuts(0)
+	{ }
 
 	enum RangeFindResult {
 		In,
@@ -137,11 +136,6 @@ namespace PAD {
 	AudioStreamConfiguration AudioStreamConfiguration::StereoOutput(unsigned index) const
 	{
 		auto tmp(*this);tmp.AddDeviceOutputs(ChannelRange(index*2,index*2+2));return tmp;
-	}
-
-	AudioStreamConfiguration AudioStreamConfiguration::Delegate(AudioCallbackDelegate& d) const
-	{
-		auto tmp(*this);tmp.SetAudioDelegate(d);return tmp;
 	}
 
 	AudioStreamConfiguration AudioStreamConfiguration::Inputs(ChannelRange cr) const

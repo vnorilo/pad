@@ -39,9 +39,6 @@
     <ClCompile Include="..\..\HostAPI.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\pad_jack.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\AsioUtil.cpp">
       <Filter>Source Files\ASIO</Filter>
     </ClCompile>

@@ -69,7 +69,6 @@ namespace {
 		unsigned index;
 
 		AudioStreamConfiguration currentConfiguration;
-		AudioCallbackDelegate* currentDelegate;
 		vector<ASIO::BufferInfo> bufferInfos;
 		vector<ASIO::ChannelInfo> channelInfos;
 		vector<float> delegateBufferInput, delegateBufferOutput;
@@ -182,10 +181,9 @@ namespace {
 
 		void SampleRateDidChange(ASIO::SampleRate sRate)
 		{
-			currentConfiguration.SetSampleRate(sRate);
-			if (currentDelegate) 
-				currentDelegate->StreamConfigurationDidChange(
-				AudioCallbackDelegate::SampleRateDidChange,currentConfiguration);
+			currentConfiguration.SetSampleRate(sRate);			
+			StreamConfigurationDidChange(AudioStreamConfiguration::SampleRateDidChange,
+										 currentConfiguration);
 		}
 
 		long AsioMessage(long selector, long value, void* message, double* opt)
@@ -455,7 +453,7 @@ namespace {
 				}
 			}
 
-			currentDelegate->Process(0ll,currentConfiguration,
+			AudioDevice::BufferSwitch(0ll,currentConfiguration,
 				delegateBufferInput.data(),
 				delegateBufferOutput.data(),
 				callbackBufferFrames);
@@ -506,7 +504,6 @@ namespace {
 			Init();
 
 			/* canonicalize passed format */
-			currentDelegate = &conf.GetAudioDelegate();
 			currentConfiguration = conf;
 			ASIO().getSampleRate(&sr);
 			currentConfiguration.SetSampleRate(sr);
@@ -516,7 +513,7 @@ namespace {
 
 			currentConfiguration.SetBufferSize(callbackBufferFrames);
 
-			currentDelegate->AboutToBeginStream(currentConfiguration,*this);
+			AboutToBeginStream(currentConfiguration);
 
 			if (conf.HasSuspendOnStartup() == false) Run();
 			return currentConfiguration;
@@ -531,14 +528,14 @@ namespace {
 		virtual void Suspend() 
 		{
 			AsioUnwind(Prepared);
-			if (currentDelegate) currentDelegate->StreamDidEnd(*this);
+			StreamDidEnd();
 		}
 
 		virtual void Close() 
 		{
 			bool didEnd(State == Running);
 			AsioUnwind(Loaded);
-			if (didEnd && currentDelegate) currentDelegate->StreamDidEnd(*this);
+			if (didEnd) StreamDidEnd();
 		}
 	};
 
