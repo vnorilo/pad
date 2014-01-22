@@ -1,9 +1,11 @@
 syntax: glob
 xcode/PAD/PAD.xcodeproj/xcuserdata
 xcode/PAD/PAD.xcodeproj/project.xcworkspace/xcuserdata
-msvc/PADTest/Debug
+msvc/PADTest
 msvc/PADTest/Release
 msvc/PADTest/Test.App
+msvc/Debug Lib
+msvc/build
 *.sdf
 *.suo
 *.opensdf

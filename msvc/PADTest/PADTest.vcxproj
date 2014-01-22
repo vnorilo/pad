@@ -78,6 +78,13 @@
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release Lib|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v110</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
@@ -298,6 +305,14 @@
     <ClCompile Include="..\..\pad_asio.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug Lib|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release Lib|x64'">true</ExcludedFromBuild>
+<<<<<<< local
+=======
+    </ClCompile>
+    <ClCompile Include="..\..\pad_jack.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug Lib|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release Lib|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+>>>>>>> other
     </ClCompile>
     <ClCompile Include="..\..\test1.cpp">
       <AssemblerOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">AssemblyAndSourceCode</AssemblerOutput>
@@ -307,7 +322,10 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug Lib|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release Lib|x64'">true</ExcludedFromBuild>
+<<<<<<< local
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">UNICODE;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+=======
+>>>>>>> other
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

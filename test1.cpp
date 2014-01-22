@@ -12,6 +12,13 @@ int main() {
 		void Catch(SoftError e) { std::cerr << "*Soft " << e.GetCode() << "* :" << e.what() << "\n"; }
 		void Catch(HardError e) { std::cerr << "*Hard " << e.GetCode() << "* :" << e.what() << "\n"; }
 	};
+<<<<<<< local
+=======
+    
+
+    ErrorLogger log;	
+	Session myAudioSession(true,&log);
+>>>>>>> other
 
 	ErrorLogger log;
 	Session myAudioSession(true, &log);
@@ -21,7 +28,11 @@ int main() {
 			<< "\n  * All    : " << dev.DefaultAllChannels() << "\n\n";
 	}
 
+<<<<<<< local
 	auto asioDevice = myAudioSession.FindDevice("wasapi", "idt");
+=======
+	auto asioDevice = myAudioSession.FindDevice("wasapi","idt");
+>>>>>>> other
 
 	if (asioDevice != myAudioSession.end()) {
 		try {
@@ -51,6 +62,7 @@ int main() {
 				}
 			};
 
+<<<<<<< local
 			asioDevice->BufferSwitch += [&](uint64_t time, const PAD::AudioStreamConfiguration& cfg, const float *input, float *output, unsigned frames) {
 				unsigned numOuts(cfg.GetNumStreamOutputs());
 				for (unsigned i(0); i < frames; ++i) {
@@ -68,5 +80,16 @@ int main() {
 		catch (std::runtime_error e) {
 			std::cerr << e.what();
 		}
+=======
+		std::cout << "Actual stream parameters: " <<
+		asioDevice->Open(Stream(myAudioProcess).StereoOutput(0).StereoInput(0).SampleRate(48000));
+		getchar();
+//		asioDevice->Close();
+        }
+        catch(std::runtime_error e)
+        {
+            std::cerr << e.what();
+        }
+>>>>>>> other
 	}
 }
