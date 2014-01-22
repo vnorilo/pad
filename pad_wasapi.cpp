@@ -165,7 +165,7 @@ public:
         const unsigned endPointToActivate=0;
         //cout << "Wasapi::Open, thread id "<<GetCurrentThreadId()<<"\n";
         m_outputGlitchCounter=0;
-        currentDelegate = &conf.GetAudioDelegate();
+//        currentDelegate = &conf.GetAudioDelegate();
         currentConfiguration=conf;
         currentConfiguration.SetValid(false);
         if (m_currentState==WASS_Closed || m_currentState==WASS_Idle)
@@ -298,8 +298,9 @@ public:
         }
         if (m_currentState!=WASS_Open)
             return currentConfiguration;
-        if (currentDelegate)
-            currentDelegate->AboutToBeginStream(currentConfiguration,*this);
+
+		AboutToBeginStream(currentConfiguration);
+
         if (m_currentState==WASS_Open)
             InitAudioThread();
         if (m_currentState==WASS_Open && conf.HasSuspendOnStartup() == false) Run();
@@ -396,7 +397,7 @@ public:
         } else cerr << "Could not load avrt.dll\n";
     }
 
-    AudioCallbackDelegate* currentDelegate=nullptr;
+//    AudioCallbackDelegate* currentDelegate=nullptr;
     AudioStreamConfiguration currentConfiguration;
     vector<float> m_delegateOutputBuffer;
     vector<float> m_delegateInputBuffer;
@@ -849,7 +850,8 @@ struct wasapi_thread
                         hr = m_dev->m_outputEndPoints.at(ep).m_AudioRenderClient->GetBuffer(framesToOutput, &renderData);
                         if (hr>=0 && renderData!=nullptr)
                         {
-                            m_dev->currentDelegate->Process(0,curConf,m_dev->m_delegateInputBuffer.data(),m_dev->m_delegateOutputBuffer.data(),framesToOutput);
+							m_dev->BufferSwitch(0,curConf,m_dev->m_delegateInputBuffer.data(),m_dev->m_delegateOutputBuffer.data(),framesToOutput);
+
                             float* pf=(float*)renderData;
                             unsigned numStreamChans=curConf.GetNumStreamOutputs();
                             unsigned numEndpointChans=m_dev->m_outputEndPoints.at(ep).m_numChannels;
@@ -1040,7 +1042,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                         hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->GetBuffer(framesToOutput, &renderData);
                         if (hr>=0 && renderData!=nullptr)
                         {
-                            dev->currentDelegate->Process(0,curConf,dev->m_delegateInputBuffer.data(),dev->m_delegateOutputBuffer.data(),framesToOutput);
+                            dev->BufferSwitch(0,curConf,dev->m_delegateInputBuffer.data(),dev->m_delegateOutputBuffer.data(),framesToOutput);
                             float* pf=(float*)renderData;
                             unsigned numStreamChans=curConf.GetNumStreamOutputs();
                             unsigned numEndpointChans=dev->m_outputEndPoints.at(ep).m_numChannels;

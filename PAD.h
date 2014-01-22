@@ -1,6 +1,8 @@
 #pragma once
 #include <vector>
+#include <list>
 #include <cstdint>
+#include <functional>
 #include <iosfwd>
 
 #include "PADErrors.h"
@@ -23,11 +25,9 @@ namespace PAD{
 		Channel(unsigned c):ChannelRange(c,c+1){}
 	};
 
-	class AudioCallbackDelegate;
 	class AudioStreamConfiguration {
 		friend class AudioDevice;
 		double sampleRate;
-		AudioCallbackDelegate* audioDelegate;
 		std::vector<ChannelRange> inputRanges;
 		std::vector<ChannelRange> outputRanges;
 		unsigned numStreamIns;
@@ -49,8 +49,6 @@ namespace PAD{
 
 		void SetBufferSize(unsigned frames) {bufferSize = frames;}
 
-		void SetAudioDelegate(AudioCallbackDelegate& d) {audioDelegate = &d;}
-
 		void SetSuspendOnStartup(bool suspend) {startSuspended = suspend;}
 
 		bool IsInputEnabled(unsigned index) const;
@@ -67,9 +65,6 @@ namespace PAD{
 		unsigned GetBufferSize() const {return bufferSize;}
 		double GetSampleRate() const {return sampleRate;}	
 
-		bool HasAudioDelegate() const {return audioDelegate != NULL; }
-		AudioCallbackDelegate& GetAudioDelegate() const {return *audioDelegate;}
-
 		bool HasSuspendOnStartup() const {return startSuspended;}
 
 		void SetDeviceChannelLimits(unsigned maximumDeviceInputChannel, unsigned maximumDeviceOutputChannel);
@@ -81,53 +76,78 @@ namespace PAD{
 		AudioStreamConfiguration Outputs(ChannelRange) const;
 		AudioStreamConfiguration StereoInput(unsigned index) const;
 		AudioStreamConfiguration StereoOutput(unsigned index) const;
-		AudioStreamConfiguration Delegate(AudioCallbackDelegate& del) const;
 		AudioStreamConfiguration SampleRate(double rate) const;
 		AudioStreamConfiguration StartSuspended() const;
         
         const std::vector<ChannelRange> GetInputRanges() const {return inputRanges;}
         const std::vector<ChannelRange> GetOutputRanges() const {return outputRanges;}
-	};
 
-	static AudioStreamConfiguration Stream(AudioCallbackDelegate& d) {return AudioStreamConfiguration().Delegate(d);}
-
-    class AudioDevice;
-    class AudioCallbackDelegate{
-	public:
-		/**
-		 * Process is the audio callback. Expect it to be called from a realtime thread
-		 */
-		virtual void Process(uint64_t timestamp, const AudioStreamConfiguration&, const float* input, float *output, unsigned int frames) = 0;
-
-		/** 
-		 * Stream callbacks that may occur from any thread
-		 */
-		enum ConfigurationChangeFlags{
+		enum ConfigurationChangeFlags {
 			SampleRateDidChange = 0x0001,
 			BufferSizeDidChange = 0x0002
 		};
-
-		virtual void StreamConfigurationDidChange(ConfigurationChangeFlags whatDidChange, const AudioStreamConfiguration& newConfig) {}
-
-		/**
-		 * Utility setup calls that are called from the thread that controls the AudioDevice 
-		 */
-		virtual void AboutToBeginStream(const AudioStreamConfiguration&, AudioDevice&) {}
-		virtual void StreamDidEnd(AudioDevice&) {}
 	};
 
-	template <typename FUNCTOR> class AudioClosure : public AudioCallbackDelegate{
-		FUNCTOR proc;
+	class IEvent;
+
+	class IEventSubscriber {
 	public:
-		AudioClosure(FUNCTOR p):proc(p){}
-		virtual void Process(uint64_t ts, const AudioStreamConfiguration& conf, const float* in, float *out, unsigned int frames)
-		{ proc(ts,conf,in,out,frames); }
+		virtual void RemoveEvent(IEvent*) = 0;
+	};
+	
+	class IEvent {
+	public:
+		virtual void RemoveSubscriber(IEventSubscriber*) = 0;
 	};
 
-	template <typename FUNCTOR> AudioClosure<FUNCTOR> Closure(FUNCTOR f) { return AudioClosure<FUNCTOR>(f); }
+	template <typename... ARGS> class Event : public IEvent {
+		friend class EventSubscriber;
+		std::list<std::pair<IEventSubscriber*, std::function<void(ARGS...)>>> handlers;
+		void AddSubscriber(IEventSubscriber* sub, const std::function<void(ARGS...)>& func) {
+			handlers.push_back(std::make_pair(sub,func));
+		}
 
-	class AudioDevice {	
+		void RemoveSubscriber(IEventSubscriber *sub) {
+			handlers.remove_if(
+				[sub](const std::pair<IEventSubscriber*, std::function<void(ARGS...)>>& p)
+				{ return p.first == sub; });
+		}
 	public:
+		~Event() {
+			for (auto& h : handlers) if (h.first) h.first->RemoveEvent(this);
+		}
+
+		void operator()(const ARGS&... args) {
+			for (auto& h : handlers) h.second(args...);
+		}
+
+		Event& operator=(const std::function<void(ARGS...)>& handler) {
+			handlers.clear(); return *this += handler;
+		}
+
+		Event& operator+=(const std::function<void(ARGS...)>& handler) {
+			handlers.push_back(std::make_pair(nullptr, handler)); return *this;
+		}
+	};
+
+	class EventSubscriber : public IEventSubscriber {
+		std::list<IEvent*> subscriptions;
+	public:
+		~EventSubscriber() {
+			for (auto s : subscriptions) s->RemoveSubscriber(this);
+		}
+
+		void RemoveEvent(IEvent *evt) { subscriptions.remove(evt); }
+
+		template <typename... ARGS> void When(Event<ARGS...>& evt, const std::function<void(ARGS...)>& f) {
+			evt.AddSubscriber(this, std::forward<FUNCTOR>(f));
+		}
+	};
+
+	class AudioDevice {
+	public:
+		using BufferSwitchHandler = std::function<void()>;
+		virtual ~AudioDevice() { }
 		virtual unsigned GetNumInputs() const = 0;
 		virtual unsigned GetNumOutputs() const = 0;
 		virtual const char *GetName() const = 0;
@@ -148,7 +168,16 @@ namespace PAD{
 		virtual void Suspend() = 0;
 
 		virtual void Close() = 0;
+
+		Event<uint64_t, const AudioStreamConfiguration&, const float*, float*, unsigned> BufferSwitch;
+		Event<AudioStreamConfiguration> AboutToBeginStream;
+		Event<> StreamDidEnd;
+		Event<AudioStreamConfiguration::ConfigurationChangeFlags,AudioStreamConfiguration> StreamConfigurationDidChange;
 	};
+
+	static void SilenceOutput(uint64_t, const AudioStreamConfiguration& c, const float*, float *output, unsigned frames) {
+		for (int i = 0, sz = c.GetNumStreamOutputs() * frames; i < sz; ++i) output[i] = 0.f;
+	}
 
 	class HostAPIPublisher;
 
