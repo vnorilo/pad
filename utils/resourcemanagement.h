@@ -174,9 +174,12 @@ public:
         return *this;
     }
     ~COMPointer() { CoTaskMemFree((LPVOID)m_p); }
-    operator T*() const { return m_p; }
-    // this is very handy to have, but is it safe? ie, does it conflict with operator T*?
-    operator T**() { return &m_p; }
+    T* get() const { return m_p; }
+    // It's almost certain this needs be used so that the previous resource
+    // also needs to be freed at this point. I know it's ugly to have a getter
+    // that mutates the state, but glah, can't be bothered to invent a better
+    // name right now...
+    T** get_addr_and_free() { CoTaskMemFree((LPVOID)m_p); return &m_p; }
 private:
     COMPointer(const COMPointer&); // prevent copy construction
     COMPointer& operator=(const COMPointer&); // prevent copy assignment
