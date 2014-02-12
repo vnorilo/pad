@@ -479,8 +479,8 @@ struct WasapiPublisher : public HostAPIPublisher
             "PAD/WASAPI : Could not get default input/output endpoint device"))
         {
             COMPointer<WCHAR> deviceId;
-            epo->GetId(deviceId);
-            result.second=WideCharToStdString(deviceId);
+            epo->GetId(deviceId.get_addr_and_free());
+            result.second=WideCharToStdString(deviceId.get());
         }
         result.first=epo;
         return result;
@@ -538,8 +538,8 @@ struct WasapiPublisher : public HostAPIPublisher
             hr = collection->Item(i, endpoint.NullAndGetPtrAddress());
             if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint collection item")==false) continue;
             COMPointer<WCHAR> deviceId;
-            endpoint->GetId(deviceId);
-            std::string curDevId=WideCharToStdString(deviceId);
+            endpoint->GetId(deviceId.get_addr_and_free());
+            std::string curDevId=WideCharToStdString(deviceId.get());
             if (curDevId==defaultOutputDevId)
                 outputDeviceSortID=0;
             if (curDevId==defaultInputDevId)
@@ -566,10 +566,10 @@ struct WasapiPublisher : public HostAPIPublisher
                 continue;
             }
             COMPointer<WAVEFORMATEX> mixFormat;
-            hr=tempClient->GetMixFormat(mixFormat);
+            hr=tempClient->GetMixFormat(mixFormat.get_addr_and_free());
             if (CheckHResult(hr,"PAD/WASAPI : Could not get mix format")==false) continue;
             WAVEFORMATEXTENSIBLE format;
-            CopyWavFormat(format, mixFormat);
+            CopyWavFormat(format, mixFormat.get());
             //WAVE_FORMAT_IEEE_FLOAT
             //cout << "endpoint " << i << " format is " << mixFormat->wFormatTag << "\n";
             int defaultSr=format.Format.nSamplesPerSec;
