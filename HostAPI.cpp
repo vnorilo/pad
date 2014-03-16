@@ -38,7 +38,7 @@ namespace PAD{
 		api->Publish(*this, errHandler);
 	}
 
-	Session::Session(bool loadAll, DeviceErrorDelegate* del)
+	Session::Session(bool loadAll, DeviceErrorDelegate* del, void*)
 	{
 		AlwaysPropagateErrors p;
 		if (del == NULL) del = &p;
