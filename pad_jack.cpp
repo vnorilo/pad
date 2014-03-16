@@ -205,7 +205,7 @@ namespace{
 				todo-=now;
 			}
 
-			currentConf.GetAudioDelegate().Process(0ll,currentConf,clientInputBuffer.data(),clientOutputBuffer.data(),frames);
+			BufferSwitch(0ll,currentConf,clientInputBuffer.data(),clientOutputBuffer.data(),frames);
 
 			todo = outputPorts.size();
 			while(todo>0)
@@ -292,3 +292,8 @@ namespace{
 
 	} publisher;
 }
+
+extern "C" void* weak_jack() {
+	return (IHostAPI*)&publisher;
+}
+

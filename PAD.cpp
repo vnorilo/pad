@@ -4,9 +4,10 @@
 #include <ostream>
 #include <algorithm>
 
+
 namespace PAD {
 	using namespace std;
-    const char* VersionString() { return "1.0.0"; }
+	const char* VersionString() { return "1.0.0"; }
 
 	AudioStreamConfiguration::AudioStreamConfiguration(double samplerate, bool valid)
 		:sampleRate(samplerate),valid(valid),startSuspended(false),numStreamIns(0),numStreamOuts(0)
@@ -171,42 +172,63 @@ namespace PAD {
 	}
 }
 
+// this monster ensures construction of global objects in statically linked libraries
+#define API_TABLE	F(asio) F(wasapi) F(jack) F(coreaudio)
+#if _MSC_VER
+extern "C" void* APINotLinked() { return nullptr; };
 
-std::ostream& operator<<(std::ostream& stream, const PAD::AudioDevice& dev)
-{
-	stream << "[" << dev.GetHostAPI() << "] " << dev.GetName() << " [" << dev.GetNumInputs() << "x"<<dev.GetNumOutputs()<<"]";
-	return stream;
+#define F(HOST) extern "C" void *weak_##HOST();
+API_TABLE
+#undef F
+
+#define F(HOST) __pragma(comment(linker, "/ALTERNATENAME:weak_" #HOST "=APINotLinked")) 
+API_TABLE
+#undef F
+
+namespace PAD {
+	std::vector<IHostAPI*> GetLinkedAPIs() {
+		std::vector<IHostAPI*> hosts;
+#define F(HOST) if (weak_##HOST != APINotLinked) hosts.push_back((IHostAPI*)weak_##HOST());
+		API_TABLE
+#undef F
+		return hosts;
+	}
 }
 
-std::ostream& operator<<(std::ostream& stream, const PAD::AudioStreamConfiguration& cfg)
-{
-	if (cfg.IsValid() == false)
-	{
-		stream << "n/a";
+#elif __GNUC__
+#error Write weak linkage initializers for GNU
+#endif
+
+namespace std {
+	ostream& operator<<(ostream& stream, const PAD::AudioDevice& dev) {
+		stream << "[" << dev.GetHostAPI() << "] " << dev.GetName() << " [" << dev.GetNumInputs() << "x" << dev.GetNumOutputs() << "]";
 		return stream;
 	}
 
-	stream << cfg.GetSampleRate() / 1000.0 << "kHz ";
-	unsigned devIns(cfg.GetNumDeviceInputs());
-	unsigned devOuts(cfg.GetNumDeviceOutputs());
-
-	if (devIns < 32 && devOuts < 32 && (devIns > 0 || devOuts > 0))
-	{
-		stream << "Device[";
-		for(unsigned i(0);i<devIns;++i)
-		{
-			if (cfg.IsInputEnabled(i)) stream << "<"<<i+1<<">";
+	ostream& operator<<(ostream& stream, const PAD::AudioStreamConfiguration& cfg) {
+		if (cfg.IsValid() == false) {
+			stream << "n/a";
+			return stream;
 		}
 
-		stream << " x ";
+		stream << cfg.GetSampleRate() / 1000.0 << "kHz ";
+		unsigned devIns(cfg.GetNumDeviceInputs());
+		unsigned devOuts(cfg.GetNumDeviceOutputs());
 
-		for(unsigned i(0);i<devOuts;++i)
-		{
-			if (cfg.IsOutputEnabled(i)) stream << "<"<<i+1<<">";
-		}
-		stream << "]";
+		if (devIns < 32 && devOuts < 32 && (devIns > 0 || devOuts > 0)) {
+			stream << "Device[";
+			for (unsigned i(0); i < devIns; ++i) {
+				if (cfg.IsInputEnabled(i)) stream << "<" << i + 1 << ">";
+			}
+
+			stream << " x ";
+
+			for (unsigned i(0); i < devOuts; ++i) {
+				if (cfg.IsOutputEnabled(i)) stream << "<" << i + 1 << ">";
+			}
+			stream << "]";
+		} else stream << "[" << devIns << "x" << devOuts << "]";
+
+		return stream;
 	}
-	else stream << "["<<devIns<<"x"<<devOuts<<"]";
-
-	return stream;
 }

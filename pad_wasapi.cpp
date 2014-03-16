@@ -1115,3 +1115,6 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
 
 }
 
+extern "C" void* weak_wasapi() {
+	return (IHostAPI*)&publisher;
+}
