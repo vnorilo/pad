@@ -10,10 +10,14 @@
 namespace PAD{
     const char* VersionString();
 
-	class ChannelRange{
-		unsigned b, e;
+	class IHostAPI {
 	public:
-		
+		virtual const char *GetName() const = 0;
+	};
+
+	class ChannelRange {
+		unsigned b, e;
+	public:		
 		ChannelRange(unsigned b = 0, unsigned e = -1):b(b),e(e) {if(e<b) throw SoftError(ChannelRangeInvalid,"Invalid channel range");}
 		unsigned begin() const {return b;}
 		unsigned end() const {return e;}
@@ -201,13 +205,17 @@ namespace PAD{
 		virtual void Catch(HardError) = 0;
 	};
 
+	std::vector<IHostAPI*> GetLinkedAPIs();
+
+	static void* LinkAPIs() { GetLinkedAPIs(); return nullptr;  }
+
 	class Session {
 		std::vector<AudioDevice*> devices;
 		std::vector<HostAPIPublisher*> heldAPIProviders;
 		void InitializeApi(HostAPIPublisher*, DeviceErrorDelegate&);
 	public:
 		/* initialize all host apis */
-		Session(bool loadAllAPIs = true, DeviceErrorDelegate* handler = NULL);
+		Session(bool loadAllAPIs = true, DeviceErrorDelegate* handler = NULL, void *forceLinkage = LinkAPIs());
 		~Session();
 
 		std::vector<const char*> GetAvailableHostAPIs();
@@ -224,5 +232,7 @@ namespace PAD{
 	};
 };
 
-std::ostream& operator<<(std::ostream&, const PAD::AudioStreamConfiguration&);
-std::ostream& operator<<(std::ostream&, const PAD::AudioDevice&);
+namespace std {
+	ostream& operator<<(ostream&, const PAD::AudioStreamConfiguration&);
+	ostream& operator<<(ostream&, const PAD::AudioDevice&);
+}
