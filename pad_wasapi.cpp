@@ -25,7 +25,7 @@ inline double scale_value_from_range_to_range(double v, double inputmin, double 
 {
     double range1=inputmax-inputmin;
     double range2=outputmax-outputmin;
-    return outputmin+range2/range1*v;
+    return outputmin+range2/range1*(v-inputmin);
 }
 
 void CopyWavFormat(WAVEFORMATEXTENSIBLE& dest, const WAVEFORMATEX* const src)
