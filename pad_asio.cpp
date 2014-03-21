@@ -575,14 +575,21 @@ namespace {
 						ASIO::ComRef<ASIO::IASIO> driver = drv.Load();
 						if (driver)
 						{
-							ASIO::SampleRate currentSampleRate;
+							try {
+								ASIO::SampleRate currentSampleRate;
 
-							THROW_FALSE(DeviceInitializationFailure,driver->init(GetDesktopWindow()));
-							THROW_ERROR(DeviceInitializationFailure,driver->getChannels(&numInputs,&numOutputs));
-							THROW_ERROR(DeviceInitializationFailure,driver->getSampleRate(&currentSampleRate));
+								THROW_FALSE(DeviceInitializationFailure, driver->init(GetDesktopWindow()));
+								THROW_ERROR(DeviceInitializationFailure, driver->getChannels(&numInputs, &numOutputs));
+								THROW_ERROR(DeviceInitializationFailure, driver->getSampleRate(&currentSampleRate));
 
-							deviceMutex.push_back(unique_ptr<recursive_mutex>());
-							RegisterDevice(PADInstance,AsioDevice(drv,deviceMutex.back().get(),currentSampleRate,drv.driverName,numInputs,numOutputs));
+								deviceMutex.push_back(unique_ptr<recursive_mutex>());
+								RegisterDevice(PADInstance, AsioDevice(drv, deviceMutex.back().get(), currentSampleRate, drv.driverName, numInputs, numOutputs));
+							} catch (PAD::Error &) {
+								// device failed to open
+								char name[256];
+								driver->getDriverName(name);
+								std::cerr << "[ASIO] " << name << " failed to initialize\n";
+							}
 						}
 					}
 				}
@@ -685,4 +692,8 @@ namespace {
 		CallbackForwarder<NUM_CALLBACKS>::Free(&master);
 		memset(&cb,0,sizeof(ASIO::Callbacks));
 	}
+}
+
+extern "C" void* weak_asio() {
+	return (IHostAPI*)&publisher;
 }

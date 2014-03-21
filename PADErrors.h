@@ -25,6 +25,7 @@ namespace PAD{
 		Error(ErrorCode c,const std::string& message):code(c),runtime_error(message.c_str()) {}
 	public:
 		ErrorCode GetCode() const {return code;}
+		virtual bool IsHard() const { return false; }
 	};
 
 	/**
@@ -38,6 +39,7 @@ namespace PAD{
 	class HardError : public Error {
 	public:
 		HardError(ErrorCode c, const std::string& message):Error(c,message){}
+		virtual bool IsHard() const { return true; }
 	};
 
 }
