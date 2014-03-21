@@ -158,6 +158,7 @@ static bool CheckHResult(HRESULT r,const std::string& context=std::string())
 // RAII helper for things that need to be freed with CoTaskMemFree.
 // Can be moved but not copied around because we don't have a generic way to copy
 // and copies could be harmful anyway.
+
 template <class T>
 class COMPointer
 {
