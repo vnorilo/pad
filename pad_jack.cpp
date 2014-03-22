@@ -76,6 +76,8 @@ namespace{
 		virtual const char *GetName() const {return jack_get_version_string();}
 		virtual const char *GetHostAPI() const {return "jack";}
 
+		double CPU_Load() const { throw "Not implemented"; }
+
 		void Init()
 		{
 			if (currentState < Initialized)
