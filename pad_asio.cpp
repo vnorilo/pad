@@ -59,7 +59,9 @@ namespace {
 
 	class AsioDevice : public AudioDevice {
 
-		recursive_mutex *callbackMutex;
+        double CPU_Load() const { return 0.0; }
+
+        recursive_mutex *callbackMutex;
 
 		ASIO::DriverRecord driverInfo;
 		ASIO::ComRef<ASIO::IASIO> driver;

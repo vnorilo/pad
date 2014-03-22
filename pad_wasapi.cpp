@@ -370,6 +370,9 @@ public:
         //    currentDelegate->StreamDidEnd(*this);
         //cout << "Pad/Wasapi close, thread was stopped\n";
     }
+
+    double CPU_Load() const { return m_current_cpu_load; }
+
     void EnableMultiMediaThreadPriority(bool proAudio=false)
     {
         HMODULE hModule=LoadLibrary(L"avrt.dll");
@@ -412,6 +415,7 @@ public:
     volatile bool m_threadShouldStop=false;
     std::vector<int> m_supportedSampleRates;
     bool m_console_spam_enabled=false;
+    double m_current_cpu_load=0.0;
 private:
     HANDLE m_audioThreadHandle=NULL;
     string m_deviceName="Invalid";
@@ -929,6 +933,9 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         {
             return 0;
         }
+        LARGE_INTEGER perf_freq;
+        LARGE_INTEGER perf_t0;
+        LARGE_INTEGER perf_t1;
         COMInitRAIIHelper com_initer;
         if (com_initer.didInitialize()==false)
             return 0;
@@ -966,6 +973,9 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                 const AudioStreamConfiguration curConf=dev->currentConfiguration;
                 if (waitEvents.waitForEvents(10000)==true)
                 {
+                    unsigned framesToOutput=0;
+                    QueryPerformanceFrequency(&perf_freq);
+                    QueryPerformanceCounter(&perf_t0);
                     int minFramesInput=65536;
                     for (unsigned ep=0;ep<numInputEndPoints;ep++)
                     {
@@ -1036,7 +1046,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                         {
                             dev->m_outputGlitchCounter++;
                         }
-                        unsigned framesToOutput=nFramesInBuffer-nFramesOfPadding;
+                        framesToOutput=nFramesInBuffer-nFramesOfPadding;
                         if (minFramesInput!=65536)
                             framesToOutput=minFramesInput;
                         hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->GetBuffer(framesToOutput, &renderData);
@@ -1091,6 +1101,14 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                         }
                     }
                     counter++;
+                    QueryPerformanceCounter(&perf_t1);
+                    double elapsed_ms=double( perf_t1.QuadPart - perf_t0.QuadPart ) / perf_freq.QuadPart * 1000.0;
+                    if (framesToOutput>0)
+                    {
+                        double buflen_ms=1000.0/dev->currentConfiguration.GetSampleRate()*framesToOutput;
+                        dev->m_current_cpu_load=1.0/buflen_ms*elapsed_ms;
+                    }
+
                 } else
                 {
                     cerr << "PAD/WASAPI : Audio thread had to wait unusually long for end point events\n";

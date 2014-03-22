@@ -173,6 +173,8 @@ namespace PAD{
 
 		virtual void Close() = 0;
 
+        virtual double CPU_Load() const = 0;
+
 		Event<uint64_t, const AudioStreamConfiguration&, const float*, float*, unsigned> BufferSwitch;
 		Event<AudioStreamConfiguration> AboutToBeginStream;
 		Event<> StreamDidEnd;
