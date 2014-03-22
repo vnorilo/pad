@@ -173,16 +173,19 @@ namespace PAD {
 }
 
 // this monster ensures construction of global objects in statically linked libraries
-//#define API_TABLE	F(asio) F(wasapi) F(jack) F(coreaudio)
-#define API_TABLE	F(asio) F(wasapi)
+#define API_TABLE	F(asio) F(wasapi) F(jack) F(coreaudio)
+//#define API_TABLE	F(asio) F(wasapi)
 #if _MSC_VER
 extern "C" void* APINotLinked() { return nullptr; };
 
 #define F(HOST) extern "C" void *weak_##HOST();
 API_TABLE
 #undef F
-
+#ifdef WIN64
 #define F(HOST) __pragma(comment(linker, "/ALTERNATENAME:weak_" #HOST "=APINotLinked")) 
+#else
+#define F(HOST) __pragma(comment(linker, "/ALTERNATENAME:_weak_" #HOST "=_APINotLinked")) 
+#endif
 API_TABLE
 #undef F
 
