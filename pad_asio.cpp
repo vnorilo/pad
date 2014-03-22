@@ -59,7 +59,7 @@ namespace {
 
 	class AsioDevice : public AudioDevice {
 
-        double CPU_Load() const { return 0.0; }
+        double CPU_Load() const { return current_cpu_load; }
 
         recursive_mutex *callbackMutex;
 
@@ -172,14 +172,16 @@ namespace {
 			return false;
 		}
 
-		void BufferSwitch(long doubleBufferIndex, ASIO::Bool directProcess)
+        double current_cpu_load=0.0;
+
+        void BufferSwitch(long doubleBufferIndex, ASIO::Bool directProcess)
 		{
-			ASIO::Time time;
+            ASIO::Time time;
 			memset(&time,0,sizeof(ASIO::Time));
 			time.timeInfo.flags = ASIO::SystemTimeValid | ASIO::SamplePositionValid | ASIO::SampleRateValid;
 			time.timeInfo.sampleRate = currentConfiguration.GetSampleRate();
 			BufferSwitchTimeInfo(&time,doubleBufferIndex,directProcess);
-		}
+        }
 
 		void SampleRateDidChange(ASIO::SampleRate sRate)
 		{
@@ -410,12 +412,21 @@ namespace {
 
 		ASIO::Time* BufferSwitchTimeInfo(ASIO::Time* params, long doubleBufferIndex, ASIO::Bool directProcess)
 		{
-			if (callbackMutex)
+            LARGE_INTEGER perf_freq, perf_t0, perf_t1;
+            QueryPerformanceFrequency(&perf_freq);
+            QueryPerformanceCounter(&perf_t0);
+            ASIO::Time* result_=nullptr;
+            if (callbackMutex)
 			{
 				lock_guard<recursive_mutex> lock(*callbackMutex);
-				return _BufferSwitchTimeInfo(params,doubleBufferIndex,directProcess);
+                result_=_BufferSwitchTimeInfo(params,doubleBufferIndex,directProcess);
 			}
-			else return _BufferSwitchTimeInfo(params,doubleBufferIndex,directProcess);
+            else result_=_BufferSwitchTimeInfo(params,doubleBufferIndex,directProcess);
+            QueryPerformanceCounter(&perf_t1);
+            double elapsed_ms=double( perf_t1.QuadPart - perf_t0.QuadPart ) / perf_freq.QuadPart * 1000.0;
+            double callback_max_len=1000.0/this->currentConfiguration.GetSampleRate()*callbackBufferFrames;
+            current_cpu_load=1.0/callback_max_len*elapsed_ms;
+            return result_;
 		}
 
 		ASIO::Time* _BufferSwitchTimeInfo(ASIO::Time* params, long doubleBufferIndex, ASIO::Bool directProcess)
