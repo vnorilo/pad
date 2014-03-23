@@ -21,7 +21,8 @@
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
 
-inline double scale_value_from_range_to_range(double v, double inputmin, double inputmax, double outputmin, double outputmax)
+template<typename T>
+inline T scale_value_from_range_to_range(double v, double inputmin, double inputmax, double outputmin, double outputmax)
 {
     double range1=inputmax-inputmin;
     double range2=outputmax-outputmin;
@@ -728,6 +729,49 @@ private:
     bool m_inited=false;
 };
 
+void fill_output_16bit(WasapiDevice* dev,
+                       unsigned framesToOutput,
+                       unsigned numStreamChans,
+                       unsigned numEndpointChans,
+                       unsigned k,
+                       short* wasapiOutput,
+                       unsigned i)
+{
+    for (unsigned j=0;j<framesToOutput;j++)
+    {
+        float tempsample=dev->m_delegateOutputBuffer[j*numStreamChans+k];
+        wasapiOutput[j*numEndpointChans+i]=scale_value_from_range_to_range<float>(
+                    tempsample,
+                    -1.0,
+                    1.0,
+                    -32768.0,
+                    32767.0);
+    }
+}
+
+void fill_with_silence(short* wasapiExclusiveOutput,
+                       unsigned ep,
+                       WasapiDevice* dev,
+                       unsigned channel,
+                       unsigned framesToOutput,
+                       float* wasapiSharedOutput,
+                       unsigned numEndpointChans)
+{
+    if (dev->m_outputEndPoints.at(ep).m_isExclusiveMode==false)
+    {
+        for (unsigned j=0;j<framesToOutput;j++)
+        {
+            wasapiSharedOutput[j*numEndpointChans+channel]=0.0f;
+        }
+    } else
+    {
+        for (unsigned j=0;j<framesToOutput;j++)
+        {
+            wasapiExclusiveOutput[j*numEndpointChans+channel]=0;
+        }
+    }
+}
+
 DWORD WINAPI WasapiThreadFunction(LPVOID params)
 {
     WasapiDevice* dev=(WasapiDevice*)params;
@@ -809,7 +853,11 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
 
                                 for (unsigned i=0;i<framesInPacket*numEndpointChans;i++)
                                 {
-                                    wasapiInputBuffer[i]=scale_value_from_range_to_range(baz[i],-32768,32767,-1.0,1.0);
+                                    wasapiInputBuffer[i]=scale_value_from_range_to_range<float>(baz[i],
+                                                                                                -32768,
+                                                                                                32767,
+                                                                                                -1.0,
+                                                                                                1.0);
                                     //wasapiInputBuffer[i]=-1.0+(2.0/32767)*baz[i];
                                 }
                             }
@@ -876,29 +924,12 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                                     {
                                         // hack, handles only 16 bit format
 
-                                        for (unsigned j=0;j<framesToOutput;j++)
-                                        {
-                                            float tempsample=dev->m_delegateOutputBuffer[j*numStreamChans+k];
-                                            wasapiOutput[j*numEndpointChans+i]=scale_value_from_range_to_range(tempsample,-1.0,1.0,-32768.0,32767.0);
-                                            //wasapiOutput[j*numEndpointChans+i]=4095*dev->m_delegateOutputBuffer[j*numStreamChans+k];
-                                        }
+                                        fill_output_16bit(dev, framesToOutput, numStreamChans, numEndpointChans, k, wasapiOutput, i);
                                     }
                                     k++;
                                 } else
                                 {
-                                    if (dev->m_outputEndPoints.at(ep).m_isExclusiveMode==false)
-                                    {
-                                        for (unsigned j=0;j<framesToOutput;j++)
-                                        {
-                                            pf[j*numEndpointChans+i]=0.0f;
-                                        }
-                                    } else
-                                    {
-                                        for (unsigned j=0;j<framesToOutput;j++)
-                                        {
-                                            wasapiOutput[j*numEndpointChans+i]=0;
-                                        }
-                                    }
+                                    fill_with_silence(wasapiOutput, ep, dev, i, framesToOutput, pf, numEndpointChans);
                                 }
                             }
                             hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->ReleaseBuffer(framesToOutput, 0);
