@@ -147,9 +147,8 @@ namespace {
 				if (numInputs > 0)
 					defaultStereo.AddDeviceInputs(ChannelRange(0,min(numInputs,2u)));
 			}
-			else defaultStereo.SetValid(false);
-
-			defaultAll = AudioStreamConfiguration(defaultRate,true);
+            else defaultStereo.SetValid(false);
+            defaultAll = AudioStreamConfiguration(defaultRate,true);
 			defaultAll.AddDeviceOutputs(ChannelRange(0,numOutputs));
 			defaultAll.AddDeviceInputs(ChannelRange(0,numInputs));
 		}
@@ -247,7 +246,7 @@ namespace {
 					}
 				}
 
-				streamNumInputs = bufferInfos.size();
+				streamNumInputs = (unsigned)bufferInfos.size();
 				delegateBufferInput.resize(callbackBufferFrames * streamNumInputs);
 
 				for(unsigned i(0);i<GetNumOutputs();++i)
@@ -259,10 +258,10 @@ namespace {
 					}
 				}
 
-				streamNumOutputs = bufferInfos.size() - streamNumInputs;
+				streamNumOutputs = (unsigned)bufferInfos.size() - streamNumInputs;
 				delegateBufferOutput.resize(callbackBufferFrames * streamNumOutputs);
 
-				THROW_ERROR(DeviceOpenStreamFailure,ASIO().createBuffers(bufferInfos.data(),bufferInfos.size(),callbackBufferFrames,callbacks));
+				THROW_ERROR(DeviceOpenStreamFailure,ASIO().createBuffers(bufferInfos.data(),(long)bufferInfos.size(),callbackBufferFrames,callbacks));
 				State = Prepared;
 
 				channelInfos.clear();
