@@ -181,7 +181,7 @@ extern "C" void* APINotLinked() { return nullptr; };
 #define F(HOST) extern "C" void *weak_##HOST();
 API_TABLE
 #undef F
-#ifdef WIN64
+#ifdef _WIN64
 #define F(HOST) __pragma(comment(linker, "/ALTERNATENAME:weak_" #HOST "=APINotLinked")) 
 #else
 #define F(HOST) __pragma(comment(linker, "/ALTERNATENAME:_weak_" #HOST "=_APINotLinked")) 

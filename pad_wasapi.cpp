@@ -478,7 +478,9 @@ struct WasapiPublisher : public HostAPIPublisher
     {
         std::pair<PadComSmartPointer<IMMDevice>,std::string> result;
         PadComSmartPointer<IMMDevice> epo;
-        EDataFlow direction=eRender; if (dirInput==true) direction=eCapture;
+        EDataFlow direction=eRender;
+        if (dirInput==true)
+            direction=eCapture;
         if (CheckHResult(
             enumerator->GetDefaultAudioEndpoint(direction,eMultimedia,epo.NullAndGetPtrAddress()),
             "PAD/WASAPI : Could not get default input/output endpoint device"))
@@ -518,16 +520,17 @@ struct WasapiPublisher : public HostAPIPublisher
         HRESULT hr = S_OK;
         PadComSmartPointer<IMMDeviceEnumerator> enumerator;
         hr=enumerator.CoCreateInstance(CLSID_MMDeviceEnumerator,CLSCTX_ALL);
-        if (CheckHResult(hr,"PAD/WASAPI : Could not create device enumerator")==false) return;
+        if (CheckHResult(hr,"PAD/WASAPI : Could not create device enumerator")==false)
+            return;
         PadComSmartPointer<IMMDeviceCollection> collection;
         PadComSmartPointer<IMMDevice> endpoint;
-
-        //LPWSTR pwszID = NULL;
         hr=enumerator->EnumAudioEndpoints(eAll,DEVICE_STATE_ACTIVE,collection.NullAndGetPtrAddress());
-        if (CheckHResult(hr,"PAD/WASAPI : Could not enumerate audio endpoints")==false) return;
-        UINT count;
+        if (CheckHResult(hr,"PAD/WASAPI : Could not enumerate audio endpoints")==false)
+            return;
+        UINT count=0;
         hr = collection->GetCount(&count);
-        if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint collection count")==false) return;
+        if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint collection count")==false)
+            return;
         if (count == 0)
         {
             cerr << "pad : wasapi : No endpoints found\n";
