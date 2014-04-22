@@ -16,6 +16,8 @@
 #include "Avrt.h"
 #include <cmath>
 
+#include "WinDebugStream.h"
+
 #pragma comment(lib,"Ole32.lib")
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
@@ -87,7 +89,7 @@ public:
         m_numInputs(0), m_numOutputs(0), m_currentState(WASS_Idle) {}
     ~WasapiDevice()
     {
-        //cerr << "WasapiDevice dtor\n";
+        //cwindbg() << "WasapiDevice dtor\n";
         if (m_audioThreadHandle!=0)
             Close();
     }
@@ -99,7 +101,7 @@ public:
     {
         m_numInputs+=numChannels;
         if (m_console_spam_enabled==true && sortID==0)
-            cerr << name << " is default input end point\n";
+            cwindbg() << name << " is default input end point\n";
         WasapiEndPoint wep(ep, numChannels, sortID, name,canDoExclusive);
         // I realize this is theoretically inefficient and not really elegant but I hate std::list so much I don't want to use it
         // just to get push_front and to avoid moving the couple of entries around in the std::vector which I prefer to use in the code
@@ -111,7 +113,7 @@ public:
     {
         m_numOutputs+=numChannels;
         if (m_console_spam_enabled==true && sortID==0)
-            cerr << name << " is default output end point\n";
+            cwindbg() << name << " is default output end point\n";
         WasapiEndPoint wep(ep, numChannels, sortID, name,canDoExclusive);
         // I realize this is theoretically inefficient and not really elegant but I hate std::list so much I don't want to use it
         // just to get push_front and to avoid moving the couple of entries around in the std::vector which I prefer to use in the code
@@ -151,16 +153,16 @@ public:
     virtual bool Supports(const AudioStreamConfiguration&) const
     {
 
-        cerr << "Supports() not implemented\n";
+        cwindbg() << "Supports() not implemented\n";
         return false;
     }
 
     virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration& conf)
     {
-        //cerr << "Open\n";
+        //cwindbg() << "Open\n";
         if (m_currentState==WASS_Playing)
         {
-            cerr << "Open called when already playing\n";
+            cwindbg() << "Open called when already playing\n";
             return currentConfiguration;
         }
         const unsigned endPointToActivate=0;
@@ -203,11 +205,11 @@ public:
                             format.Format.nBlockAlign=(format.Format.nChannels*format.Format.wBitsPerSample)/8;
                             format.Format.nAvgBytesPerSec=format.Format.nSamplesPerSec*format.Format.nBlockAlign;
                             hr = theClient->GetDevicePeriod(NULL, &hnsRequestedDuration);
-                            cerr << "Device default period is " << hnsRequestedDuration << "\n";
+                            cwindbg() << "Device default period is " << hnsRequestedDuration << "\n";
                             hr = theClient->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
                                                        hnsRequestedDuration,hnsRequestedDuration,(WAVEFORMATEX*)&format, NULL);
                             if (hr<0)
-                                cerr << "PAD/WASAPI : Exclusive init error " << hr << "\n";
+                                cwindbg() << "PAD/WASAPI : Exclusive init error " << hr << "\n";
                         } else
                         {
                             hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pMixformat, NULL);
@@ -230,10 +232,10 @@ public:
                                     m_enabledDeviceOutputs[i]=currentConfiguration.IsOutputEnabled(i);
                                 }
                                 m_currentState=WASS_Open;
-                            } else cerr << "PAD/WASAPI : Output audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
+                            } else cwindbg() << "PAD/WASAPI : Output audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
                         }
 
-                    } else cerr << "PAD/WASAPI : Could not initialize IAudioClient\n";
+                    } else cwindbg() << "PAD/WASAPI : Could not initialize IAudioClient\n";
                 }
             }
             if (m_inputEndPoints.size()>0 && m_currentState==WASS_Open)
@@ -290,10 +292,10 @@ public:
                                     m_enabledDeviceInputs[i]=currentConfiguration.IsInputEnabled(i);
                                 }
                                 m_currentState=WASS_Open;
-                            } else cerr << "PAD/WASAPI : Input audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
+                            } else cwindbg() << "PAD/WASAPI : Input audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
                         }
 
-                    } else cerr << "PAD/WASAPI : Could not initialize IAudioClient\n";
+                    } else cwindbg() << "PAD/WASAPI : Could not initialize IAudioClient\n";
                 }
             }
         }
@@ -316,7 +318,7 @@ public:
             m_audioThreadHandle=CreateThread(NULL, 0,WasapiThreadFunction,(void*)this, 0,0);
             if (m_audioThreadHandle==0)
             {
-                cerr << "PAD/WASAPI : Could not create audio thread :C\n";
+                cwindbg() << "PAD/WASAPI : Could not create audio thread :C\n";
             }
         }
     }
@@ -325,7 +327,7 @@ public:
     {
         if (m_currentState!=WASS_Open)
         {
-            cerr << "PAD/WASAPI : Run called when device not open\n";
+            cwindbg() << "PAD/WASAPI : Run called when device not open\n";
             return;
         }
         Resume();
@@ -337,17 +339,17 @@ public:
         if (m_audioThreadHandle)
         {
             m_currentState=WASS_Playing;
-        } else cerr << "PAD/WASAPI : Resume called when audio thread not initialized\n";
+        } else cwindbg() << "PAD/WASAPI : Resume called when audio thread not initialized\n";
     }
 
     void Suspend()
     {
         if (m_currentState!=WASS_Playing)
         {
-            cerr << "PAD/WASAPI : Suspend() called when not playing\n";
+            cwindbg() << "PAD/WASAPI : Suspend() called when not playing\n";
             return;
         }
-        //cerr  << "Pad/Wasapi : Suspend()\n";
+        //cwindbg()  << "Pad/Wasapi : Suspend()\n";
         m_currentState=WASS_Idle;
     }
 
@@ -358,11 +360,11 @@ public:
             cout << "PAD/WASAPI : Close called when already closed\n";
             return;
         }
-        //cerr << "Pad/Wasapi close, waiting for thread to stop...\n";
+        //cwindbg() << "Pad/Wasapi close, waiting for thread to stop...\n";
         m_currentState=WASS_Idle;
         m_threadShouldStop=true;
         if (WaitForSingleObject(m_audioThreadHandle,1000)==WAIT_TIMEOUT)
-            cerr << "Pad/Wasapi close, audio thread timed out when stopping\n";
+            cwindbg() << "Pad/Wasapi close, audio thread timed out when stopping\n";
         m_currentState=WASS_Closed;
         //Sleep(500);
         CloseHandle(m_audioThreadHandle);
@@ -394,11 +396,11 @@ public:
                 {
                     BOOL result=ptrAvSetMmThreadPriority (h, AVRT_PRIORITY_NORMAL);
                     if (result==FALSE)
-                        cerr << "AvSetMmThreadPriority failed\n";
+                        cwindbg() << "AvSetMmThreadPriority failed\n";
                 }
-                else cerr << "Task wasn't returned from AvSetMmThreadCharacteristics\n";
-            } else cerr << "Could not resolve functions from avrt.dll\n";
-        } else cerr << "Could not load avrt.dll\n";
+                else cwindbg() << "Task wasn't returned from AvSetMmThreadCharacteristics\n";
+            } else cwindbg() << "Could not resolve functions from avrt.dll\n";
+        } else cwindbg() << "Could not load avrt.dll\n";
     }
 
 //    AudioCallbackDelegate* currentDelegate=nullptr;
@@ -459,7 +461,7 @@ struct WasapiPublisher : public HostAPIPublisher
         {
             for (int sr : {44100,48000,88200,96000,176400,192000})
             {
-                //cerr << "testing exclusive mode support for samplerate " << sr << " bitdepth " << bd << "\n";
+                //cwindbg() << "testing exclusive mode support for samplerate " << sr << " bitdepth " << bd << "\n";
                 format.Format.wBitsPerSample=bd;
                 format.Format.nSamplesPerSec=sr;
                 format.Format.nBlockAlign=(format.Format.nChannels*format.Format.wBitsPerSample)/8;
@@ -467,7 +469,7 @@ struct WasapiPublisher : public HostAPIPublisher
                 if (cl->IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE,(WAVEFORMATEX*)&format,0)==S_OK)
                 {
                     result++;
-                    //cerr << "Exclusive mode supported for " << bd << " " << sr << "\n";
+                    //cwindbg() << "Exclusive mode supported for " << bd << " " << sr << "\n";
                 }
             }
         }
@@ -478,7 +480,9 @@ struct WasapiPublisher : public HostAPIPublisher
     {
         std::pair<PadComSmartPointer<IMMDevice>,std::string> result;
         PadComSmartPointer<IMMDevice> epo;
-        EDataFlow direction=eRender; if (dirInput==true) direction=eCapture;
+        EDataFlow direction=eRender;
+        if (dirInput==true)
+            direction=eCapture;
         if (CheckHResult(
             enumerator->GetDefaultAudioEndpoint(direction,eMultimedia,epo.NullAndGetPtrAddress()),
             "PAD/WASAPI : Could not get default input/output endpoint device"))
@@ -518,19 +522,20 @@ struct WasapiPublisher : public HostAPIPublisher
         HRESULT hr = S_OK;
         PadComSmartPointer<IMMDeviceEnumerator> enumerator;
         hr=enumerator.CoCreateInstance(CLSID_MMDeviceEnumerator,CLSCTX_ALL);
-        if (CheckHResult(hr,"PAD/WASAPI : Could not create device enumerator")==false) return;
+        if (CheckHResult(hr,"PAD/WASAPI : Could not create device enumerator")==false)
+            return;
         PadComSmartPointer<IMMDeviceCollection> collection;
         PadComSmartPointer<IMMDevice> endpoint;
-
-        //LPWSTR pwszID = NULL;
         hr=enumerator->EnumAudioEndpoints(eAll,DEVICE_STATE_ACTIVE,collection.NullAndGetPtrAddress());
-        if (CheckHResult(hr,"PAD/WASAPI : Could not enumerate audio endpoints")==false) return;
-        UINT count;
+        if (CheckHResult(hr,"PAD/WASAPI : Could not enumerate audio endpoints")==false)
+            return;
+        UINT count=0;
         hr = collection->GetCount(&count);
-        if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint collection count")==false) return;
+        if (CheckHResult(hr,"PAD/WASAPI : Could not get endpoint collection count")==false)
+            return;
         if (count == 0)
         {
-            cerr << "pad : wasapi : No endpoints found\n";
+            cwindbg() << "pad : wasapi : No endpoints found\n";
             return;
         }
         auto defOutputInfo=GetDefaultEndPoint(enumerator,false);
@@ -553,7 +558,7 @@ struct WasapiPublisher : public HostAPIPublisher
             std::string endPointNameString=GetEndPointName(endpoint);
             if (adapterNameString.size()==0 || endPointNameString.size()==0)
             {
-                cerr << "PAD/WASAPI : Failed to get adapter/endpoint name strings for device " << i << "\n";
+                cwindbg() << "PAD/WASAPI : Failed to get adapter/endpoint name strings for device " << i << "\n";
                 continue;
             }
             EDataFlow audioDirection=getAudioDirection(endpoint);
@@ -561,13 +566,13 @@ struct WasapiPublisher : public HostAPIPublisher
             hr = endpoint->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)tempClient.NullAndGetPtrAddress());
             if (tempClient==nullptr)
             {
-                cerr << "pad : wasapi : could not create temp client for " << i << " to get channel counts etc\n";
+                cwindbg() << "pad : wasapi : could not create temp client for " << i << " to get channel counts etc\n";
                 continue;
             }
             REFERENCE_TIME defPer, minPer;
             if (CheckHResult(tempClient->GetDevicePeriod(&defPer,&minPer))==false)
             {
-                cerr << "PAD/WASAPI : could not get device default/min period for " << endPointNameString << "\n";
+                cwindbg() << "PAD/WASAPI : could not get device default/min period for " << endPointNameString << "\n";
                 continue;
             }
             COMPointer<WAVEFORMATEX> mixFormat;
@@ -584,18 +589,18 @@ struct WasapiPublisher : public HostAPIPublisher
                 exclusiveModeCount=countSupportedExclusiveFormats(tempClient);
                 if (exclusiveModeCount>0)
                 {
-                    //cerr << endPointNameString << " supports exclusive mode\n";
+                    //cwindbg() << endPointNameString << " supports exclusive mode\n";
                     adapterNameString+=" Exclusive";
-                } //else cerr << endPointNameString << " does not support exclusive mode\n";
+                } //else cwindbg() << endPointNameString << " does not support exclusive mode\n";
             }
             wasapiMap[adapterNameString].SetName(adapterNameString);
             wasapiMap[adapterNameString].m_supportedSampleRates.push_back(defaultSr);
-            //cerr << endPointNameString << " default sr is " << defaultSr << "\n";
+            //cwindbg() << endPointNameString << " default sr is " << defaultSr << "\n";
 
             int minPeriodSamples=RefTimeToSamples(minPer,defaultSr);
             int defaultPeriodSamples=RefTimeToSamples(defPer,defaultSr);
-            //cerr << endPointNameString << " minimum period is " << (double)minPer/10000 << " ms, default period is " << (double)defPer/10000 << " ms\n";
-            //cerr << endPointNameString << " minimum buf size is " << minPeriodSamples << " , default buf size is " << defaultPeriodSamples << "\n";
+            //cwindbg() << endPointNameString << " minimum period is " << (double)minPer/10000 << " ms, default period is " << (double)defPer/10000 << " ms\n";
+            //cwindbg() << endPointNameString << " minimum buf size is " << minPeriodSamples << " , default buf size is " << defaultPeriodSamples << "\n";
 
             // This hasn't so far appeared to ever do anything for shared mode devices.
             // The supported samplerate has always been only the default samplerate, which we've already added
@@ -607,7 +612,7 @@ struct WasapiPublisher : public HostAPIPublisher
                 format.Format.nSamplesPerSec=(DWORD)samplerate;
                 if (tempClient->IsFormatSupported(AUDCLNT_SHAREMODE_SHARED,(WAVEFORMATEX*)&format,0)>=0)
                 {
-                    cerr << endPointNameString << " supports " << samplerate << " hz in shared mode\n";
+                    cwindbg() << endPointNameString << " supports " << samplerate << " hz in shared mode\n";
                     wasapiMap[adapterNameString].m_supportedSampleRates.push_back(samplerate);
                 }
 
@@ -616,12 +621,12 @@ struct WasapiPublisher : public HostAPIPublisher
             {
                 if (exclusiveModeCount==0)
                 {
-                    //cerr << i << " is shared output endpoint " << endPointNameString << "\n";
+                    //cwindbg() << i << " is shared output endpoint " << endPointNameString << "\n";
                     wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,outputDeviceSortID, false, endPointNameString);
                 } else
                 {
                     //endPointNameString+=" [Exclusive mode]";
-                    //cerr << i << " is exclusive output endpoint " << endPointNameString << "\n";
+                    //cwindbg() << i << " is exclusive output endpoint " << endPointNameString << "\n";
                     outputDeviceSortID=2;
                     wasapiMap[adapterNameString].AddOutputEndPoint(endpoint,format.Format.nChannels,outputDeviceSortID, true, endPointNameString);
                 }
@@ -630,12 +635,12 @@ struct WasapiPublisher : public HostAPIPublisher
             {
                 if (exclusiveModeCount==0)
                 {
-                    //cerr << i << " is shared input endpoint " << endPointNameString << "\n";
+                    //cwindbg() << i << " is shared input endpoint " << endPointNameString << "\n";
                     wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,inputDeviceSortID, false, endPointNameString);
                 } else
                 {
                     //endPointNameString+=" [Exclusive mode]";
-                    //cerr << i << " is exclusive input endpoint " << endPointNameString << "\n";
+                    //cwindbg() << i << " is exclusive input endpoint " << endPointNameString << "\n";
                     inputDeviceSortID=2;
                     wasapiMap[adapterNameString].AddInputEndPoint(endpoint,format.Format.nChannels,inputDeviceSortID, true, endPointNameString);
                 }
@@ -657,7 +662,7 @@ struct WasapiPublisher : public HostAPIPublisher
         }
         high_resolution_clock::time_point t2 = high_resolution_clock::now();
         duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
-        //std::cerr << "Enumerating WASAPI devices took " << time_span.count()*1000.0 << " ms\n";
+        //cwindbg() << "Enumerating WASAPI devices took " << time_span.count()*1000.0 << " ms\n";
     }
 } publisher;
 
@@ -675,7 +680,7 @@ public:
             if (!CloseHandle(e))
                 failcount++;
         if (failcount>0)
-            std::cerr << "PAD/WASAPI : WinEventContainer couldn't close all open event handles\n";
+            cwindbg() << "PAD/WASAPI : WinEventContainer couldn't close all open event handles\n";
         m_events.clear();
     }
     HANDLE addEvent()
@@ -712,15 +717,15 @@ public:
         if (CoInitialize(0)>=0)
         {
             m_inited=true;
-            std::cerr << "PAD/WASAPI : COM was succesfully initialized in thread " << std::this_thread::get_id() << "\n";
+            cwindbg() << "PAD/WASAPI : COM was succesfully initialized in thread " << std::this_thread::get_id() << "\n";
         }
-        else std::cerr << "PAD/WASAPI : COM could not be initialized in thread " << std::this_thread::get_id() << "\n";
+        else cwindbg() << "PAD/WASAPI : COM could not be initialized in thread " << std::this_thread::get_id() << "\n";
     }
     ~COMInitRAIIHelper()
     {
         if (m_inited==true)
         {
-            std::cerr << "PAD/WASAPI : Unitializing COM in thread " << std::this_thread::get_id() << "\n";
+            cwindbg() << "PAD/WASAPI : Unitializing COM in thread " << std::this_thread::get_id() << "\n";
             CoUninitialize();
         }
     }
@@ -946,7 +951,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
 
                 } else
                 {
-                    cerr << "PAD/WASAPI : Audio thread had to wait unusually long for end point events\n";
+                    cwindbg() << "PAD/WASAPI : Audio thread had to wait unusually long for end point events\n";
                 }
             }
             Sleep(1);
@@ -960,9 +965,9 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
             hr=dev->m_inputEndPoints.at(i).m_AudioClient->Stop();
         }
         if (dev->m_outputGlitchCounter>0)
-            cerr << "ended wasapi audio thread. "<<dev->m_outputGlitchCounter<< " glitches detected\n";
+            cwindbg() << "ended wasapi audio thread. "<<dev->m_outputGlitchCounter<< " glitches detected\n";
     }
-    catch (std::exception& ex) { std::cerr << "PAD WASAPI audio thread exception : " << ex.what() << "\n"; }
+    catch (std::exception& ex) { cwindbg() << "PAD WASAPI audio thread exception : " << ex.what() << "\n"; }
     return 0;
 }
 
