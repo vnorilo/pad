@@ -147,9 +147,8 @@ namespace {
 				if (numInputs > 0)
 					defaultStereo.AddDeviceInputs(ChannelRange(0,min(numInputs,2u)));
 			}
-			else defaultStereo.SetValid(false);
-
-			defaultAll = AudioStreamConfiguration(defaultRate,true);
+            else defaultStereo.SetValid(false);
+            defaultAll = AudioStreamConfiguration(defaultRate,true);
 			defaultAll.AddDeviceOutputs(ChannelRange(0,numOutputs));
 			defaultAll.AddDeviceInputs(ChannelRange(0,numInputs));
 		}
