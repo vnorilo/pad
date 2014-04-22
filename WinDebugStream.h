@@ -1,4 +1,5 @@
 #include <ostream>
+#include <string>
 #include <WinBase.h>
 
 class windbgbuf : public std::streambuf {
@@ -12,10 +13,8 @@ public:
 	}
 
 	std::streamsize xsputn(const char *buffer, std::streamsize n) {
-		for (int i = 0; i < n; ++i) {
-			char ch[2] = { buffer[i], 0 };
-			OutputDebugStringA(ch);
-		}
+		std::string buf(buffer, buffer + n);
+		OutputDebugStringA(buf.c_str());
 		return n;
 	}
 };
