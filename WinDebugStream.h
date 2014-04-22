@@ -9,7 +9,7 @@ public:
 			char ch[2] = { traits_type::to_char_type(c), 0 };
 			OutputDebugStringA(ch);
 		}
-		return std::streambuf::overflow(c);
+		return c;
 	}
 
 	std::streamsize xsputn(const char *buffer, std::streamsize n) {

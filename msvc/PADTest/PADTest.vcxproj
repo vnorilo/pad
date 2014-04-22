@@ -327,6 +327,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release Lib|x64'">false</ExcludedFromBuild>
       <PreprocessorDefinitions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">UNICODE;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
+    <ClCompile Include="..\..\test1.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\AsioUtil.h" />

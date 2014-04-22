@@ -17,7 +17,7 @@
 #include "pad_samples_sse2.h"
 #include "pad_channels.h"
 
-#include <iostream>
+#include "WinDebugStream.h"
 
 static std::string utostr(unsigned code)
 {
@@ -600,7 +600,7 @@ namespace {
 								// device failed to open
 								char name[256];
 								driver->getDriverName(name);
-								std::cerr << "[ASIO] " << name << " failed to initialize\n";
+								cwindbg() << "[ASIO] " << name << " failed to initialize\n";
 							}
 						}
 					}
