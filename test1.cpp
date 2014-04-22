@@ -1,66 +1,46 @@
+#define USE_AVX
+
 #include <iostream>
 #include <iomanip>
 #define _USE_MATH_DEFINES
 #include <math.h>
+#include <algorithm>
+#include <chrono>
+
 #include "PAD.h"
-
-#include <xmmintrin.h>
-
-class TripointOsc {
-	float phase;
-	float inc;
-	float k1, k2, a;
-	float sine;
-public:
-	TripointOsc():phase(0), inc(0) { Set(0.5f, 0.5f, 1.f, 0.f); }
-
-	float ClampX(float x) {
-		x = x < 0.00001f ? 0.00001f : x;
-		x = x > 0.99999f ? 0.99999f : x;
-		return x;
-	}
-
-	void Set(float x1, float x2, float x3, float sinusoidal) {
-		x1 = ClampX(x1);
-		x2 = ClampX(x2);
-		x3 = ClampX(x3);
-		x1 = x1 < 0.0001f ? 0.0001f : x1;
-		k1 = 1.f / x1;
-
-		k2 = -1.f / ClampX(x3 - x2);
-		a = x2;
-
-		sine = sinusoidal;
-	}
-
-	void SetFreq(float f, float sr) {
-		inc = f / sr;
-	}
-
-	float Tick() {
-		float s1 = phase * k1;
-		s1 = s1 > 1.f ? 1.f : s1;
-
-		float s2 = (phase - a) * k2;
-		s2 = s2 > 0.f ? 0.f : s2;
-
-		float x = s1 + s2;
-		x = x < 0.f ? 0.f : x;
-		
-		phase += inc;
-		phase -= phase >= 1.f ? 1.f : 0.f;
-
-		float pseudo_sine = ((x * x / 2.f) - (x * x * x / 3.f)) * 6.f;
-
-		float out = x + ((pseudo_sine - x) * sine);
-
-		return out - 0.5f;
-	}
-};
+#include "tvcomb.h"
 
 int main() {
+
+	vectored_comb<8> vc;
+	float sum_l(0.f), sum_r(0.f);
+
+	float triangle[] = { 0.5f, 0.5f, 1.f, 0.3f };
+
+	for (int i(0); i < 8; ++i) {
+		vc.set(i, 1.f, 1.f, i / 8.f, 10000.f * pow(2.f, i / 8.f), 0.8f, 0.5f, 0.001f, 0.f, 0.f, 100.f, 0.f, triangle, triangle);
+	}
+
+	auto start = std::chrono::high_resolution_clock::now();
+	int num = 100000000;
+
+	for (int i = 0; i < num; ++i) {
+		float l, r;
+		vc.tick(0.f, l, r);
+		sum_l += l; sum_r += r;
+	}
+
+	auto dur = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start);
+
+	auto smp_s = (double)num / dur.count();
+	std::cout << smp_s << " samples per second\n";
+	std::cout << 100 * 44100.0 / smp_s << "% cpu @ 44.1\n";
+
+
+
 	using namespace PAD;
 
+	return 0;
 	class ErrorLogger : public DeviceErrorDelegate {
 	public:
 		void Catch(SoftError e) { std::cerr << "*Soft " << e.GetCode() << "* :" << e.what() << "\n"; }
@@ -74,33 +54,12 @@ int main() {
 
 	if (asioDevice != myAudioSession.end()) {
 		try {
-			double phase1 = 0, phase2 = 0;
-
-			asioDevice->AboutToBeginStream = [](AudioStreamConfiguration conf) {
-				std::cout << "* Beginning stream: " << conf << "\n";
-			};
-
-			asioDevice->StreamConfigurationDidChange = [](AudioStreamConfiguration::ConfigurationChangeFlags, AudioStreamConfiguration conf) {
-				std::cout << "* New configuration: " << conf << "\n";
-			};
-
-			asioDevice->StreamDidEnd = []() {
-				std::cout << "* Stream stopped\n";
-			};
-
-			TripointOsc lfo, osc;
-			lfo.SetFreq(0.05, 44100);
-			osc.SetFreq(110, 44100);
-
 
 			asioDevice->BufferSwitch = [&](uint64_t time, const PAD::AudioStreamConfiguration& cfg, const float *input, float *output, unsigned frames) {
 				unsigned numOuts(cfg.GetNumStreamOutputs());
 				static double phase = 0;
 				for (unsigned i(0); i < frames; ++i) {
-					float l = lfo.Tick() + 0.5f;
-					float out = osc.Tick() * l;
 					for (unsigned j(0); j < numOuts; ++j) {
-						output[i*numOuts + j] = out;
 					}
 				}
 			};

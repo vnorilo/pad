@@ -71,6 +71,12 @@
     <ClInclude Include="..\..\AsioUtil.h">
       <Filter>Header Files\ASIO</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\vec.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\tvcomb.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Library Include="..\..\jack\libjack.lib">
