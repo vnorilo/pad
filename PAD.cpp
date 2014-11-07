@@ -172,33 +172,28 @@ namespace PAD {
 	}
 }
 
-extern "C" void* APINotLinked() { return nullptr; };
-
-#define API_TABLE	F(asio) F(wasapi) F(jack) F(coreaudio)
-#if _MSC_VER
-#define F(HOST) extern "C" void *weak_ ## HOST();
-API_TABLE
-#undef F
-#ifdef _WIN64
-#define F(HOST) __pragma(comment(linker, "/ALTERNATENAME:weak_" #HOST "=APINotLinked")) 
-#else
-#define F(HOST) __pragma(comment(linker, "/ALTERNATENAME:_weak_" #HOST "=_APINotLinked")) 
-#endif
-API_TABLE
-#undef F
-#elif __GNUC__
-#define F(HOST) extern "C" void *weak_ ## HOST() __attribute__((weak, alias ("APINotLinked")));
-#else
-#error Please define weakly linked HOSTAPI accessors for your compiler
-#endif
-
 namespace PAD {
+    IHostAPI* LinkCoreAudio();
+    IHostAPI* LinkASIO();
+    IHostAPI* LinkWASAPI();
+    IHostAPI* LinkJACK();
+    
 	std::vector<IHostAPI*> GetLinkedAPIs() {
 		std::vector<IHostAPI*> hosts;
-#define F(HOST) if (weak_##HOST != APINotLinked) hosts.push_back((IHostAPI*)weak_##HOST());
-		API_TABLE
-#undef F
-			return hosts;
+#ifdef PAD_LINK_ASIO
+        hosts.push_back(LinkASIO());
+#endif
+#ifdef PAD_LINK_WASAPI
+        hosts.push_back(LinkWASAPI());
+#endif
+#ifdef PAD_LINK_COREAUDIO
+        hosts.push_back(LinkCoreAudio());
+#endif
+#ifdef PAD_LINK_JACK
+        hosts.push_back(LinkJACK());
+#endif
+        
+        return hosts;
 	}
 }
 
