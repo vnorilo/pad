@@ -275,12 +275,11 @@ namespace {
             }
         }
         const char *GetName() const {return "CoreAudio";}
-    };
+    } publisher;
 }
 
 namespace PAD {
     IHostAPI* LinkCoreAudio() {
-        static CoreaudioPublisher publisher;
         return &publisher;
     }
 }

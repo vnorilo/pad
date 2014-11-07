@@ -621,7 +621,6 @@ namespace {
 			devices.clear();
 			if (coInitializeCount>0) {coInitializeCount--;CoUninitialize();}
 		}
-
 	} publisher;
 
 	static ASIO::Time dummyTime;
@@ -706,6 +705,8 @@ namespace {
 	}
 }
 
-extern "C" void* weak_asio() {
-	return (IHostAPI*)&publisher;
+namespace PAD {
+	IHostAPI* LinkASIO() {
+		return &publisher;
+	}
 }
