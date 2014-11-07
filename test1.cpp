@@ -27,7 +27,7 @@ int main() {
 		std::cout << d.GetHostAPI() << " " << d.GetName() << "\n";
 	}
 
-	auto asioDevice = myAudioSession.FindDevice("Output");
+	auto asioDevice = myAudioSession.FindDevice("IDT");
 
 	if (asioDevice != myAudioSession.end()) {
 		try {
