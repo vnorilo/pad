@@ -19,9 +19,6 @@
     <Filter Include="Header Files\ASIO">
       <UniqueIdentifier>{e65ee15a-7ab6-44bd-88a6-e59286692681}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\jack">
-      <UniqueIdentifier>{0dfc17ec-ccc3-41fe-9ebf-08bedfb522a3}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\pad_asio.cpp">
@@ -80,13 +77,5 @@
     <ClInclude Include="..\..\WinDebugStream.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <Library Include="..\..\jack\libjack.lib">
-      <Filter>Source Files\jack</Filter>
-    </Library>
-    <Library Include="..\..\jack\libjack64.lib">
-      <Filter>Source Files\jack</Filter>
-    </Library>
   </ItemGroup>
 </Project>

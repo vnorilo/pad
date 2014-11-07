@@ -27,6 +27,10 @@ int main() {
     ErrorLogger log;	
 	Session myAudioSession(true,&log);
 
+	for (auto& d : myAudioSession) {
+		std::cout << d.GetHostAPI() << " " << d.GetName() << "\n";
+	}
+
 	auto asioDevice = myAudioSession.FindDevice("audio codec");
 
 	if (asioDevice != myAudioSession.end()) {
@@ -37,7 +41,9 @@ int main() {
 				static double phase = 0;
 				for (unsigned i(0); i < frames; ++i) {
 					for (unsigned j(0); j < numOuts; ++j) {
+						output[i*numOuts + j] = sin(phase);
 					}
+					phase+=0.1;
 				}
 			};
 

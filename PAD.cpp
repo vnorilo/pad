@@ -172,13 +172,11 @@ namespace PAD {
 	}
 }
 
-// this monster ensures construction of global objects in statically linked libraries
-#define API_TABLE	F(asio) F(wasapi) F(jack) F(coreaudio)
-//#define API_TABLE	F(asio) F(wasapi)
-#if _MSC_VER
 extern "C" void* APINotLinked() { return nullptr; };
 
-#define F(HOST) extern "C" void *weak_##HOST();
+#define API_TABLE	F(asio) F(wasapi) F(jack) F(coreaudio)
+#if _MSC_VER
+#define F(HOST) extern "C" void *weak_ ## HOST();
 API_TABLE
 #undef F
 #ifdef _WIN64
@@ -188,6 +186,11 @@ API_TABLE
 #endif
 API_TABLE
 #undef F
+#elif __GNUC__
+#define F(HOST) extern "C" void *weak_ ## HOST() __attribute__((weak, alias ("APINotLinked")));
+#else
+#error Please define weakly linked HOSTAPI accessors for your compiler
+#endif
 
 namespace PAD {
 	std::vector<IHostAPI*> GetLinkedAPIs() {
@@ -195,13 +198,9 @@ namespace PAD {
 #define F(HOST) if (weak_##HOST != APINotLinked) hosts.push_back((IHostAPI*)weak_##HOST());
 		API_TABLE
 #undef F
-		return hosts;
+			return hosts;
 	}
 }
-
-#elif __GNUC__
-#error Write weak linkage initializers for GNU
-#endif
 
 namespace std {
 	ostream& operator<<(ostream& stream, const PAD::AudioDevice& dev) {
