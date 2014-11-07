@@ -1,5 +1,3 @@
-#include <Windows.h>
-#include "WinDebugStream.h"
 
 #define USE_AVX
 
@@ -22,8 +20,6 @@ int main() {
 		void Catch(HardError e) { std::cerr << "*Hard " << e.GetCode() << "* :" << e.what() << "\n"; }
 	};
 
-	cwindbg() << 4567 << "\n" << 'c';
-
     ErrorLogger log;	
 	Session myAudioSession(true,&log);
 
@@ -31,7 +27,7 @@ int main() {
 		std::cout << d.GetHostAPI() << " " << d.GetName() << "\n";
 	}
 
-	auto asioDevice = myAudioSession.FindDevice("audio codec");
+	auto asioDevice = myAudioSession.FindDevice("Output");
 
 	if (asioDevice != myAudioSession.end()) {
 		try {

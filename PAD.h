@@ -147,7 +147,7 @@ namespace PAD{
 		void RemoveEvent(IEvent *evt) { subscriptions.remove(evt); }
 
 		template <typename... ARGS> void When(Event<ARGS...>& evt, const std::function<void(ARGS...)>& f) {
-			evt.AddSubscriber(this, std::forward<FUNCTOR>(f));
+			evt.AddSubscriber(this, f);
 		}
 	};
 
@@ -212,7 +212,7 @@ namespace PAD{
 
 	std::vector<IHostAPI*> GetLinkedAPIs();
 
-	static void* LinkAPIs() { GetLinkedAPIs(); return nullptr;  }
+	static inline void* LinkAPIs() { GetLinkedAPIs(); return nullptr;  }
 
 	class Session {
 		std::vector<AudioDevice*> devices;

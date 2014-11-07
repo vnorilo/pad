@@ -1,5 +1,5 @@
+project(pad CXX)
 cmake_minimum_required(VERSION 3.1)
-project(pad)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	add_definitions(
@@ -10,28 +10,30 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 			-D_UNICODE -DUNICODE
 			 "/wd4458" "/wd4457" "/wd4456")
 else ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+	add_definitions(-std=c++11 -stdlib=libc++)
+endif()
+
+if (WIN32)
+	set(PAD_AVAILABLE_HOSTAPIS asio wasapi)
+elseif (APPLE)
+	set(PAD_AVAILABLE_HOSTAPIS coreaudio)
+	set(CMAKE_OSX_DEPLOYMENT_TARGET "10.8" CACHE STRING "Support OS X Version")
+else (APPLE)
+	set(PAD_AVAILABLE_HOSTAPIS jack)
 endif()
 
 include(FindJack.cmake)
-
-if (WIN32)
-	set(PAD_AVAILABLE_HOSTAPIS asio wasapi STRING "Subset of asio;wasapi;coreaudio;jack")
-elseif (APPLE)
-	set(PAD_AVAILABLE_HOSTAPIS coreaudio STRING "Subset of asio;wasapi;coreaudio;jack")
-else (APPLE)
-	set(PAD_AVAILABLE_HOSTAPIS jack STRING "Subset of asio;wasapi;coreaudio;jack")
-endif()
-
 if (JACK_FOUND)
 	list(APPEND PAD_AVAILABLE_HOSTAPIS jack)
 endif (JACK_FOUND )
 
-set(PAD_HOSTAPIS CACHE STRING ${PAD_AVAILABLE_HOSTAPIS})
+if (PAD_AVAILABLE_HOSTAPIS)
+	set(PAD_HOSTAPIS ${PAD_AVAILABLE_HOSTAPIS} CACHE STRING "Build PAD for a subset of asio;wasapi;coreaudio;jack")
+endif (PAD_AVAILABLE_HOSTAPIS)
 
 set(PAD_SOURCES HostAPI.cpp PAD.cpp)
 
-message(STATUS "Building for ${PAD_HOSTAPIS}")
+message(STATUS "Linking ${PAD_HOSTAPIS}")
 
 MACRO(LIST_CONTAINS var value)
   SET(${var})
@@ -44,17 +46,20 @@ ENDMACRO(LIST_CONTAINS)
 
 LIST_CONTAINS(contains asio ${PAD_HOSTAPIS})
 if (contains)
-	list(APPEND PAD_SOURCES AsioUtil.cpp pad_asio.cpp)	
+    list(APPEND PAD_SOURCES AsioUtil.cpp pad_asio.cpp)	
+    add_definitions(-DPAD_LINK_ASIO)
 endif()
 
 LIST_CONTAINS(contains wasapi ${PAD_HOSTAPIS})
 if (contains)
 	list(APPEND PAD_SOURCES pad_wasapi.cpp)
+	add_definitions(-DPAD_LINK_WASAPI)
 endif()
 
 LIST_CONTAINS(contains coreaudio ${PAD_HOSTAPIS})
 if (contains)
-	list(APPEND PAD_SOURCES pad_coreaudio.cpp)
+    list(APPEND PAD_SOURCES pad_coreaudio.cpp)
+    add_definitions(-DPAD_LINK_COREAUDIO)
 endif()
 
 LIST_CONTAINS(contains jack ${PAD_HOSTAPIS})
@@ -64,6 +69,7 @@ if (contains)
 	endif (NOT JACK_FOUND)
 	list(APPEND PAD_SOURCES pad_jack.cpp)	
 	include_directories(${JACK_INCLUDE_DIR})
+	add_definitions(-DPAD_LINK_JACK)
 endif()
 
 add_library(pad STATIC ${PAD_SOURCES})
@@ -73,5 +79,14 @@ if (contains)
 	target_link_libraries( pad ${JACK_LIBRARY} )
 endif()
 
+LIST_CONTAINS(contains coreaudio ${PAD_HOSTAPIS})
+if (contains)
+	find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
+	find_library(COREAUDIO_FRAMEWORK CoreAudio)
+	message(STATUS "Using ${AUDIOUNIT_FRAMEWORK} ${COREAUDIO_FRAMEWORK}")
+	target_link_libraries( pad ${AUDIOUNIT_FRAMEWORK} ${COREAUDIO_FRAMEWORK})
+endif()
+
 add_executable(pad_test test1.cpp)
 target_link_libraries( pad_test pad )
+

@@ -142,7 +142,8 @@ namespace {
                                             
                     }
                 }
-                currentConfiguration.GetAudioDelegate().Process(0ll,currentConfiguration,delegateInputBuffer.data(),(float*)io->mBuffers[0].mData,frames);
+                
+                BufferSwitch(0ll,currentConfiguration,delegateInputBuffer.data(),(float*)io->mBuffers[0].mData,frames);
             }
             return noErr;
         }
@@ -166,11 +167,11 @@ namespace {
             //THROW_ERROR(DeviceInitializationFailure, AudioUnitInitialize(AUHAL));
             
             UInt32 enable = 1;
-            THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL,kAudioOutputUnitProperty_EnableIO,kAudioUnitScope_Input, 1, &enable, sizeof(enable)));
-            THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL,kAudioOutputUnitProperty_EnableIO,kAudioUnitScope_Output, 0, &enable, sizeof(enable)));
-            
             THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL,kAudioOutputUnitProperty_CurrentDevice,kAudioUnitScope_Global,0,&caID,sizeof(caID)));
             THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL,kAudioOutputUnitProperty_CurrentDevice,kAudioUnitScope_Global,1,&caID,sizeof(caID)));
+
+            THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL,kAudioOutputUnitProperty_EnableIO,kAudioUnitScope_Input, 1, &enable, sizeof(enable)));
+            THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL,kAudioOutputUnitProperty_EnableIO,kAudioUnitScope_Output, 0, &enable, sizeof(enable)));
             
             AudioStreamBasicDescription inputFmt = {
                 currentConfiguration.GetSampleRate(), 'lpcm',
@@ -232,6 +233,8 @@ namespace {
         }
        
         bool Supports(const AudioStreamConfiguration&) const {return false;}
+        
+        double CPU_Load() const { return 0.0; }
     };
     
     
@@ -272,5 +275,12 @@ namespace {
             }
         }
         const char *GetName() const {return "CoreAudio";}
-    } publisher;
+    };
+}
+
+namespace PAD {
+    IHostAPI* LinkCoreAudio() {
+        static CoreaudioPublisher publisher;
+        return &publisher;
+    }
 }
