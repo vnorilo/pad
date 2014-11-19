@@ -160,7 +160,7 @@ namespace PAD {
 		uint64_t timeStamp;
 		unsigned numFrames;
 	};
-
+ 
 	class AudioDevice {
 		std::shared_ptr<std::recursive_mutex> deviceMutex;
 	public:
