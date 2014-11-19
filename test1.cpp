@@ -10,7 +10,6 @@
 
 #include "PAD.h"
 
-
 int main() {
 	using namespace PAD;
 
@@ -27,17 +26,16 @@ int main() {
 		std::cout << d.GetHostAPI() << " " << d.GetName() << "\n";
 	}
 
-	auto asioDevice = myAudioSession.FindDevice("IDT");
+	auto asioDevice = myAudioSession.FindDevice(2);
 
 	if (asioDevice != myAudioSession.end()) {
 		try {
-
-			asioDevice->BufferSwitch = [&](uint64_t time, const PAD::AudioStreamConfiguration& cfg, const float *input, float *output, unsigned frames) {
-				unsigned numOuts(cfg.GetNumStreamOutputs());
+			asioDevice->BufferSwitch = [&](IO io) {
+				unsigned numOuts(io.config.GetNumStreamOutputs());
 				static double phase = 0;
-				for (unsigned i(0); i < frames; ++i) {
+				for (unsigned i(0); i < io.numFrames; ++i) {
 					for (unsigned j(0); j < numOuts; ++j) {
-						output[i*numOuts + j] = sin(phase);
+						io.output[i*numOuts + j] = sin(phase);
 					}
 					phase+=0.1;
 				}
