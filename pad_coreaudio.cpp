@@ -135,8 +135,11 @@ namespace {
 
 				if (GetBufferSwitchLock( )) {
 					std::lock_guard<recursive_mutex> lock(*GetBufferSwitchLock( ));
-					BufferSwitch(0ll, currentConfiguration, delegateInputBuffer.data( ), (float*)io->mBuffers[0].mData, frames);
-				} else BufferSwitch(0ll, currentConfiguration, delegateInputBuffer.data( ), (float*)io->mBuffers[0].mData, frames);
+                    
+                    BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, 0ll, frames});
+                                 
+                } else BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, 0ll, frames});
+
 			}
 			return noErr;
 		}
