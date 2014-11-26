@@ -68,7 +68,7 @@ namespace{
 		~JackDevice() {Unwind(Idle);}
 		virtual unsigned GetNumInputs() const {return 256;}
 		virtual unsigned GetNumOutputs() const {return 256;}
-		virtual const char *GetName() const {return jack_get_version_string();}
+		virtual const char *GetName() const {return "jack";}
 		virtual const char *GetHostAPI() const {return "jack";}
 
 		double CPU_Load() const { throw "Not implemented"; }
@@ -202,7 +202,7 @@ namespace{
 				todo-=now;
 			}
 
-			BufferSwitch(0ll,currentConf,clientInputBuffer.data(),clientOutputBuffer.data(),frames);
+			BufferSwitch(PAD::IO { currentConf,clientInputBuffer.data(),clientOutputBuffer.data(),0ll, frames});
 
 			todo = outputPorts.size();
 			while(todo>0)

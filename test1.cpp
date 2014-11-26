@@ -23,14 +23,9 @@ int main() {
 	Session myAudioSession(true,&log);
 
 	for (auto& d : myAudioSession) {
-		std::cout << d.GetHostAPI() << " " << d.GetName() << "\n";
-	}
-
-	auto asioDevice = myAudioSession.FindDevice(2);
-
-	if (asioDevice != myAudioSession.end()) {
+		std::cout << d.GetHostAPI() << " " << d.GetName() << " " << d.GetNumOutputs() << "x" << d.GetNumInputs() << " \n";
 		try {
-			asioDevice->BufferSwitch = [&](IO io) {
+			d.BufferSwitch = [&](IO io) {
 				unsigned numOuts(io.config.GetNumStreamOutputs());
 				static double phase = 0;
 				for (unsigned i(0); i < io.numFrames; ++i) {
@@ -41,12 +36,14 @@ int main() {
 				}
 			};
 
-			asioDevice->Open(asioDevice->DefaultStereo());
+			std::cout << "* Opening\n";
+			d.Open(d.DefaultStereo());
 			getchar();
-			asioDevice->Close();
+			std::cout << "* Closing\n";
+			d.Close();
 		}
 		catch (std::runtime_error e) {
 			std::cerr << e.what();
 		}
-	}
+	} 
 }

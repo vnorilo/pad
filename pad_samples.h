@@ -4,6 +4,7 @@
 #undef min
 
 #include <cstdint>
+#include <cstring>
 #include <cmath>
 #include <cassert>
 #include <numeric>
@@ -86,8 +87,8 @@ namespace PAD{
 			S& operator[](unsigned i) {return data[i];}
 			S operator[](unsigned i) const {return data[i];}
 	
-			template <bool ALIGNED> void Write(S* dest) {memcpy(dest,data,sizeof(S)*N);}
-			template <bool ALIGNED> void Load(const S* from) {memcpy(data,from,sizeof(S)*N);}
+			template <bool ALIGNED> void Write(S* dest) { std::memcpy(dest,data,sizeof(S)*N); }
+			template <bool ALIGNED> void Load(const S* from) { std::memcpy(data,from,sizeof(S)*N); }
 
 			SampleVector<S,N> operator*(SampleVector<S,N> b) const
 			{

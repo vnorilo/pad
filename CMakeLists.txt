@@ -1,5 +1,5 @@
 project(pad CXX)
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 2.8)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	add_definitions(
@@ -9,8 +9,15 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 			-D_SCL_SECURE_NO_WARNINGS
 			-D_UNICODE -DUNICODE
 			 "/wd4458" "/wd4457" "/wd4456")
-else ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+	message(STATUS "Setting up MSVC compiler flags...")
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+	add_definitions(-std=c++11 -msse2)
+	message(STATUS "Setting up Gnu compiler flags...")	
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
 	add_definitions(-std=c++11 -stdlib=libc++)
+	message(STATUS "Setting up AppleClang compiler flags...")
+else ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+message(FATAL_ERROR "Unknown C++ compiler ${CMAKE_CXX_COMPILER_ID}")
 endif()
 
 if (WIN32)
