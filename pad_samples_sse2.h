@@ -1,6 +1,6 @@
 #include <emmintrin.h>
 #ifdef HAS_BIG_ENDIAN
-#error SSE2 and big endian probably shouldn't coexist in a build :)
+#error SSE2 and big endian probably shouldnt coexist in a build :)
 #endif
 
 #define PAD_SAMPLES_SSE2
@@ -20,12 +20,12 @@ namespace PAD{
 			template <bool ALIGNED> void Write(int32_t* mem) {if (ALIGNED) _mm_store_si128((__m128i*)mem,data); else _mm_storeu_si128((__m128i*)mem,data);}
 			template <bool ALIGNED> void Load(const int32_t* mem) { data = ALIGNED?_mm_load_si128((__m128i*)mem):_mm_loadu_si128((__m128i*)mem);}
 
-#ifdef __clang__
-			int32_t& operator[](unsigned i) {return  ((int32_t*)&data)[i];}
-			int32_t operator[](unsigned i) const {return  ((int32_t*)&data)[i];}
+#ifdef _MSC_VER
+			int32_t& operator[](unsigned i) { return data.m128i_i32[i]; }
+			int32_t operator[](unsigned i) const { return data.m128i_i32[i]; }
 #else
-			int32_t& operator[](unsigned i) {return data.m128i_i32[i];}
-			int32_t operator[](unsigned i) const {return data.m128i_i32[i];}
+			int32_t& operator[](unsigned i) { return  ((int32_t*)&data)[i]; }
+			int32_t operator[](unsigned i) const {return  ((int32_t*)&data)[i];}
 #endif
 			SampleVector<int32_t,4> operator*(const SampleVector<int32_t,4>& b) {return _mm_mul_epu32(data,b.data);}
 		};
@@ -39,12 +39,12 @@ namespace PAD{
 			template <bool ALIGNED> void Write(int16_t* mem) {_mm_storel_epi64((__m128i*)mem,data);}
 			template <bool ALIGNED> void Load(const int16_t* mem) { data = _mm_loadl_epi64((const __m128i*)mem);}
 
-#ifdef __clang__
-			int16_t& operator[](unsigned i) {return  ((int16_t*)&data)[i];}
-			int16_t operator[](unsigned i) const {return  ((int16_t*)&data)[i];}
-#else
-			int16_t& operator[](unsigned i) {return data.m128i_i16[i];}
+#ifdef _MSC_VER
+			int16_t& operator[](unsigned i) { return data.m128i_i16[i]; }
 			int16_t operator[](unsigned i) const {return data.m128i_i16[i];}
+#else
+			int16_t& operator[](unsigned i) {return  ((int16_t*)&data)[i];}
+			int16_t operator[](unsigned i) const { return  ((int16_t*)&data)[i]; }
 #endif
 
 			SampleVector<int16_t,4> operator*(const SampleVector<int16_t,4>& b) {return _mm_mullo_epi16(data,b.data);}
@@ -71,12 +71,12 @@ namespace PAD{
 			operator SampleVector<int32_t,4>() { return _mm_cvtps_epi32(data); }
 			operator SampleVector<int16_t,4>() { return _mm_cvtps_epi32(data); }
 
-#ifdef __clang__
+#ifdef _MSC_VER
+			float& operator[](unsigned i) { return data.m128_f32[i]; }
+			float operator[](unsigned i) const { return data.m128_f32[i]; }
+#else
 			float& operator[](unsigned i) {return  ((float*)&data)[i];}
 			float operator[](unsigned i) const {return  ((float*)&data)[i];}
-#else
-			float& operator[](unsigned i) {return data.m128_f32[i];}
-			float operator[](unsigned i) const {return data.m128_f32[i];}
 #endif
 			template <bool ALIGNED> void Write(float* mem) {if (ALIGNED) _mm_store_ps(mem,data); else _mm_storeu_ps(mem,data);}
 			template <bool ALIGNED> void Load(const float* mem) { data = ALIGNED?_mm_load_ps(mem):_mm_loadu_ps(mem);}
@@ -104,7 +104,7 @@ namespace PAD{
 			}
 		};
 
-		template <> static void Transpose<>(SampleVector<float,4> *v)
+		template <> void Transpose<>(SampleVector<float,4> *v)
 		{
 			__m128i t0 = _mm_castps_si128(_mm_unpacklo_ps(v[0].data,v[1].data));
 			__m128i t1 = _mm_castps_si128(_mm_unpacklo_ps(v[2].data,v[3].data));

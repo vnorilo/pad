@@ -907,7 +907,21 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                         hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->GetBuffer(framesToOutput, &renderData);
                         if (hr>=0 && renderData!=nullptr)
                         {
-                            dev->BufferSwitch(0,curConf,dev->m_delegateInputBuffer.data(),dev->m_delegateOutputBuffer.data(),framesToOutput);
+							IO io{
+								curConf,
+								dev->m_delegateInputBuffer.data(),
+								dev->m_delegateOutputBuffer.data(),
+								0ll,
+								framesToOutput
+							};
+
+							if (dev->GetBufferSwitchLock()) {
+								lock_guard<recursive_mutex> lock(*dev->GetBufferSwitchLock());
+								dev->BufferSwitch(io);
+							} else {
+								dev->BufferSwitch(io);
+							}
+
                             float* pf=(float*)renderData;
                             unsigned numStreamChans=curConf.GetNumStreamOutputs();
                             unsigned numEndpointChans=dev->m_outputEndPoints.at(ep).m_numChannels;
@@ -971,6 +985,8 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
 
 }
 
-extern "C" void* weak_wasapi() {
-	return (IHostAPI*)&publisher;
+namespace PAD {
+	IHostAPI* LinkWASAPI() {
+		return &publisher;
+	}
 }

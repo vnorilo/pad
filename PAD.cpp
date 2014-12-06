@@ -7,11 +7,10 @@
 
 namespace PAD {
 	using namespace std;
-	const char* VersionString() { return "1.0.0"; }
+	const char* VersionString( ) { return "1.0.0"; }
 
 	AudioStreamConfiguration::AudioStreamConfiguration(double samplerate, bool valid)
-		:sampleRate(samplerate),valid(valid),startSuspended(false),numStreamIns(0),numStreamOuts(0)
-	{ }
+		:sampleRate(samplerate), valid(valid), startSuspended(false), numStreamIns(0), numStreamOuts(0) { }
 
 	enum RangeFindResult {
 		In,
@@ -20,25 +19,20 @@ namespace PAD {
 		Above
 	};
 
-	bool ChannelRange::Overlaps(ChannelRange r)
-	{
-		return r.begin() < end() && r.end() > begin();
+	bool ChannelRange::Overlaps(ChannelRange r) {
+		return r.begin( ) < end( ) && r.end( ) > begin( );
 	}
 
-	static void AddChannels(ChannelRange channels, vector<ChannelRange>& ranges)
-	{
+	static void AddChannels(ChannelRange channels, vector<ChannelRange>& ranges) {
 		/* check for valid range */
-		for(auto r : ranges)
-		{
-			if (r.Overlaps(channels)) throw SoftError(ChannelRangeOverlap,"Channel ranges must not overlap");
+		for (auto r : ranges) {
+			if (r.Overlaps(channels)) throw SoftError(ChannelRangeOverlap, "Channel ranges must not overlap");
 		}
 
 		/* merge into another range if continuous */
-		for(auto& r : ranges)
-		{
-			if (channels.end() == r.begin())
-			{
-				r = ChannelRange(channels.begin(),r.end());
+		for (auto& r : ranges) {
+			if (channels.end( ) == r.begin( )) {
+				r = ChannelRange(channels.begin( ), r.end( ));
 				return;
 			}
 		}
@@ -46,18 +40,14 @@ namespace PAD {
 		ranges.push_back(channels);
 	}
 
-	static RangeFindResult IsChannelInRangeSet(unsigned idx, const vector<ChannelRange>& ranges)
-	{
+	static RangeFindResult IsChannelInRangeSet(unsigned idx, const vector<ChannelRange>& ranges) {
 		bool aboveAllRanges(true);
 		bool belowAllRanges(true);
-		for(auto p : ranges)
-		{
-			if (idx < p.end())
-			{
+		for (auto p : ranges) {
+			if (idx < p.end( )) {
 				aboveAllRanges = false;
-				if (idx >= p.begin()) return In;
-			}
-			else if (idx >= p.begin()) belowAllRanges = false;			
+				if (idx >= p.begin( )) return In;
+			} else if (idx >= p.begin( )) belowAllRanges = false;
 		}
 
 		if (aboveAllRanges) return Above;
@@ -65,159 +55,132 @@ namespace PAD {
 		else return Between;
 	}
 
-	static unsigned GetNumChannels(const vector<ChannelRange>& ranges)
-	{
+	static unsigned GetNumChannels(const vector<ChannelRange>& ranges) {
 		unsigned idx(0);
 		unsigned count(0);
 
 		RangeFindResult r;
-		while((r = IsChannelInRangeSet(idx++,ranges)) != Above)
-		{
+		while ((r = IsChannelInRangeSet(idx++, ranges)) != Above) {
 			if (r == In) count++;
 		}
 		return count;
 	}
 
-	unsigned AudioStreamConfiguration::GetNumDeviceInputs() const
-	{
+	unsigned AudioStreamConfiguration::GetNumDeviceInputs( ) const {
 		unsigned max(0);
-		for(auto r : inputRanges) if (r.end() > max) max = r.end();
+		for (auto r : inputRanges) if (r.end( ) > max) max = r.end( );
 		return max;
 	}
 
-	unsigned AudioStreamConfiguration::GetNumDeviceOutputs() const
-	{
+	unsigned AudioStreamConfiguration::GetNumDeviceOutputs( ) const {
 		unsigned max(0);
-		for(auto r : outputRanges) if (r.end() > max) max = r.end();
+		for (auto r : outputRanges) if (r.end( ) > max) max = r.end( );
 		return max;
 	}
 
-	bool AudioStreamConfiguration::IsInputEnabled(unsigned ch) const
-	{
-		return IsChannelInRangeSet(ch,inputRanges) == In;
+	bool AudioStreamConfiguration::IsInputEnabled(unsigned ch) const {
+		return IsChannelInRangeSet(ch, inputRanges) == In;
 	}
 
-	bool AudioStreamConfiguration::IsOutputEnabled(unsigned ch) const
-	{
-		return IsChannelInRangeSet(ch,outputRanges) == In;
+	bool AudioStreamConfiguration::IsOutputEnabled(unsigned ch) const {
+		return IsChannelInRangeSet(ch, outputRanges) == In;
 	}
 
-	void AudioStreamConfiguration::AddDeviceInputs(ChannelRange channels)
-	{
-		AddChannels(channels,inputRanges);
+	void AudioStreamConfiguration::AddDeviceInputs(ChannelRange channels) {
+		AddChannels(channels, inputRanges);
 		numStreamIns = GetNumChannels(inputRanges);
 	}
 
-	void AudioStreamConfiguration::AddDeviceOutputs(ChannelRange channels)
-	{
-		AddChannels(channels,outputRanges);
+	void AudioStreamConfiguration::AddDeviceOutputs(ChannelRange channels) {
+		AddChannels(channels, outputRanges);
 		numStreamOuts = GetNumChannels(outputRanges);
 	}
 
-	AudioStreamConfiguration AudioStreamConfiguration::SampleRate(double rate) const
-	{
-		auto tmp(*this);tmp.SetSampleRate(rate);return tmp;
+	AudioStreamConfiguration AudioStreamConfiguration::SampleRate(double rate) const {
+		auto tmp(*this); tmp.SetSampleRate(rate); return tmp;
 	}
 
-	AudioStreamConfiguration AudioStreamConfiguration::Input(unsigned ch) const
-	{
-		auto tmp(*this);tmp.AddDeviceInputs(ChannelRange(ch,ch+1));return tmp;
+	AudioStreamConfiguration AudioStreamConfiguration::Input(unsigned ch) const {
+		auto tmp(*this); tmp.AddDeviceInputs(ChannelRange(ch, ch + 1)); return tmp;
 	}
 
-	AudioStreamConfiguration AudioStreamConfiguration::Output(unsigned ch) const
-	{
-		auto tmp(*this);tmp.AddDeviceOutputs(ChannelRange(ch,ch+1));return tmp;
+	AudioStreamConfiguration AudioStreamConfiguration::Output(unsigned ch) const {
+		auto tmp(*this); tmp.AddDeviceOutputs(ChannelRange(ch, ch + 1)); return tmp;
 	}
 
-	AudioStreamConfiguration AudioStreamConfiguration::StereoInput(unsigned index) const
-	{
-		auto tmp(*this);tmp.AddDeviceInputs(ChannelRange(index*2,index*2+2));return tmp;
+	AudioStreamConfiguration AudioStreamConfiguration::StereoInput(unsigned index) const {
+		auto tmp(*this); tmp.AddDeviceInputs(ChannelRange(index * 2, index * 2 + 2)); return tmp;
 	}
 
-	AudioStreamConfiguration AudioStreamConfiguration::StereoOutput(unsigned index) const
-	{
-		auto tmp(*this);tmp.AddDeviceOutputs(ChannelRange(index*2,index*2+2));return tmp;
+	AudioStreamConfiguration AudioStreamConfiguration::StereoOutput(unsigned index) const {
+		auto tmp(*this); tmp.AddDeviceOutputs(ChannelRange(index * 2, index * 2 + 2)); return tmp;
 	}
 
-	AudioStreamConfiguration AudioStreamConfiguration::Inputs(ChannelRange cr) const
-	{
-		auto tmp(*this);tmp.AddDeviceInputs(cr);return tmp;
+	AudioStreamConfiguration AudioStreamConfiguration::Inputs(ChannelRange cr) const {
+		auto tmp(*this); tmp.AddDeviceInputs(cr); return tmp;
 	}
 
-	AudioStreamConfiguration AudioStreamConfiguration::Outputs(ChannelRange cr) const
-	{
-		auto tmp(*this);tmp.AddDeviceOutputs(cr);return tmp;
+	AudioStreamConfiguration AudioStreamConfiguration::Outputs(ChannelRange cr) const {
+		auto tmp(*this); tmp.AddDeviceOutputs(cr); return tmp;
 	}
 
-	static void SetChannelLimits(vector<ChannelRange>& channelRanges, unsigned maxCh)
-	{
+	static void SetChannelLimits(vector<ChannelRange>& channelRanges, unsigned maxCh) {
 		vector<ChannelRange> newChannelRange;
-		for(auto cr : channelRanges)
-		{
-			if (cr.begin() < maxCh) 
-			{
-                newChannelRange.push_back(ChannelRange(cr.begin(),min(cr.end(),maxCh)));
-			}			
+		for (auto cr : channelRanges) {
+			if (cr.begin( ) < maxCh) {
+				newChannelRange.push_back(ChannelRange(cr.begin( ), min(cr.end( ), maxCh)));
+			}
 		}
 
 		channelRanges = newChannelRange;
 	}
 
-	void AudioStreamConfiguration::SetDeviceChannelLimits(unsigned maxIn, unsigned maxOut)
-	{
-		SetChannelLimits(inputRanges,maxIn);
-		SetChannelLimits(outputRanges,maxOut);
+	void AudioStreamConfiguration::SetDeviceChannelLimits(unsigned maxIn, unsigned maxOut) {
+		SetChannelLimits(inputRanges, maxIn);
+		SetChannelLimits(outputRanges, maxOut);
 		numStreamIns = GetNumChannels(inputRanges);
 		numStreamOuts = GetNumChannels(outputRanges);
 	}
 }
 
-// this monster ensures construction of global objects in statically linked libraries
-#define API_TABLE	F(asio) F(wasapi) F(jack) F(coreaudio)
-//#define API_TABLE	F(asio) F(wasapi)
-#if _MSC_VER
-extern "C" void* APINotLinked() { return nullptr; };
-
-#define F(HOST) extern "C" void *weak_##HOST();
-API_TABLE
-#undef F
-#ifdef _WIN64
-#define F(HOST) __pragma(comment(linker, "/ALTERNATENAME:weak_" #HOST "=APINotLinked")) 
-#else
-#define F(HOST) __pragma(comment(linker, "/ALTERNATENAME:_weak_" #HOST "=_APINotLinked")) 
-#endif
-API_TABLE
-#undef F
-
 namespace PAD {
-	std::vector<IHostAPI*> GetLinkedAPIs() {
+	IHostAPI* LinkCoreAudio( );
+	IHostAPI* LinkASIO( );
+	IHostAPI* LinkWASAPI( );
+	IHostAPI* LinkJACK( );
+
+	std::vector<IHostAPI*> GetLinkedAPIs( ) {
 		std::vector<IHostAPI*> hosts;
-#define F(HOST) if (weak_##HOST != APINotLinked) hosts.push_back((IHostAPI*)weak_##HOST());
-		API_TABLE
-#undef F
+#ifdef PAD_LINK_ASIO
+		hosts.push_back(LinkASIO( ));
+#endif
+#ifdef PAD_LINK_WASAPI
+		hosts.push_back(LinkWASAPI( ));
+#endif
+#ifdef PAD_LINK_COREAUDIO
+		hosts.push_back(LinkCoreAudio());
+#endif
+#ifdef PAD_LINK_JACK
+		hosts.push_back(LinkJACK());
+#endif
+
 		return hosts;
 	}
-}
 
-#elif __GNUC__
-#error Write weak linkage initializers for GNU
-#endif
-
-namespace std {
 	ostream& operator<<(ostream& stream, const PAD::AudioDevice& dev) {
-		stream << "[" << dev.GetHostAPI() << "] " << dev.GetName() << " [" << dev.GetNumInputs() << "x" << dev.GetNumOutputs() << "]";
+		stream << "[" << dev.GetHostAPI( ) << "] " << dev.GetName( ) << " [" << dev.GetNumInputs( ) << "x" << dev.GetNumOutputs( ) << "]";
 		return stream;
 	}
 
 	ostream& operator<<(ostream& stream, const PAD::AudioStreamConfiguration& cfg) {
-		if (cfg.IsValid() == false) {
+		if (cfg.IsValid( ) == false) {
 			stream << "n/a";
 			return stream;
 		}
 
-		stream << cfg.GetSampleRate() / 1000.0 << "kHz ";
-		unsigned devIns(cfg.GetNumDeviceInputs());
-		unsigned devOuts(cfg.GetNumDeviceOutputs());
+		stream << cfg.GetSampleRate( ) / 1000.0 << "kHz ";
+		unsigned devIns(cfg.GetNumDeviceInputs( ));
+		unsigned devOuts(cfg.GetNumDeviceOutputs( ));
 
 		if (devIns < 32 && devOuts < 32 && (devIns > 0 || devOuts > 0)) {
 			stream << "Device[";

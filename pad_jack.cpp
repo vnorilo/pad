@@ -19,11 +19,6 @@
 
 #ifdef WIN32
 #include "utils/resourcemanagement.h"
-#ifdef _WIN64
-#pragma comment(lib,"C:/Program Files (x86)/Jack/lib/libjack64.lib")
-#else
-#pragma comment(lib,"C:/Program Files (x86)/Jack/lib/libjack.lib")
-#endif
 #endif
 
 #undef min
@@ -73,7 +68,7 @@ namespace{
 		~JackDevice() {Unwind(Idle);}
 		virtual unsigned GetNumInputs() const {return 256;}
 		virtual unsigned GetNumOutputs() const {return 256;}
-		virtual const char *GetName() const {return jack_get_version_string();}
+		virtual const char *GetName() const {return "jack";}
 		virtual const char *GetHostAPI() const {return "jack";}
 
 		double CPU_Load() const { throw "Not implemented"; }
@@ -207,7 +202,7 @@ namespace{
 				todo-=now;
 			}
 
-			BufferSwitch(0ll,currentConf,clientInputBuffer.data(),clientOutputBuffer.data(),frames);
+			BufferSwitch(PAD::IO { currentConf,clientInputBuffer.data(),clientOutputBuffer.data(),0ll, frames});
 
 			todo = outputPorts.size();
 			while(todo>0)
@@ -295,7 +290,9 @@ namespace{
 	} publisher;
 }
 
-extern "C" void* weak_jack() {
-	return (IHostAPI*)&publisher;
+namespace PAD {
+	IHostAPI* LinkJACK() {
+		return &publisher;
+	}
 }
 
