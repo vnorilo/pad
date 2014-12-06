@@ -1,5 +1,3 @@
-#include <Windows.h>
-#include "WinDebugStream.h"
 
 #define USE_AVX
 
@@ -12,7 +10,6 @@
 
 #include "PAD.h"
 
-
 int main() {
 	using namespace PAD;
 
@@ -22,31 +19,31 @@ int main() {
 		void Catch(HardError e) { std::cerr << "*Hard " << e.GetCode() << "* :" << e.what() << "\n"; }
 	};
 
-	cwindbg() << 4567 << "\n" << 'c';
-
     ErrorLogger log;	
 	Session myAudioSession(true,&log);
 
-	auto asioDevice = myAudioSession.FindDevice("audio codec");
-
-	if (asioDevice != myAudioSession.end()) {
+	for (auto& d : myAudioSession) {
+		std::cout << d.GetHostAPI() << " " << d.GetName() << " " << d.GetNumOutputs() << "x" << d.GetNumInputs() << " \n";
 		try {
-
-			asioDevice->BufferSwitch = [&](uint64_t time, const PAD::AudioStreamConfiguration& cfg, const float *input, float *output, unsigned frames) {
-				unsigned numOuts(cfg.GetNumStreamOutputs());
+			d.BufferSwitch = [&](IO io) {
+				unsigned numOuts(io.config.GetNumStreamOutputs());
 				static double phase = 0;
-				for (unsigned i(0); i < frames; ++i) {
+				for (unsigned i(0); i < io.numFrames; ++i) {
 					for (unsigned j(0); j < numOuts; ++j) {
+						io.output[i*numOuts + j] = sin(phase);
 					}
+					phase+=0.1;
 				}
 			};
 
-			asioDevice->Open(asioDevice->DefaultStereo());
+			std::cout << "* Opening\n";
+			d.Open(d.DefaultStereo());
 			getchar();
-			asioDevice->Close();
+			std::cout << "* Closing\n";
+			d.Close();
 		}
 		catch (std::runtime_error e) {
 			std::cerr << e.what();
 		}
-	}
+	} 
 }

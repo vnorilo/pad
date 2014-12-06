@@ -1,18 +1,2 @@
 syntax: glob
-xcode/PAD/PAD.xcodeproj/xcuserdata
-xcode/PAD/PAD.xcodeproj/project.xcworkspace/xcuserdata
-msvc/PADTest
-msvc/PADTest/Release
-msvc/PADTest/Test.App
-msvc/Debug Lib
-msvc/build
-*.sdf
-*.suo
-*.opensdf
-ASIOSDK2
-jack
-msvc/PADTest/x64
-ipch
-*.user
-test/minimaltest/build-minimaltest-vs_2012_x86-Release
-.DS_Store
+build
