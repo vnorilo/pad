@@ -306,7 +306,8 @@ public:
 
         if (m_currentState==WASS_Open)
             InitAudioThread();
-        if (m_currentState==WASS_Open && conf.HasSuspendOnStartup() == false) Run();
+        if (m_currentState==WASS_Open && conf.HasSuspendOnStartup() == false)
+            Run();
         currentConfiguration.SetValid(true);
         return currentConfiguration;
     }
@@ -368,10 +369,7 @@ public:
         m_currentState=WASS_Closed;
         //Sleep(500);
         CloseHandle(m_audioThreadHandle);
-        m_audioThreadHandle=0;
-        //if (currentDelegate)
-        //    currentDelegate->StreamDidEnd(*this);
-        //cout << "Pad/Wasapi close, thread was stopped\n";
+        m_audioThreadHandle=NULL;
     }
 
     double CPU_Load() const { return m_current_cpu_load; }
