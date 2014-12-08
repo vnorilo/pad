@@ -16,6 +16,9 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
 	add_definitions(-std=c++11 -stdlib=libc++)
 	message(STATUS "Setting up AppleClang compiler flags...")
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+	add_definitions(-std=c++11 -stdlib=libc++)
+	message(STATUS "Setting up Clang compiler flags...")
 else ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 message(FATAL_ERROR "Unknown C++ compiler ${CMAKE_CXX_COMPILER_ID}")
 endif()
@@ -38,7 +41,7 @@ if (PAD_AVAILABLE_HOSTAPIS)
 	set(PAD_HOSTAPIS ${PAD_AVAILABLE_HOSTAPIS} CACHE STRING "Build PAD for a subset of asio;wasapi;coreaudio;jack")
 endif (PAD_AVAILABLE_HOSTAPIS)
 
-set(PAD_SOURCES HostAPI.cpp PAD.cpp)
+set(PAD_SOURCES HostAPI.cpp PAD.cpp pad_samples_sse2.cpp)
 
 message(STATUS "Linking ${PAD_HOSTAPIS}")
 

@@ -70,17 +70,7 @@ namespace PAD{
 			}
 		};
 
-		//template <> struct SampleToHost<SampleVector<int16_t,8>,SampleVector<float,8>>{
-		//	static void RoundAndClip(SampleVector<int16_t,8>& dst, const SampleVector<float,8>& src, const SampleVector<float,8>& hi, const SampleVector<float,8>& lo)
-		//	{
-		//		/* todo: check rounding mode in outer scope */
-		//		dst.data = _mm256_shufflehi_epi16(_mm256_cvtps_epi32(
-		//			_mm256_max_ps(_mm256_min_ps(src.data,hi.data),
-		//			lo.data)),_MM256_SHUFFL
-		//	}
-		//};
-
-		template <> static void Transpose<>(SampleVector<float,8> *v)
+		template <> void Transpose<>(SampleVector<float,8> *v)
 		{
 			__m256 __t0, __t1, __t2, __t3, __t4, __t5, __t6, __t7;
 			__m256 __tt0, __tt1, __tt2, __tt3, __tt4, __tt5, __tt6, __tt7;
