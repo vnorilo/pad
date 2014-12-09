@@ -14,7 +14,9 @@
 #pragma warning(disable: 4267)
 
 // prevent stdint definitions by jack
+#ifndef _STDINT_H
 #define _STDINT_H
+#endif
 #include <jack/jack.h>
 
 #ifdef WIN32
@@ -159,6 +161,7 @@ namespace{
 
 		void Stop()
 		{
+			timeStamp = 0ll;
 			jack_deactivate(client);
 		}
 
@@ -188,6 +191,8 @@ namespace{
 			Unwind(Idle);
 		};
 
+		std::uint64_t timeStamp;
+
 		int Process(jack_nframes_t frames)
 		{
 			typedef Converter::HostSample<float,float,-1,1,0,SYSTEM_BIGENDIAN> jack_smp_t;
@@ -202,7 +207,7 @@ namespace{
 				todo-=now;
 			}
 
-			BufferSwitch(PAD::IO { currentConf,clientInputBuffer.data(),clientOutputBuffer.data(),0ll, frames});
+			BufferSwitch(PAD::IO { currentConf,clientInputBuffer.data(),clientOutputBuffer.data(),timeStamp,frames});
 
 			todo = outputPorts.size();
 			while(todo>0)
