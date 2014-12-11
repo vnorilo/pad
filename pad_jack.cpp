@@ -256,6 +256,12 @@ namespace{
 			size_t pos;
 			while((pos = appName.find("\\"))!=appName.npos) appName=appName.substr(pos+1);
 			appName = appName.substr(0,appName.rfind(".exe"));
+#else
+			if (getenv("_")) {
+				appName = getenv("_");
+				if (appName.find('/') != std::string::npos)
+					appName = appName.substr(appName.find_last_of('/'));
+			}
 #endif
 			CleanupList Cleanup;
 			jack_status_t status;
@@ -264,8 +270,7 @@ namespace{
 				jack_client_t *client = jack_client_open(appName.c_str(),JackNoStartServer,&status);
 				CLEANUP(jack_client_close(client));
 
-				if ((status&JackFailure) != 0 || client == NULL)
-					throw SoftError(DeviceInitializationFailure,"Couldn't open jack client");
+				if ((status&JackFailure) != 0 || client == NULL) return;
 
 				dev.push_back(JackDevice(appName,jack_get_sample_rate(client)));
 				auto &jdev(dev.back());
