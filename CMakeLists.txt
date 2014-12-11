@@ -41,7 +41,7 @@ if (PAD_AVAILABLE_HOSTAPIS)
 	set(PAD_HOSTAPIS ${PAD_AVAILABLE_HOSTAPIS} CACHE STRING "Build PAD for a subset of asio;wasapi;coreaudio;jack")
 endif (PAD_AVAILABLE_HOSTAPIS)
 
-set(PAD_SOURCES HostAPI.cpp PAD.cpp pad_samples_sse2.cpp)
+set(PAD_SOURCES HostAPI.cpp PAD.cpp)
 
 message(STATUS "Linking ${PAD_HOSTAPIS}")
 
