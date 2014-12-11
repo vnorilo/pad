@@ -260,7 +260,7 @@ namespace{
 			if (getenv("_")) {
 				appName = getenv("_");
 				if (appName.find('/') != std::string::npos)
-					appName = appName.substr(appName.find_last_of('/'));
+					appName = appName.substr(appName.find_last_of('/') + 1);
 			}
 #endif
 			CleanupList Cleanup;
