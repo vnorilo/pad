@@ -14,7 +14,9 @@
 #pragma warning(disable: 4267)
 
 // prevent stdint definitions by jack
+#ifndef _STDINT_H
 #define _STDINT_H
+#endif
 #include <jack/jack.h>
 
 #ifdef WIN32
@@ -159,6 +161,7 @@ namespace{
 
 		void Stop()
 		{
+			timeStamp = 0ll;
 			jack_deactivate(client);
 		}
 
@@ -188,6 +191,8 @@ namespace{
 			Unwind(Idle);
 		};
 
+		std::uint64_t timeStamp;
+
 		int Process(jack_nframes_t frames)
 		{
 			typedef Converter::HostSample<float,float,-1,1,0,SYSTEM_BIGENDIAN> jack_smp_t;
@@ -202,7 +207,7 @@ namespace{
 				todo-=now;
 			}
 
-			BufferSwitch(PAD::IO { currentConf,clientInputBuffer.data(),clientOutputBuffer.data(),0ll, frames});
+			BufferSwitch(PAD::IO { currentConf,clientInputBuffer.data(),clientOutputBuffer.data(),timeStamp,frames});
 
 			todo = outputPorts.size();
 			while(todo>0)
@@ -256,6 +261,12 @@ namespace{
 			size_t pos;
 			while((pos = appName.find("\\"))!=appName.npos) appName=appName.substr(pos+1);
 			appName = appName.substr(0,appName.rfind(".exe"));
+#else
+			if (getenv("_")) {
+				appName = getenv("_");
+				if (appName.find('/') != std::string::npos)
+					appName = appName.substr(appName.find_last_of('/') + 1);
+			}
 #endif
 			CleanupList Cleanup;
 			jack_status_t status;
@@ -264,8 +275,7 @@ namespace{
 				jack_client_t *client = jack_client_open(appName.c_str(),JackNoStartServer,&status);
 				CLEANUP(jack_client_close(client));
 
-				if ((status&JackFailure) != 0 || client == NULL)
-					throw SoftError(DeviceInitializationFailure,"Couldn't open jack client");
+				if ((status&JackFailure) != 0 || client == NULL) return;
 
 				dev.push_back(JackDevice(appName,jack_get_sample_rate(client)));
 				auto &jdev(dev.back());
