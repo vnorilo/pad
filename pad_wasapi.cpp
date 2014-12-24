@@ -364,13 +364,32 @@ public:
         //cwindbg() << "Pad/Wasapi close, waiting for thread to stop...\n";
         m_currentState=WASS_Idle;
         m_threadShouldStop=true;
-        if (WaitForSingleObject(m_audioThreadHandle,1000)==WAIT_TIMEOUT)
-            cwindbg() << "Pad/Wasapi close, audio thread timed out when stopping\n";
-        m_currentState=WASS_Closed;
-        //Sleep(500);
-        CloseHandle(m_audioThreadHandle);
-        m_audioThreadHandle=NULL;
+		bool did_end = false;
+		if (WaitForSingleObject(m_audioThreadHandle, 1000) == WAIT_TIMEOUT)
+		{
+			cwindbg() << "Pad/Wasapi close : audio thread did not stop in time, trying harder in another thread...\n";
+			std::thread th([](HANDLE athandle)
+			{
+				if (WaitForSingleObject(athandle, 5000) == WAIT_TIMEOUT)
+				{
+					cwindbg() << "Pad/Wasapi close : audio thread did not stop with extra time, giving up...\n";
+				}
+				else
+				{
+					CloseHandle(athandle);
+					cwindbg() << "Pad/Wasapi close : audio thread stopped and closed with extra wait time\n";
+				}
+			},m_audioThreadHandle);
+			th.detach();
+		}
+		else 
+			did_end = true;
+		m_currentState = WASS_Closed;
+		if (did_end==true)
+			CloseHandle(m_audioThreadHandle);
+		m_audioThreadHandle = NULL;
 		StreamDidEnd();
+		
     }
 
     double CPU_Load() const { return m_current_cpu_load; }
@@ -979,7 +998,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         }
         if (dev->m_outputGlitchCounter>0)
             cwindbg() << "ended wasapi audio thread. "<<dev->m_outputGlitchCounter<< " glitches detected\n";
-    }
+	}
     catch (std::exception& ex) { cwindbg() << "PAD WASAPI audio thread exception : " << ex.what() << "\n"; }
     return 0;
 }
