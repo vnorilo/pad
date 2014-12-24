@@ -1,6 +1,6 @@
 #include <iostream>
 #include <string>
-#include <list>
+#include <atomic>
 #include "utils/resourcemanagement.h"
 #include "winerror.h"
 #include "Mmdeviceapi.h"
@@ -370,6 +370,7 @@ public:
         //Sleep(500);
         CloseHandle(m_audioThreadHandle);
         m_audioThreadHandle=NULL;
+		StreamDidEnd();
     }
 
     double CPU_Load() const { return m_current_cpu_load; }
@@ -413,7 +414,7 @@ public:
     std::shared_ptr<std::mutex> m_mutex;
     vector<WasapiEndPoint> m_inputEndPoints;
     vector<WasapiEndPoint> m_outputEndPoints;
-    volatile bool m_threadShouldStop=false;
+    std::atomic<bool> m_threadShouldStop=false;
     std::vector<int> m_supportedSampleRates;
     bool m_console_spam_enabled=false;
     double m_current_cpu_load=0.0;
