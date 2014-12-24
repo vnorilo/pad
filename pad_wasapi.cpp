@@ -185,7 +185,7 @@ public:
                             __uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)theClient.NullAndGetPtrAddress());
                 if (CheckHResult(hr,"PAD/WASAPI : Activate output audioclient")==true)
                 {
-                    if (theClient)
+                    if (theClient!=nullptr)
                     {
 
                         WAVEFORMATEX *pMixformat=nullptr;
@@ -224,14 +224,19 @@ public:
                                 currentConfiguration.SetBufferSize(nFramesInBuffer);
                                 PadComSmartPointer<IAudioRenderClient> theAudioRenderClient;
                                 hr = theClient->GetService(__uuidof(IAudioRenderClient),(void**)theAudioRenderClient.NullAndGetPtrAddress());
-                                m_outputEndPoints[endPointToActivate].m_AudioClient=theClient;
-                                m_outputEndPoints[endPointToActivate].m_AudioRenderClient=theAudioRenderClient;
-                                m_enabledDeviceOutputs.resize(m_numOutputs);
-                                for (unsigned i=0;i<m_numOutputs;i++)
-                                {
-                                    m_enabledDeviceOutputs[i]=currentConfiguration.IsOutputEnabled(i);
-                                }
-                                m_currentState=WASS_Open;
+								if (theAudioRenderClient != nullptr)
+								{
+									m_outputEndPoints[endPointToActivate].m_AudioClient = theClient;
+									m_outputEndPoints[endPointToActivate].m_AudioRenderClient = theAudioRenderClient;
+									m_enabledDeviceOutputs.resize(m_numOutputs);
+									for (unsigned i = 0; i < m_numOutputs; i++)
+									{
+										m_enabledDeviceOutputs[i] = currentConfiguration.IsOutputEnabled(i);
+									}
+									m_currentState = WASS_Open;
+								}
+								else 
+									cwindbg() << "PAD/WASAPI : Audio render client was not initialized properly\n";
                             } else cwindbg() << "PAD/WASAPI : Output audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
                         }
 
@@ -249,7 +254,7 @@ public:
                             __uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)theClient.NullAndGetPtrAddress());
                 if (CheckHResult(hr,"PAD/WASAPI : Activate input audioclient")==true)
                 {
-                    if (theClient)
+                    if (theClient!=nullptr)
                     {
                         WAVEFORMATEX *pMixformat=nullptr;
                         hr = theClient->GetMixFormat(&pMixformat);
@@ -278,21 +283,27 @@ public:
                         {
                             UINT32 nFramesInBuffer=0;
                             hr = theClient->GetBufferSize(&nFramesInBuffer);
-                            if (nFramesInBuffer>7 && nFramesInBuffer<32769)
-                            {
-                                m_delegateInputBuffer.resize(nFramesInBuffer*m_numInputs);
-                                currentConfiguration.SetBufferSize(nFramesInBuffer);
-                                PadComSmartPointer<IAudioCaptureClient> theAudioCaptureClient;
-                                hr = theClient->GetService(__uuidof(IAudioCaptureClient),(void**)theAudioCaptureClient.NullAndGetPtrAddress());
-                                m_inputEndPoints[endPointToActivate].m_AudioClient=theClient;
-                                m_inputEndPoints[endPointToActivate].m_AudioCaptureClient=theAudioCaptureClient;
-                                m_enabledDeviceInputs.resize(m_numInputs);
-                                for (unsigned i=0;i<m_numOutputs;i++)
-                                {
-                                    m_enabledDeviceInputs[i]=currentConfiguration.IsInputEnabled(i);
-                                }
-                                m_currentState=WASS_Open;
-                            } else cwindbg() << "PAD/WASAPI : Input audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
+							if (nFramesInBuffer > 7 && nFramesInBuffer < 32769)
+							{
+								m_delegateInputBuffer.resize(nFramesInBuffer*m_numInputs);
+								currentConfiguration.SetBufferSize(nFramesInBuffer);
+								PadComSmartPointer<IAudioCaptureClient> theAudioCaptureClient;
+								hr = theClient->GetService(__uuidof(IAudioCaptureClient), (void**)theAudioCaptureClient.NullAndGetPtrAddress());
+								if (theAudioCaptureClient != nullptr)
+								{
+									m_inputEndPoints[endPointToActivate].m_AudioClient = theClient;
+									m_inputEndPoints[endPointToActivate].m_AudioCaptureClient = theAudioCaptureClient;
+									m_enabledDeviceInputs.resize(m_numInputs);
+									for (unsigned i = 0; i < m_numOutputs; i++)
+									{
+										m_enabledDeviceInputs[i] = currentConfiguration.IsInputEnabled(i);
+									}
+									m_currentState = WASS_Open;
+								}
+								else
+									cwindbg() << "PAD/WASAPI : Audio capture client was not initialized properly\n";
+							} else 
+								cwindbg() << "PAD/WASAPI : Input audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
                         }
 
                     } else cwindbg() << "PAD/WASAPI : Could not initialize IAudioClient\n";
