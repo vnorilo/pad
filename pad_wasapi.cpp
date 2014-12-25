@@ -379,7 +379,8 @@ public:
 		if (WaitForSingleObject(m_audioThreadHandle, 1000) == WAIT_TIMEOUT)
 		{
 			cwindbg() << "Pad/Wasapi close : audio thread did not stop in time, trying harder in another thread...\n";
-			std::thread th([](HANDLE athandle)
+			// the thread object is leaked, but things are not so good anyway if this codepath is executed...
+			std::thread* th = new std::thread([](HANDLE athandle)
 			{
 				if (WaitForSingleObject(athandle, 5000) == WAIT_TIMEOUT)
 				{
@@ -391,7 +392,7 @@ public:
 					cwindbg() << "Pad/Wasapi close : audio thread stopped and closed with extra wait time\n";
 				}
 			},m_audioThreadHandle);
-			th.detach();
+			th->detach();
 		}
 		else 
 			did_end = true;
