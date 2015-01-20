@@ -1,6 +1,6 @@
 #include <iostream>
 #include <string>
-#include <list>
+#include <atomic>
 #include "utils/resourcemanagement.h"
 #include "winerror.h"
 #include "Mmdeviceapi.h"
@@ -185,7 +185,7 @@ public:
                             __uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)theClient.NullAndGetPtrAddress());
                 if (CheckHResult(hr,"PAD/WASAPI : Activate output audioclient")==true)
                 {
-                    if (theClient)
+                    if (theClient!=nullptr)
                     {
 
                         WAVEFORMATEX *pMixformat=nullptr;
@@ -224,14 +224,19 @@ public:
                                 currentConfiguration.SetBufferSize(nFramesInBuffer);
                                 PadComSmartPointer<IAudioRenderClient> theAudioRenderClient;
                                 hr = theClient->GetService(__uuidof(IAudioRenderClient),(void**)theAudioRenderClient.NullAndGetPtrAddress());
-                                m_outputEndPoints[endPointToActivate].m_AudioClient=theClient;
-                                m_outputEndPoints[endPointToActivate].m_AudioRenderClient=theAudioRenderClient;
-                                m_enabledDeviceOutputs.resize(m_numOutputs);
-                                for (unsigned i=0;i<m_numOutputs;i++)
-                                {
-                                    m_enabledDeviceOutputs[i]=currentConfiguration.IsOutputEnabled(i);
-                                }
-                                m_currentState=WASS_Open;
+								if (theAudioRenderClient != nullptr)
+								{
+									m_outputEndPoints[endPointToActivate].m_AudioClient = theClient;
+									m_outputEndPoints[endPointToActivate].m_AudioRenderClient = theAudioRenderClient;
+									m_enabledDeviceOutputs.resize(m_numOutputs);
+									for (unsigned i = 0; i < m_numOutputs; i++)
+									{
+										m_enabledDeviceOutputs[i] = currentConfiguration.IsOutputEnabled(i);
+									}
+									m_currentState = WASS_Open;
+								}
+								else 
+									cwindbg() << "PAD/WASAPI : Audio render client was not initialized properly\n";
                             } else cwindbg() << "PAD/WASAPI : Output audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
                         }
 
@@ -249,7 +254,7 @@ public:
                             __uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)theClient.NullAndGetPtrAddress());
                 if (CheckHResult(hr,"PAD/WASAPI : Activate input audioclient")==true)
                 {
-                    if (theClient)
+                    if (theClient!=nullptr)
                     {
                         WAVEFORMATEX *pMixformat=nullptr;
                         hr = theClient->GetMixFormat(&pMixformat);
@@ -278,21 +283,27 @@ public:
                         {
                             UINT32 nFramesInBuffer=0;
                             hr = theClient->GetBufferSize(&nFramesInBuffer);
-                            if (nFramesInBuffer>7 && nFramesInBuffer<32769)
-                            {
-                                m_delegateInputBuffer.resize(nFramesInBuffer*m_numInputs);
-                                currentConfiguration.SetBufferSize(nFramesInBuffer);
-                                PadComSmartPointer<IAudioCaptureClient> theAudioCaptureClient;
-                                hr = theClient->GetService(__uuidof(IAudioCaptureClient),(void**)theAudioCaptureClient.NullAndGetPtrAddress());
-                                m_inputEndPoints[endPointToActivate].m_AudioClient=theClient;
-                                m_inputEndPoints[endPointToActivate].m_AudioCaptureClient=theAudioCaptureClient;
-                                m_enabledDeviceInputs.resize(m_numInputs);
-                                for (unsigned i=0;i<m_numOutputs;i++)
-                                {
-                                    m_enabledDeviceInputs[i]=currentConfiguration.IsInputEnabled(i);
-                                }
-                                m_currentState=WASS_Open;
-                            } else cwindbg() << "PAD/WASAPI : Input audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
+							if (nFramesInBuffer > 7 && nFramesInBuffer < 32769)
+							{
+								m_delegateInputBuffer.resize(nFramesInBuffer*m_numInputs);
+								currentConfiguration.SetBufferSize(nFramesInBuffer);
+								PadComSmartPointer<IAudioCaptureClient> theAudioCaptureClient;
+								hr = theClient->GetService(__uuidof(IAudioCaptureClient), (void**)theAudioCaptureClient.NullAndGetPtrAddress());
+								if (theAudioCaptureClient != nullptr)
+								{
+									m_inputEndPoints[endPointToActivate].m_AudioClient = theClient;
+									m_inputEndPoints[endPointToActivate].m_AudioCaptureClient = theAudioCaptureClient;
+									m_enabledDeviceInputs.resize(m_numInputs);
+									for (unsigned i = 0; i < m_numOutputs; i++)
+									{
+										m_enabledDeviceInputs[i] = currentConfiguration.IsInputEnabled(i);
+									}
+									m_currentState = WASS_Open;
+								}
+								else
+									cwindbg() << "PAD/WASAPI : Audio capture client was not initialized properly\n";
+							} else 
+								cwindbg() << "PAD/WASAPI : Input audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
                         }
 
                     } else cwindbg() << "PAD/WASAPI : Could not initialize IAudioClient\n";
@@ -364,12 +375,33 @@ public:
         //cwindbg() << "Pad/Wasapi close, waiting for thread to stop...\n";
         m_currentState=WASS_Idle;
         m_threadShouldStop=true;
-        if (WaitForSingleObject(m_audioThreadHandle,1000)==WAIT_TIMEOUT)
-            cwindbg() << "Pad/Wasapi close, audio thread timed out when stopping\n";
-        m_currentState=WASS_Closed;
-        //Sleep(500);
-        CloseHandle(m_audioThreadHandle);
-        m_audioThreadHandle=NULL;
+		bool did_end = false;
+		if (WaitForSingleObject(m_audioThreadHandle, 1000) == WAIT_TIMEOUT)
+		{
+			cwindbg() << "Pad/Wasapi close : audio thread did not stop in time, trying harder in another thread...\n";
+			// the thread object is leaked, but things are not so good anyway if this codepath is executed...
+			std::thread* th = new std::thread([](HANDLE athandle)
+			{
+				if (WaitForSingleObject(athandle, 5000) == WAIT_TIMEOUT)
+				{
+					cwindbg() << "Pad/Wasapi close : audio thread did not stop with extra time, giving up...\n";
+				}
+				else
+				{
+					CloseHandle(athandle);
+					cwindbg() << "Pad/Wasapi close : audio thread stopped and closed with extra wait time\n";
+				}
+			},m_audioThreadHandle);
+			th->detach();
+		}
+		else 
+			did_end = true;
+		m_currentState = WASS_Closed;
+		if (did_end==true)
+			CloseHandle(m_audioThreadHandle);
+		m_audioThreadHandle = NULL;
+		StreamDidEnd();
+		
     }
 
     double CPU_Load() const { return m_current_cpu_load; }
@@ -413,7 +445,7 @@ public:
     std::shared_ptr<std::mutex> m_mutex;
     vector<WasapiEndPoint> m_inputEndPoints;
     vector<WasapiEndPoint> m_outputEndPoints;
-    volatile bool m_threadShouldStop=false;
+    std::atomic<bool> m_threadShouldStop=false;
     std::vector<int> m_supportedSampleRates;
     bool m_console_spam_enabled=false;
     double m_current_cpu_load=0.0;
@@ -981,7 +1013,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         }
         if (dev->m_outputGlitchCounter>0)
             cwindbg() << "ended wasapi audio thread. "<<dev->m_outputGlitchCounter<< " glitches detected\n";
-    }
+	}
     catch (std::exception& ex) { cwindbg() << "PAD WASAPI audio thread exception : " << ex.what() << "\n"; }
     return 0;
 }
