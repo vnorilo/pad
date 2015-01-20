@@ -28,7 +28,7 @@ inline T scale_value_from_range_to_range(double v, double inputmin, double input
 {
     double range1=inputmax-inputmin;
     double range2=outputmax-outputmin;
-    return outputmin+range2/range1*(v-inputmin);
+    return T(outputmin+range2/range1*(v-inputmin));
 }
 
 void CopyWavFormat(WAVEFORMATEXTENSIBLE& dest, const WAVEFORMATEX* const src)
@@ -41,7 +41,7 @@ void CopyWavFormat(WAVEFORMATEXTENSIBLE& dest, const WAVEFORMATEX* const src)
 
 inline int simple_round(double x)
 {
-    return x+0.5;
+    return int(x+0.5);
 }
 
 int RefTimeToSamples(const REFERENCE_TIME& v, const double sr)
@@ -698,7 +698,7 @@ public:
     HANDLE* getEvents() { return m_events.data(); }
     bool waitForEvents(int maxwait_ms)
     {
-        DWORD result=WaitForMultipleObjects(m_events.size(),m_events.data(),TRUE,maxwait_ms);
+        DWORD result=WaitForMultipleObjects((DWORD)m_events.size(),m_events.data(),TRUE,maxwait_ms);
         if (result<WAIT_OBJECT_0+m_events.size())
             return true;
         return false;
@@ -743,7 +743,7 @@ void fill_output_16bit(WasapiDevice* dev,
     for (unsigned j=0;j<framesToOutput;j++)
     {
         float tempsample=dev->m_delegateOutputBuffer[j*numStreamChans+k];
-        wasapiOutput[j*numEndpointChans+i]=scale_value_from_range_to_range<float>(
+        wasapiOutput[j*numEndpointChans+i]=scale_value_from_range_to_range<short>(
                     tempsample,
                     -1.0,
                     1.0,
@@ -819,6 +819,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         //throw std::exception("test pad exceptioopn");
         while (dev->m_threadShouldStop==false)
         {
+			std::uint64_t timeStamp = 0;
             while (dev->m_currentState==WasapiDevice::WASS_Playing)
             {
                 const AudioStreamConfiguration curConf=dev->currentConfiguration;
@@ -827,7 +828,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
                     unsigned framesToOutput=0;
                     QueryPerformanceFrequency(&perf_freq);
                     QueryPerformanceCounter(&perf_t0);
-                    int minFramesInput=65536;
+                    UINT32 minFramesInput=65536;
                     for (unsigned ep=0;ep<numInputEndPoints;ep++)
                     {
                         UINT32 nFramesOfPadding;
@@ -911,9 +912,11 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
 								curConf,
 								dev->m_delegateInputBuffer.data(),
 								dev->m_delegateOutputBuffer.data(),
-								0ll,
+								timeStamp,
 								framesToOutput
 							};
+
+							timeStamp += framesToOutput;
 
 							if (dev->GetBufferSwitchLock()) {
 								lock_guard<recursive_mutex> lock(*dev->GetBufferSwitchLock());
