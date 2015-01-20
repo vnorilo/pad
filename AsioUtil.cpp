@@ -38,7 +38,7 @@ namespace ASIO{
 
 		CleanupList Cleanup;
 
-		CharLowerBuffA(clsidstr,strlen(clsidstr));
+		CharLowerBuffA(clsidstr,(DWORD)strlen(clsidstr));
 		if ((cr = RegOpenKeyA(HKEY_CLASSES_ROOT,COM_CLSID,&hkEnum)) == ERROR_SUCCESS) 
 		{
 			CLEANUP(RegCloseKey(hkEnum));
@@ -46,7 +46,7 @@ namespace ASIO{
 			while (cr == ERROR_SUCCESS && !found) {
 				cr = RegEnumKeyA(hkEnum,index++,databuf,512);
 				if (cr == ERROR_SUCCESS) {
-					CharLowerBuffA(databuf,strlen(databuf));
+					CharLowerBuffA(databuf,(DWORD)strlen(databuf));
 					if (!(strcmp(databuf,clsidstr))) {
 						if ((cr = RegOpenKeyExA(hkEnum,(LPCSTR)databuf,0,KEY_READ,&hksub)) == ERROR_SUCCESS) {
 							CLEANUP(RegCloseKey(hksub));
