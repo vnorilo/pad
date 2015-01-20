@@ -35,8 +35,8 @@ namespace PAD {
 		{
 			unsigned i(0);
 			const SAMPLE* bb[VEC];//={blockBuffers[0],blockBuffers[1],blockBuffers[2],blockBuffers[3]};
-			for(unsigned i(0);i<VEC;++i) bb[i]=blockBuffers[i];
-			for(;i+VEC<=frames;i+=VEC)
+			for(i=0;i<VEC;++i) bb[i]=blockBuffers[i];
+			for(i=0;i+VEC<=frames;i+=VEC)
 			{
 				SampleVector<float,VEC> mtx[VEC];
                 SAMPLE fmt;

@@ -44,7 +44,7 @@ namespace PAD {
 		bool valid;
 	public:
 		AudioStreamConfiguration(double sampleRate = 44100.0, bool valid = true);
-		void SetSampleRate(double sampleRate) { this->sampleRate = sampleRate; }
+		void SetSampleRate(double newRate) { sampleRate = newRate; }
 
 		void SetValid(bool v) { valid = v; }
 
