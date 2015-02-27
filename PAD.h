@@ -10,6 +10,8 @@
 
 #include "PADErrors.h"
 
+#define PAD_GUI_CONTROL_PANEL_SUPPORT 0
+
 namespace PAD {
 	const char* VersionString( );
 
@@ -189,7 +191,9 @@ namespace PAD {
 		virtual void Close( ) = 0;
 
 		virtual double CPU_Load( ) const = 0;
-
+#if PAD_GUI_CONTROL_PANEL_SUPPORT
+		virtual void ShowControlPanel() = 0;
+#endif
 
 		std::shared_ptr<std::recursive_mutex>& GetBufferSwitchLock( ) { return deviceMutex; }
 		void SetBufferSwitchLock(std::shared_ptr<std::recursive_mutex> lock) { deviceMutex = std::move(lock); }
