@@ -60,10 +60,7 @@ namespace {
 	class AsioDevice : public AudioDevice {
 
 		double CPU_Load( ) const { return current_cpu_load; }
-#if PAD_GUI_CONTROL_PANEL_SUPPORT
-		void ShowControlPanel() { MessageBoxA(0,"This should be the ASIO control panel","PAD",MB_OK); }
-#endif
-
+		
 		ASIO::DriverRecord driverInfo;
 		ASIO::ComRef<ASIO::IASIO> driver;
 		string deviceName;

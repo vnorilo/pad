@@ -10,7 +10,7 @@
 
 #include "PADErrors.h"
 
-#define PAD_GUI_CONTROL_PANEL_SUPPORT 0
+#define PAD_GUI_CONTROL_PANEL_SUPPORT 1
 
 namespace PAD {
 	const char* VersionString( );
@@ -192,7 +192,12 @@ namespace PAD {
 
 		virtual double CPU_Load( ) const = 0;
 #if PAD_GUI_CONTROL_PANEL_SUPPORT
-		virtual void ShowControlPanel() = 0;
+		void ShowControlPanel() 
+		{ 
+			if (ShowControlPanelFunc)
+				ShowControlPanelFunc();
+		}
+		std::function<void(void)> ShowControlPanelFunc;
 #endif
 
 		std::shared_ptr<std::recursive_mutex>& GetBufferSwitchLock( ) { return deviceMutex; }

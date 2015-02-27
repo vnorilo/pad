@@ -405,12 +405,8 @@ public:
     }
 
     double CPU_Load() const { return m_current_cpu_load; }
-
-#if PAD_GUI_CONTROL_PANEL_SUPPORT
-	void ShowControlPanel() { MessageBoxA(0, "This should be the WASAPI control panel", "PAD", MB_OK); }
-#endif
-
-    void EnableMultiMediaThreadPriority(bool proAudio=false)
+	
+	void EnableMultiMediaThreadPriority(bool proAudio=false)
     {
         HMODULE hModule=LoadLibrary(L"avrt.dll");
         if (hModule)
