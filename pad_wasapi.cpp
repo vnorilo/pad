@@ -86,10 +86,12 @@ public:
     };
 
     WasapiDevice() :
-        m_numInputs(0), m_numOutputs(0), m_currentState(WASS_Idle) {}
+        m_numInputs(0), m_numOutputs(0), m_currentState(WASS_Idle) 
+	{
+		ShowControlPanelFunc = []() { MessageBoxA(0, "This should be the WASAPI control panel", "PAD", MB_OK); };
+	}
     ~WasapiDevice()
     {
-        //cwindbg() << "WasapiDevice dtor\n";
         if (m_audioThreadHandle!=0)
             Close();
     }
