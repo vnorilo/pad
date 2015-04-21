@@ -89,7 +89,7 @@ namespace {
 			:caID(id), numInputs(CountChannels(true, inputChannelFormat)), numOutputs(CountChannels(false, outputChannelFormat)),
 			devName(GetName(true) + "/" + GetName(false)) { }
 
-
+        ~CoreAudioDevice() { Close(); }
 		const char* GetName( ) const { return devName.c_str( ); }
 		unsigned GetNumInputs( ) const { return numInputs; }
 		unsigned GetNumOutputs( ) const { return numOutputs; }
@@ -101,7 +101,7 @@ namespace {
 
 		AudioStreamConfiguration currentConfiguration;
 
-		AudioUnit AUHAL;
+		AudioUnit AUHAL=nullptr;
 
 		static void CopyChannelBundle(void *dest, const void *src, unsigned copySz, unsigned destStride, unsigned srcStride, unsigned frames) {
 			char *destb = (char *)dest;
@@ -223,8 +223,11 @@ namespace {
 
 		void Close( )
         {
-            AudioUnitUninitialize (AUHAL);
-            
+            if (AUHAL!=nullptr)
+            {
+                AudioUnitUninitialize (AUHAL);
+                AUHAL=nullptr;
+            }
         }
 
 		bool Supports(const AudioStreamConfiguration&) const { return false; }
