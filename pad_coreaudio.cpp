@@ -221,7 +221,11 @@ namespace {
 			THROW_ERROR(DeviceStopStreamFailure, AudioOutputUnitStop(AUHAL));
 		}
 
-		void Close( ) { }
+		void Close( )
+        {
+            AudioUnitUninitialize (AUHAL);
+            
+        }
 
 		bool Supports(const AudioStreamConfiguration&) const { return false; }
 
