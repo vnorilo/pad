@@ -225,8 +225,11 @@ namespace {
         {
             if (AUHAL!=nullptr)
             {
-                AudioUnitUninitialize (AUHAL);
-                AUHAL=nullptr;
+                if (AudioUnitUninitialize (AUHAL) == noErr)
+                {
+                    AUHAL=nullptr;
+                    StreamDidEnd();
+                } else throw SoftError(DeviceCloseStreamFailure,"Could not stop stream");
             }
         }
 
