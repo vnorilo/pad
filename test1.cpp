@@ -1,49 +1,59 @@
+#include <array>
+#include <cmath>
+#include <functional>
 
-#define USE_AVX
+class DSPKernel {
+public:
+	virtual void Begin(float sampleRate) = 0;
+	virtual float Process(float input) = 0;
+	virtual void End( ) = 0;
+};
 
-#include <iostream>
-#include <iomanip>
-#define _USE_MATH_DEFINES
-#include <math.h>
-#include <algorithm>
-#include <chrono>
+template <int STAGES> class DSPChannel : public DSPKernel {
+	std::array<DSPKernel*, STAGES> pipeline;
+	DSPKernel*  ref(DSPKernel& krn) { return &krn; }
+public:
+	template <typename... KERNELS> DSPChannel(KERNELS&... krn) : pipeline{ref(krn)...} { }
+	void Begin(float sampleRate) { for (auto krn : pipeline) krn->Begin(sampleRate); }
+	void End() { for (auto krn : pipeline) krn->End(); }
+	float Process(float sig) { for (auto krn : pipeline) sig = krn->Process(sig); return sig; }
+};
 
-#include "PAD.h"
+template <typename DSP1, typename DSP2, typename OP> class DSPOp {
+	DSP1& dsp1; DSP2& dsp2;
+public:
+	DSPOp(DSP1& dsp1, DSP2& dsp2) :dsp1(dsp1), dsp2(dsp2) { }
+	virtual float Process(float in) { OP op; return op(dsp1.Process(in), dsp2.Process(in)); }
+	virtual void Begin(float sampleRate) { dsp1.Begin(sampleRate); dsp2.Begin(sampleRate); }
+	virtual void End( ) { dsp1.End( ); dsp2.End( ); }
+};
 
-int main() {
-	using namespace PAD;
+#define AUTO_EXPR(expr) ->decltype(expr) { return expr; }
 
-	class ErrorLogger : public DeviceErrorDelegate {
-	public:
-		void Catch(SoftError e) { std::cerr << "*Soft " << e.GetCode() << "* :" << e.what() << "\n"; }
-		void Catch(HardError e) { std::cerr << "*Hard " << e.GetCode() << "* :" << e.what() << "\n"; }
-	};
+template <typename... KERNELS> static auto Channel(KERNELS&... kernels) AUTO_EXPR(DSPChannel<sizeof...(KERNELS)>(kernels...))
+template <int A, int B> static auto operator+(DSPChannel<A> a, DSPChannel<B> b) AUTO_EXPR(DSPOp<DSPChannel<A>,DSPChannel<B>,std::plus<float>>(a, b))
+template <int A, int B> static auto operator-(DSPChannel<A> a, DSPChannel<B> b) AUTO_EXPR(DSPOp<DSPChannel<A>,DSPChannel<B>,std::minus<float>>(a, b))
+template <int A, int B> static auto operator*(DSPChannel<A> a, DSPChannel<B> b) AUTO_EXPR(DSPOp<DSPChannel<A>,DSPChannel<B>,std::multiplies<float>>(a, b))
 
-    ErrorLogger log;	
-	Session myAudioSession(true,&log);
+void Play(DSPKernel&, int numSamples);
 
-	for (auto& d : myAudioSession) {
-		std::cout << d.GetHostAPI() << " " << d.GetName() << " " << d.GetNumOutputs() << "x" << d.GetNumInputs() << " \n";
-		try {
-			d.BufferSwitch = [&](IO io) {
-				unsigned numOuts(io.config.GetNumStreamOutputs());
-				static double phase = 0;
-				for (unsigned i(0); i < io.numFrames; ++i) {
-					for (unsigned j(0); j < numOuts; ++j) {
-						io.output[i*numOuts + j] = sin(phase);
-					}
-					phase+=0.1;
-				}
-			};
+class SinOsc {
+	float phase;
+	float inc;
+public:
+	SinOsc(float f) {
+		freq = f;
+	}
 
-			std::cout << "* Opening\n";
-			d.Open(d.DefaultStereo());
-			getchar();
-			std::cout << "* Closing\n";
-			d.Close();
-		}
-		catch (std::runtime_error e) {
-			std::cerr << e.what();
-		}
-	} 
+	void Begin(float sampleRate) {
+		inc = M_PI * 2 * freq / sampleRate;
+	}
+
+	float Process(float in) {
+
+	}
+};
+
+int main( ) {
+
 }
