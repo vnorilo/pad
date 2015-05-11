@@ -113,6 +113,7 @@ namespace {
 
 
 		vector<float> delegateInputBuffer;
+		std::uint64_t padTimeStamp = 0;
 
 		OSStatus AUHALProc(AudioUnitRenderActionFlags* ioFlags, const AudioTimeStamp *timeStamp, UInt32 Bus, UInt32 frames, AudioBufferList *io) {
 			if (Bus == 0) {
@@ -136,10 +137,11 @@ namespace {
 				if (GetBufferSwitchLock( )) {
 					std::lock_guard<recursive_mutex> lock(*GetBufferSwitchLock( ));
                     
-                    BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, 0ll, frames});
+                    BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, padTimeStamp, frames});
                                  
-                } else BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, 0ll, frames});
+                } else BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, padTimeStamp, frames});
 
+		padTimeStamp += frames;
 			}
 			return noErr;
 		}
@@ -207,7 +209,7 @@ namespace {
 
 			THROW_ERROR(DeviceInitializationFailure, AudioUnitInitialize(AUHAL));
 
-
+			padTimeStamp = 0ul;
 			if (currentConfiguration.HasSuspendOnStartup( ) == false) Resume( );
 
 			return currentConfiguration;
