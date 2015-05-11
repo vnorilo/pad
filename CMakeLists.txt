@@ -1,8 +1,8 @@
 project(pad CXX)
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.2)
 
-set(CXX_STANDARD 11)
-set(CXX_STANDARD_REQUIRED 11)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	add_definitions(
@@ -13,7 +13,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 			-D_UNICODE -DUNICODE
 			 "/wd4458" "/wd4457" "/wd4456")
 else ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse2 -fno-rtti -Wno-reorder -Wno-unused-function")
+	add_definitions(-msse2 -fno-rtti -Wno-reorder -Wno-unused-function -Wno-ignored-attributes)
 endif()
 
 option(PAD_SHARED_LIBRARY "Build PAD as a shared library" OFF)
@@ -106,6 +106,6 @@ if (contains)
 	target_link_libraries( pad ${AUDIOUNIT_FRAMEWORK} ${COREAUDIO_FRAMEWORK})
 endif()
 
-add_executable(pad_test test1.cpp)
+add_executable(pad_test "test1.cpp")
 target_link_libraries( pad_test pad )
 
