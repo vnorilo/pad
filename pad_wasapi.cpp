@@ -86,10 +86,12 @@ public:
     };
 
     WasapiDevice() :
-        m_numInputs(0), m_numOutputs(0), m_currentState(WASS_Idle) {}
+        m_numInputs(0), m_numOutputs(0), m_currentState(WASS_Idle) 
+	{
+		ShowControlPanelFunc = []() { MessageBoxA(0, "This should be the WASAPI control panel", "PAD", MB_OK); };
+	}
     ~WasapiDevice()
     {
-        //cwindbg() << "WasapiDevice dtor\n";
         if (m_audioThreadHandle!=0)
             Close();
     }
@@ -331,7 +333,17 @@ public:
             if (m_audioThreadHandle==0)
             {
                 cwindbg() << "PAD/WASAPI : Could not create audio thread :C\n";
+				return;
             }
+			SYSTEM_INFO sysinfo;
+			GetSystemInfo(&sysinfo);
+			if (sysinfo.dwNumberOfProcessors > 1)
+			{
+				DWORD_PTR affinityMask = 1 << 1;
+				if (sysinfo.dwNumberOfProcessors > 2)
+					affinityMask = 1 << 2;
+				SetThreadAffinityMask(m_audioThreadHandle, affinityMask);
+			}
         }
     }
 
@@ -816,7 +828,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         {
             return 0;
         }
-        LARGE_INTEGER perf_freq;
+		LARGE_INTEGER perf_freq;
         LARGE_INTEGER perf_t0;
         LARGE_INTEGER perf_t1;
         COMInitRAIIHelper com_initer;
