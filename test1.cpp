@@ -1,49 +1,50 @@
-
-#define USE_AVX
-
+#ifndef PAD_EXPORT_STATIC_LIB
 #include <iostream>
-#include <iomanip>
+#include "pad.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
-#include <algorithm>
-#include <chrono>
+#include <thread>
 
-#include "PAD.h"
+using namespace std;
+using namespace PAD;
 
-int main() {
-	using namespace PAD;
+class ErrorLogger : public DeviceErrorDelegate {
+public:
+    void Catch(SoftError e) {std::cerr << "*Soft "<<e.GetCode()<<"* :" << e.what() << "\n";}
+    void Catch(HardError e) {std::cerr << "*Hard "<<e.GetCode()<<"* :" << e.what() << "\n";}
+};
 
-	class ErrorLogger : public DeviceErrorDelegate {
-	public:
-		void Catch(SoftError e) { std::cerr << "*Soft " << e.GetCode() << "* :" << e.what() << "\n"; }
-		void Catch(HardError e) { std::cerr << "*Hard " << e.GetCode() << "* :" << e.what() << "\n"; }
-	};
+int main()
+{
+    cout << "Hello from PAD "<<PAD::VersionString()<<"!"<<endl;
+    //getchar();
+    ErrorLogger el;
+    Session myAudioSession(true,&el);
 
-    ErrorLogger log;	
-	Session myAudioSession(true,&log);
+    for(auto&& d : myAudioSession) {
+      std::cout << "Testing " << d.GetName() << "\n" << d.DefaultAllChannels() << "\n";
+      double phase = 0.0;
+      try {
+      if (d.DefaultAllChannels().GetNumStreamOutputs() > 0) {
+        d.BufferSwitch = [&](PAD::IO io) { 
+          int nc = io.config.GetNumStreamOutputs();
+          for(int i=0;i<io.numFrames;++i) {
+            for(int c =0;c<nc;++c) {
+              io.output[i*nc+c] = sin(phase);
+            }
+            phase += 0.01;
+          }
+        };
+      }
+      d.Open(d.DefaultAllChannels());
+      std::this_thread::sleep_for(std::chrono::seconds(2));
+      d.Close();
+      } catch(std::exception& e) {
+        std::cout << "* ERROR " << e.what() << " *\n";
+      }
+    }
 
-	for (auto& d : myAudioSession) {
-		std::cout << d.GetHostAPI() << " " << d.GetName() << " " << d.GetNumOutputs() << "x" << d.GetNumInputs() << " \n";
-		try {
-			d.BufferSwitch = [&](IO io) {
-				unsigned numOuts(io.config.GetNumStreamOutputs());
-				static double phase = 0;
-				for (unsigned i(0); i < io.numFrames; ++i) {
-					for (unsigned j(0); j < numOuts; ++j) {
-						io.output[i*numOuts + j] = sin(phase);
-					}
-					phase+=0.1;
-				}
-			};
-
-			std::cout << "* Opening\n";
-			d.Open(d.DefaultStereo());
-			getchar();
-			std::cout << "* Closing\n";
-			d.Close();
-		}
-		catch (std::runtime_error e) {
-			std::cerr << e.what();
-		}
-	} 
+    return 0;
 }
+
+#endif

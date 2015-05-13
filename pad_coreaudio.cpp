@@ -89,7 +89,7 @@ namespace {
 			:caID(id), numInputs(CountChannels(true, inputChannelFormat)), numOutputs(CountChannels(false, outputChannelFormat)),
 			devName(GetName(true) + "/" + GetName(false)) { }
 
-
+        ~CoreAudioDevice() { Close(); }
 		const char* GetName( ) const { return devName.c_str( ); }
 		unsigned GetNumInputs( ) const { return numInputs; }
 		unsigned GetNumOutputs( ) const { return numOutputs; }
@@ -101,7 +101,7 @@ namespace {
 
 		AudioStreamConfiguration currentConfiguration;
 
-		AudioUnit AUHAL;
+		AudioUnit AUHAL=nullptr;
 
 		static void CopyChannelBundle(void *dest, const void *src, unsigned copySz, unsigned destStride, unsigned srcStride, unsigned frames) {
 			char *destb = (char *)dest;
@@ -113,6 +113,7 @@ namespace {
 
 
 		vector<float> delegateInputBuffer;
+		std::uint64_t padTimeStamp = 0;
 
 		OSStatus AUHALProc(AudioUnitRenderActionFlags* ioFlags, const AudioTimeStamp *timeStamp, UInt32 Bus, UInt32 frames, AudioBufferList *io) {
 			if (Bus == 0) {
@@ -136,10 +137,11 @@ namespace {
 				if (GetBufferSwitchLock( )) {
 					std::lock_guard<recursive_mutex> lock(*GetBufferSwitchLock( ));
                     
-                    BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, 0ll, frames});
+                    BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, padTimeStamp, frames});
                                  
-                } else BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, 0ll, frames});
+                } else BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, padTimeStamp, frames});
 
+		padTimeStamp += frames;
 			}
 			return noErr;
 		}
@@ -207,7 +209,7 @@ namespace {
 
 			THROW_ERROR(DeviceInitializationFailure, AudioUnitInitialize(AUHAL));
 
-
+			padTimeStamp = 0ul;
 			if (currentConfiguration.HasSuspendOnStartup( ) == false) Resume( );
 
 			return currentConfiguration;
@@ -221,7 +223,17 @@ namespace {
 			THROW_ERROR(DeviceStopStreamFailure, AudioOutputUnitStop(AUHAL));
 		}
 
-		void Close( ) { }
+		void Close( )
+        {
+            if (AUHAL!=nullptr)
+            {
+                if (AudioUnitUninitialize (AUHAL) == noErr)
+                {
+                    AUHAL=nullptr;
+                    StreamDidEnd();
+                } else throw SoftError(DeviceCloseStreamFailure,"Could not stop stream");
+            }
+        }
 
 		bool Supports(const AudioStreamConfiguration&) const { return false; }
 
