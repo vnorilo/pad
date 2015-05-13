@@ -1,7 +1,10 @@
 project(pad CXX)
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.2)
 
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL MSVC)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	add_definitions(
 			-D_CRT_SECURE_NO_DEPREATE 
 			-D_CRT_NONSTDC_NO_DEPRECATE 
@@ -9,15 +12,8 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL MSVC)
 			-D_SCL_SECURE_NO_WARNINGS
 			-D_UNICODE -DUNICODE
 			 "/wd4458" "/wd4457" "/wd4456")
-	message(STATUS "Setting up MSVC compiler flags...")
-elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -msse2 -fno-rtti -Wno-reorder -Wno-unused-function")
-	message(STATUS "Setting up Gnu compiler flags...")
-elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -std=c++11 -fno-rtti -Wno-reorder -Wno-unused-function")
-    message(STATUS "Setting up Clang compiler flags...")
 else ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-	message(FATAL_ERROR "Unknown C++ compiler ${CMAKE_CXX_COMPILER_ID}")
+	add_definitions(-msse2 -fno-rtti -Wno-reorder -Wno-unused-function -Wno-ignored-attributes)
 endif()
 
 option(PAD_SHARED_LIBRARY "Build PAD as a shared library" OFF)
@@ -110,6 +106,6 @@ if (contains)
 	target_link_libraries( pad ${AUDIOUNIT_FRAMEWORK} ${COREAUDIO_FRAMEWORK})
 endif()
 
-add_executable(pad_test test1.cpp)
+add_executable(pad_test "test1.cpp")
 target_link_libraries( pad_test pad )
 
