@@ -244,11 +244,6 @@ namespace {
 	class CoreaudioPublisher : public HostAPIPublisher {
 		list<CoreAudioDevice> devices;
 	public:
-		void RegisterDevice(Session& PI, const CoreAudioDevice& dev) {
-			devices.push_back(dev);
-			PI.Register(&devices.back( ));
-		}
-
 		void Publish(Session& PADInstance, DeviceErrorDelegate& errorHandler) {
 			UInt32 propsize(0);
 			AudioObjectPropertyAddress theAddress = {kAudioHardwarePropertyDevices,
@@ -262,12 +257,22 @@ namespace {
 
 			for (auto dev : devids) {
 				try {
-					RegisterDevice(PADInstance, CoreAudioDevice(dev));
+					devices.emplace_back(dev);
 				} catch (SoftError se) {
 					errorHandler.Catch(se);
 				} catch (HardError he) {
 					errorHandler.Catch(he);
 				}
+			}
+
+			devices.sort([](const CoreAudioDevice& a, const CoreAudioDevice& b) {
+				if (a.GetNumOutputs() > b.GetNumOutputs()) return true;
+				if (a.GetNumOutputs() < b.GetNumOutputs()) return false;
+				return a.GetNumInputs() > b.GetNumInputs();
+			});
+
+			for(auto& d : devices) {
+				PADInstance.Register(&d);
 			}
 		}
 		const char *GetName( ) const { return "CoreAudio"; }
