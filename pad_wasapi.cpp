@@ -296,7 +296,7 @@ public:
 									m_inputEndPoints[endPointToActivate].m_AudioClient = theClient;
 									m_inputEndPoints[endPointToActivate].m_AudioCaptureClient = theAudioCaptureClient;
 									m_enabledDeviceInputs.resize(m_numInputs);
-									for (unsigned i = 0; i < m_numOutputs; i++)
+									for (unsigned i = 0; i < m_numInputs; i++)
 									{
 										m_enabledDeviceInputs[i] = currentConfiguration.IsInputEnabled(i);
 									}
