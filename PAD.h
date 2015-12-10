@@ -226,6 +226,7 @@ namespace PAD {
 		AudioDevice& operator*() { assert(ptr); return **ptr; }
 		AudioDevice* operator->() { assert(ptr); return *ptr; }
 		operator AudioDevice*() { assert(ptr);  return *ptr; }
+		operator bool() const { return ptr != nullptr; }
 		AudioDeviceIterator& operator++() { ptr++; return *this; }
 		AudioDeviceIterator operator++(int) { auto tmp(*this); ptr++; return tmp; }
 	};
@@ -238,7 +239,7 @@ namespace PAD {
 
 	std::vector<IHostAPI*> GetLinkedAPIs( );
 
-	static inline void* LinkAPIs( ) { GetLinkedAPIs( ); return nullptr; }
+	static inline void* LinkAPIs( ) { return GetLinkedAPIs( ).data( ); }
 
 	class Session {
 		std::vector<AudioDevice*> devices;
