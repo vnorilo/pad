@@ -113,6 +113,7 @@ namespace {
 
 
 		vector<float> delegateInputBuffer;
+		std::uint64_t padTimeStamp = 0;
 
 		OSStatus AUHALProc(AudioUnitRenderActionFlags* ioFlags, const AudioTimeStamp *timeStamp, UInt32 Bus, UInt32 frames, AudioBufferList *io) {
 			if (Bus == 0) {
@@ -136,10 +137,11 @@ namespace {
 				if (GetBufferSwitchLock( )) {
 					std::lock_guard<recursive_mutex> lock(*GetBufferSwitchLock( ));
                     
-                    BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, 0ll, frames});
+                    BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, padTimeStamp, frames});
                                  
-                } else BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, 0ll, frames});
+                } else BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, padTimeStamp, frames});
 
+		padTimeStamp += frames;
 			}
 			return noErr;
 		}
@@ -207,7 +209,7 @@ namespace {
 
 			THROW_ERROR(DeviceInitializationFailure, AudioUnitInitialize(AUHAL));
 
-
+			padTimeStamp = 0ul;
 			if (currentConfiguration.HasSuspendOnStartup( ) == false) Resume( );
 
 			return currentConfiguration;
@@ -242,11 +244,6 @@ namespace {
 	class CoreaudioPublisher : public HostAPIPublisher {
 		list<CoreAudioDevice> devices;
 	public:
-		void RegisterDevice(Session& PI, const CoreAudioDevice& dev) {
-			devices.push_back(dev);
-			PI.Register(&devices.back( ));
-		}
-
 		void Publish(Session& PADInstance, DeviceErrorDelegate& errorHandler) {
 			UInt32 propsize(0);
 			AudioObjectPropertyAddress theAddress = {kAudioHardwarePropertyDevices,
@@ -260,12 +257,22 @@ namespace {
 
 			for (auto dev : devids) {
 				try {
-					RegisterDevice(PADInstance, CoreAudioDevice(dev));
+					devices.emplace_back(dev);
 				} catch (SoftError se) {
 					errorHandler.Catch(se);
 				} catch (HardError he) {
 					errorHandler.Catch(he);
 				}
+			}
+
+			devices.sort([](const CoreAudioDevice& a, const CoreAudioDevice& b) {
+				if (a.GetNumOutputs() > b.GetNumOutputs()) return true;
+				if (a.GetNumOutputs() < b.GetNumOutputs()) return false;
+				return a.GetNumInputs() > b.GetNumInputs();
+			});
+
+			for(auto& d : devices) {
+				PADInstance.Register(&d);
 			}
 		}
 		const char *GetName( ) const { return "CoreAudio"; }

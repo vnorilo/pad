@@ -1,8 +1,8 @@
 project(pad CXX)
-cmake_minimum_required(VERSION 3.2)			
+cmake_minimum_required(VERSION 3.2)
 
 set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	message(STATUS "Setting up MSVC compiler flags...")
@@ -109,6 +109,6 @@ if (contains)
 	target_link_libraries( pad ${AUDIOUNIT_FRAMEWORK} ${COREAUDIO_FRAMEWORK})
 endif()
 
-add_executable(pad_test test1.cpp)
+add_executable(pad_test "test1.cpp")
 target_link_libraries( pad_test pad )
 
