@@ -1,19 +1,22 @@
 project(pad CXX)
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.2)			
 
-set(CXX_STANDARD 11)
-set(CXX_STANDARD_REQUIRED 11)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED 11)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+	message(STATUS "Setting up MSVC compiler flags...")
 	add_definitions(
 			-D_CRT_SECURE_NO_DEPREATE 
 			-D_CRT_NONSTDC_NO_DEPRECATE 
 			-D_CRT_SECURE_NO_WARNINGS
 			-D_SCL_SECURE_NO_WARNINGS
+			-DNOMINMAX
 			-D_UNICODE -DUNICODE
 			 "/wd4458" "/wd4457" "/wd4456")
+	set(CMAKE_EXE_LINKER_FLAGS "/ENTRY:wmainCRTStartup")
 else ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse2 -fno-rtti -Wno-reorder -Wno-unused-function")
+	add_definitions(-msse2 -fno-rtti -Wno-reorder -Wno-unused-function)
 endif()
 
 option(PAD_SHARED_LIBRARY "Build PAD as a shared library" OFF)
