@@ -296,7 +296,7 @@ public:
 									m_inputEndPoints[endPointToActivate].m_AudioClient = theClient;
 									m_inputEndPoints[endPointToActivate].m_AudioCaptureClient = theAudioCaptureClient;
 									m_enabledDeviceInputs.resize(m_numInputs);
-									for (unsigned i = 0; i < m_numOutputs; i++)
+									for (unsigned i = 0; i < m_numInputs; i++)
 									{
 										m_enabledDeviceInputs[i] = currentConfiguration.IsInputEnabled(i);
 									}
@@ -333,7 +333,17 @@ public:
             if (m_audioThreadHandle==0)
             {
                 cwindbg() << "PAD/WASAPI : Could not create audio thread :C\n";
+				return;
             }
+			SYSTEM_INFO sysinfo;
+			GetSystemInfo(&sysinfo);
+			if (sysinfo.dwNumberOfProcessors > 1)
+			{
+				DWORD_PTR affinityMask = 1 << 1;
+				if (sysinfo.dwNumberOfProcessors > 2)
+					affinityMask = 1 << 2;
+				SetThreadAffinityMask(m_audioThreadHandle, affinityMask);
+			}
         }
     }
 
@@ -818,7 +828,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         {
             return 0;
         }
-        LARGE_INTEGER perf_freq;
+		LARGE_INTEGER perf_freq;
         LARGE_INTEGER perf_t0;
         LARGE_INTEGER perf_t1;
         COMInitRAIIHelper com_initer;
