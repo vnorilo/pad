@@ -19,8 +19,6 @@ else ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	add_definitions(-msse2 -fno-rtti -Wno-reorder -Wno-unused-function)
 endif()
 
-option(PAD_SHARED_LIBRARY "Build PAD as a shared library" OFF)
-
 if(APPLE)
 	set(CMAKE_OSX_ARCHITECTURES "x86_64" CACHE STRING "Build architecture")
 endif()
@@ -90,11 +88,7 @@ if (contains)
 	add_definitions(-DPAD_LINK_JACK)
 endif()
 
-if (PAD_SHARED_LIBRARY)
-	add_library(pad SHARED ${PAD_SOURCES})
-else (PAD_SHARED_LIBRARY)
-	add_library(pad STATIC ${PAD_SOURCES})
-endif()
+add_library(pad STATIC ${PAD_SOURCES})
 
 LIST_CONTAINS(contains jack ${PAD_HOSTAPIS})
 if (contains)
