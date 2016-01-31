@@ -1,12 +1,11 @@
 #pragma once
 #include <Windows.h>
 #include "Unknwn.h"
-#undef min
-#undef max
 
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <algorithm>
 
 #pragma pack(push,4)
 
@@ -233,7 +232,7 @@ namespace ASIO {
 		T* ptr;
 	public:
 		ComRef& operator=(const ComRef& c) {if (ptr!=c.ptr) {c.ptr->AddRef();ptr->Release();ptr=c.ptr;} return *this; }
-		ComRef& operator=(ComRef&& c) {swap(ptr,c.ptr);return *this;}
+		ComRef& operator=(ComRef&& c) { std::swap(this->ptr,c.ptr); return *this; }
 		ComRef(T* ptr=0):ptr(ptr) {if (ptr) ptr->AddRef();}
 		ComRef(const ComRef& c):ptr(c.ptr) {if (ptr) ptr->AddRef();}
 		ComRef(ComRef&& c):ptr(c.ptr){c.ptr=0;}

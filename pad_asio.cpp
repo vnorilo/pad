@@ -1,6 +1,4 @@
 #include "AsioUtil.h"
-#undef min
-#undef max
 
 #include <string>
 #include <set>

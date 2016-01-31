@@ -5,18 +5,19 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+	message(STATUS "Setting up MSVC compiler flags...")
 	add_definitions(
 			-D_CRT_SECURE_NO_DEPREATE 
 			-D_CRT_NONSTDC_NO_DEPRECATE 
 			-D_CRT_SECURE_NO_WARNINGS
 			-D_SCL_SECURE_NO_WARNINGS
+			-DNOMINMAX
 			-D_UNICODE -DUNICODE
 			 "/wd4458" "/wd4457" "/wd4456")
+	set(CMAKE_EXE_LINKER_FLAGS "/ENTRY:wmainCRTStartup")
 else ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-	add_definitions(-msse2 -fno-rtti -Wno-reorder -Wno-unused-function -Wno-ignored-attributes)
+	add_definitions(-msse2 -fno-rtti -Wno-reorder -Wno-unused-function)
 endif()
-
-option(PAD_SHARED_LIBRARY "Build PAD as a shared library" OFF)
 
 if(APPLE)
 	set(CMAKE_OSX_ARCHITECTURES "x86_64" CACHE STRING "Build architecture")
@@ -87,11 +88,7 @@ if (contains)
 	add_definitions(-DPAD_LINK_JACK)
 endif()
 
-if (PAD_SHARED_LIBRARY)
-	add_library(pad SHARED ${PAD_SOURCES})
-else (PAD_SHARED_LIBRARY)
-	add_library(pad STATIC ${PAD_SOURCES})
-endif()
+add_library(pad STATIC ${PAD_SOURCES})
 
 LIST_CONTAINS(contains jack ${PAD_HOSTAPIS})
 if (contains)
