@@ -821,7 +821,7 @@ void fill_with_silence(short* wasapiExclusiveOutput,
 
 DWORD WINAPI WasapiThreadFunction(LPVOID params)
 {
-    WasapiDevice* dev=(WasapiDevice*)params;
+	WasapiDevice* dev=(WasapiDevice*)params;
     try
     {
         if (dev->m_outputEndPoints.size()==0)
@@ -863,6 +863,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         //throw std::exception("test pad exceptioopn");
         while (dev->m_threadShouldStop==false)
         {
+			
 			std::uint64_t timeStamp = 0;
             while (dev->m_currentState==WasapiDevice::WASS_Playing)
             {
