@@ -420,11 +420,15 @@ public:
 	
 	void EnableMultiMediaThreadPriority(bool proAudio=false)
     {
-        HMODULE hModule=LoadLibrary(L"avrt.dll");
+        HMODULE hModule=LoadLibraryA("avrt.dll");
         if (hModule)
         {
             HANDLE (WINAPI *ptrAvSetMmThreadCharacteristics)(LPCTSTR,LPDWORD);
-            *((void **)&ptrAvSetMmThreadCharacteristics)=(void*)GetProcAddress(hModule,"AvSetMmThreadCharacteristicsW");
+#ifndef UNICODE
+			*((void **)&ptrAvSetMmThreadCharacteristics)=(void*)GetProcAddress(hModule,"AvSetMmThreadCharacteristicsA");
+#else
+			*((void **)&ptrAvSetMmThreadCharacteristics) = (void*)GetProcAddress(hModule, "AvSetMmThreadCharacteristicsW");
+#endif
             BOOL (WINAPI *ptrAvSetMmThreadPriority)(HANDLE,AVRT_PRIORITY);
             *((void **)&ptrAvSetMmThreadPriority)=(void*)GetProcAddress(hModule,"AvSetMmThreadPriority");
             if (ptrAvSetMmThreadCharacteristics!=0 && ptrAvSetMmThreadPriority!=0)
@@ -432,8 +436,8 @@ public:
                 DWORD foo=0;
                 HANDLE h = 0;
                 if (proAudio==false)
-                    h=ptrAvSetMmThreadCharacteristics(L"Audio", &foo);
-                else h=ptrAvSetMmThreadCharacteristics(L"Pro Audio", &foo);
+                    h=ptrAvSetMmThreadCharacteristics(TEXT("Audio"), &foo);
+                else h=ptrAvSetMmThreadCharacteristics(TEXT("Pro Audio"), &foo);
                 if (h != 0)
                 {
                     BOOL result=ptrAvSetMmThreadPriority (h, AVRT_PRIORITY_NORMAL);
@@ -821,7 +825,7 @@ void fill_with_silence(short* wasapiExclusiveOutput,
 
 DWORD WINAPI WasapiThreadFunction(LPVOID params)
 {
-    WasapiDevice* dev=(WasapiDevice*)params;
+	WasapiDevice* dev=(WasapiDevice*)params;
     try
     {
         if (dev->m_outputEndPoints.size()==0)
@@ -863,6 +867,7 @@ DWORD WINAPI WasapiThreadFunction(LPVOID params)
         //throw std::exception("test pad exceptioopn");
         while (dev->m_threadShouldStop==false)
         {
+			
 			std::uint64_t timeStamp = 0;
             while (dev->m_currentState==WasapiDevice::WASS_Playing)
             {
