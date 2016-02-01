@@ -1,6 +1,8 @@
 project(pad CXX)
 cmake_minimum_required(VERSION 3.2)
 
+set(CPACK_PACKAGE_VERSION 0.1.0)
+
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -14,7 +16,6 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 			-DNOMINMAX
 			-D_UNICODE -DUNICODE
 			 "/wd4458" "/wd4457" "/wd4456")
-	set(CMAKE_EXE_LINKER_FLAGS "/ENTRY:wmainCRTStartup")
 else ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	add_definitions(-msse2 -fno-rtti -Wno-reorder -Wno-unused-function)
 endif()
@@ -106,3 +107,38 @@ endif()
 add_executable(pad_test "test1.cpp")
 target_link_libraries( pad_test pad )
 
+target_include_directories(pad INTERFACE 
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+	$<INSTALL_INTERFACE:include>)
+
+install( TARGETS pad EXPORT PADTargets
+	LIBRARY DESTINATION lib 
+	ARCHIVE DESTINATION lib 
+	PUBLIC_HEADER DESTINATION include 
+    FRAMEWORK DESTINATION "/Library/Frameworks" )
+
+include(CMakePackageConfigHelpers)
+write_basic_package_Version_file(
+	"${CMAKE_CURRENT_BINARY_DIR}/PAD/PADConfigVersion.cmake"
+	VERSION "${CPACK_PACKAGE_VERSION}"
+	COMPATIBILITY AnyNewerVersion
+)
+
+export(EXPORT PADTargets
+	FILE "${CMAKE_CURRENT_BINARY_DIR}/PAD/PADTargets.cmake"
+	NAMESPACE PAD::)
+
+configure_file(PADConfig.cmake
+	"${CMAKE_CURRENT_BINARY_DIR}/PAD/PADConfig.cmake"
+	COPYONLY)
+
+set(ConfigPackageLocation lib/cmake/pad)
+install(EXPORT PADTargets
+		FILE PADTargets.cmake
+		NAMESPACE PAD::
+		DESTINATION ${ConfigPackageLocation})
+
+install(FILES
+	package/PADConfig.cmake
+	"${CMAKE_CURRENT_BINARY_DIR}/Kronos/PADConfigVersion.cmake"
+	DESTINATION ${ConfigPackageLocation})
