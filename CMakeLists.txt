@@ -139,6 +139,6 @@ install(EXPORT PADTargets
 		DESTINATION ${ConfigPackageLocation})
 
 install(FILES
-	package/PADConfig.cmake
+	PADConfig.cmake
 	"${CMAKE_CURRENT_BINARY_DIR}/pad/PADConfigVersion.cmake"
 	DESTINATION ${ConfigPackageLocation})
