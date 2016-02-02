@@ -104,6 +104,10 @@ if (contains)
 	target_link_libraries( pad ${AUDIOUNIT_FRAMEWORK} ${COREAUDIO_FRAMEWORK})
 endif()
 
+set_target_properties( pad 
+		       PROPERTIES 
+		       PUBLIC_HEADER "PAD.h;PADErrors.h")
+
 add_executable(pad_test "test1.cpp")
 target_link_libraries( pad_test pad )
 
@@ -142,3 +146,4 @@ install(FILES
 	PADConfig.cmake
 	"${CMAKE_CURRENT_BINARY_DIR}/pad/PADConfigVersion.cmake"
 	DESTINATION ${ConfigPackageLocation})
+
