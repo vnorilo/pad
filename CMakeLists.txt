@@ -119,17 +119,17 @@ install( TARGETS pad EXPORT PADTargets
 
 include(CMakePackageConfigHelpers)
 write_basic_package_Version_file(
-	"${CMAKE_CURRENT_BINARY_DIR}/PAD/PADConfigVersion.cmake"
+	"${CMAKE_CURRENT_BINARY_DIR}/pad/PADConfigVersion.cmake"
 	VERSION "${CPACK_PACKAGE_VERSION}"
 	COMPATIBILITY AnyNewerVersion
 )
 
 export(EXPORT PADTargets
-	FILE "${CMAKE_CURRENT_BINARY_DIR}/PAD/PADTargets.cmake"
+	FILE "${CMAKE_CURRENT_BINARY_DIR}/pad/PADTargets.cmake"
 	NAMESPACE PAD::)
 
 configure_file(PADConfig.cmake
-	"${CMAKE_CURRENT_BINARY_DIR}/PAD/PADConfig.cmake"
+	"${CMAKE_CURRENT_BINARY_DIR}/PADConfig.cmake"
 	COPYONLY)
 
 set(ConfigPackageLocation lib/cmake/pad)
@@ -140,5 +140,5 @@ install(EXPORT PADTargets
 
 install(FILES
 	package/PADConfig.cmake
-	"${CMAKE_CURRENT_BINARY_DIR}/Kronos/PADConfigVersion.cmake"
+	"${CMAKE_CURRENT_BINARY_DIR}/pad/PADConfigVersion.cmake"
 	DESTINATION ${ConfigPackageLocation})
