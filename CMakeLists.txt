@@ -133,10 +133,10 @@ export(EXPORT PADTargets
 	NAMESPACE PAD::)
 
 configure_file(PADConfig.cmake
-	"${CMAKE_CURRENT_BINARY_DIR}/PADConfig.cmake"
+	"${CMAKE_CURRENT_BINARY_DIR}/pad/PADConfig.cmake"
 	COPYONLY)
 
-set(ConfigPackageLocation lib/cmake/pad)
+set(ConfigPackageLocation share/pad/cmake)
 install(EXPORT PADTargets
 		FILE PADTargets.cmake
 		NAMESPACE PAD::
@@ -147,3 +147,5 @@ install(FILES
 	"${CMAKE_CURRENT_BINARY_DIR}/pad/PADConfigVersion.cmake"
 	DESTINATION ${ConfigPackageLocation})
 
+export(EXPORT PADTargets FILE pad-config.cmake)
+export(PACKAGE pad)
