@@ -73,8 +73,8 @@ namespace PAD {
 	Session::~Session( ) {
 		lock_guard<recursive_mutex> guard(PublisherMutex());
 		devices.clear( );
-		AvailablePublishers( ).insert(AvailablePublishers( ).begin( ), heldAPIProviders.begin( ), heldAPIProviders.end( ));
 		for (auto api : heldAPIProviders) api->Cleanup(*this);
+		AvailablePublishers( ).insert(AvailablePublishers( ).end( ), heldAPIProviders.begin( ), heldAPIProviders.end( ));
 	}
 
 	void Session::InitializeHostAPI(const char *name, DeviceErrorDelegate* del) {

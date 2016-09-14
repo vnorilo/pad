@@ -187,6 +187,8 @@ namespace {
 			case ASIO::EngineVersion:
 				return 2L;
 			case ASIO::ResetRequest:
+				return 1L;
+				break;
 			case ASIO::ResyncRequest:
 			case ASIO::LatenciesChanged:
 			case ASIO::SupportsTimeInfo:
