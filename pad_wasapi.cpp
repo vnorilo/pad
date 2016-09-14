@@ -17,6 +17,9 @@
 #include <cmath>
 
 #include "WinDebugStream.h"
+#include "pad_samples.h"
+#include "pad_samples_sse2.h"
+#include "pad_channels.h"
 
 #pragma comment(lib,"Ole32.lib")
 
@@ -192,9 +195,10 @@ public:
 
                         WAVEFORMATEX *pMixformat=nullptr;
                         hr = theClient->GetMixFormat(&pMixformat);
-                        if (m_outputEndPoints.at(endPointToActivate).m_isExclusiveMode==true)
+						REFERENCE_TIME hnsMinimumDuration = 0, hnsDefaultDuration;
+						hr = theClient->GetDevicePeriod(&hnsDefaultDuration, &hnsMinimumDuration);
+						if (m_outputEndPoints.at(endPointToActivate).m_isExclusiveMode==true)
                         {
-                            REFERENCE_TIME hnsRequestedDuration = 0;
                             WAVEFORMATEXTENSIBLE format;
                             memset(&format,0,sizeof(WAVEFORMATEXTENSIBLE));
                             format.SubFormat=KSDATAFORMAT_SUBTYPE_PCM;
@@ -206,15 +210,14 @@ public:
                             format.Format.wBitsPerSample=16;
                             format.Format.nBlockAlign=(format.Format.nChannels*format.Format.wBitsPerSample)/8;
                             format.Format.nAvgBytesPerSec=format.Format.nSamplesPerSec*format.Format.nBlockAlign;
-                            hr = theClient->GetDevicePeriod(NULL, &hnsRequestedDuration);
-                            cwindbg() << "Device default period is " << hnsRequestedDuration << "\n";
+                            cwindbg() << "Device default period is " << hnsDefaultDuration << "\n";
                             hr = theClient->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-                                                       hnsRequestedDuration,hnsRequestedDuration,(WAVEFORMATEX*)&format, NULL);
+                                                       hnsMinimumDuration,hnsMinimumDuration,(WAVEFORMATEX*)&format, NULL);
                             if (hr<0)
                                 cwindbg() << "PAD/WASAPI : Exclusive init error " << hr << "\n";
                         } else
                         {
-                            hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pMixformat, NULL);
+							hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,hnsDefaultDuration,hnsDefaultDuration,pMixformat, NULL);
                         }
                         if (CheckHResult(hr,"PAD/WASAPI : Initialize audio render client")==true)
                         {
@@ -260,9 +263,10 @@ public:
                     {
                         WAVEFORMATEX *pMixformat=nullptr;
                         hr = theClient->GetMixFormat(&pMixformat);
-                        if (m_inputEndPoints.at(endPointToActivate).m_isExclusiveMode==true)
+						REFERENCE_TIME hnsMinimumPeriod = 0, hnsDefaultPeriod = 0;
+						hr = theClient->GetDevicePeriod(&hnsDefaultPeriod, &hnsMinimumPeriod);
+						if (m_inputEndPoints.at(endPointToActivate).m_isExclusiveMode==true)
                         {
-                            REFERENCE_TIME hnsRequestedDuration = 0;
                             WAVEFORMATEXTENSIBLE format;
                             memset(&format,0,sizeof(WAVEFORMATEXTENSIBLE));
                             format.SubFormat=KSDATAFORMAT_SUBTYPE_PCM;
@@ -274,12 +278,11 @@ public:
                             format.Format.wBitsPerSample=16;
                             format.Format.nBlockAlign=(format.Format.nChannels*format.Format.wBitsPerSample)/8;
                             format.Format.nAvgBytesPerSec=format.Format.nSamplesPerSec*format.Format.nBlockAlign;
-                            hr = theClient->GetDevicePeriod(NULL, &hnsRequestedDuration);
                             hr = theClient->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-                                                       hnsRequestedDuration,hnsRequestedDuration,(WAVEFORMATEX*)&format, NULL);
+                                                       hnsMinimumPeriod,hnsMinimumPeriod,(WAVEFORMATEX*)&format, NULL);
                         } else
                         {
-                            hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,0,0,pMixformat, NULL);
+                            hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,hnsDefaultPeriod,hnsDefaultPeriod,pMixformat, NULL);
                         }
                         if (CheckHResult(hr,"PAD/WASAPI : Initialize audio capture client")==true)
                         {
@@ -751,6 +754,20 @@ public:
             return true;
         return false;
     }
+	size_t wait(int maxwait_ms) {
+		DWORD result = WaitForMultipleObjects((DWORD)m_events.size(), m_events.data(), false, maxwait_ms);
+		if (result<WAIT_OBJECT_0 + m_events.size())
+			return result - WAIT_OBJECT_0;
+		return WAIT_FAILED;
+	}
+
+	size_t partial_wait(int first, int maxwait_ms) {
+		DWORD result = WaitForMultipleObjects((DWORD)m_events.size() - first, m_events.data() + first, false, maxwait_ms);
+		if (result<WAIT_OBJECT_0 + m_events.size() - first)
+			return first + result - WAIT_OBJECT_0;
+		return WAIT_FAILED;
+	}
+
 private:
     std::vector<HANDLE> m_events;
 };
@@ -780,259 +797,284 @@ private:
     bool m_inited=false;
 };
 
-void fill_output_16bit(WasapiDevice* dev,
-                       unsigned framesToOutput,
-                       unsigned numStreamChans,
-                       unsigned numEndpointChans,
-                       unsigned k,
-                       short* wasapiOutput,
-                       unsigned i)
-{
-    for (unsigned j=0;j<framesToOutput;j++)
-    {
-        float tempsample=dev->m_delegateOutputBuffer[j*numStreamChans+k];
-        wasapiOutput[j*numEndpointChans+i]=scale_value_from_range_to_range<short>(
-                    tempsample,
-                    -1.0,
-                    1.0,
-                    -32768.0,
-                    32767.0);
-    }
-}
+struct audio_buffer {
+	std::vector<float> data;
+	int position = 0;
+	std::int64_t last_device_position = 0;
+	bool underrun = false;
 
-void fill_with_silence(short* wasapiExclusiveOutput,
-                       unsigned ep,
-                       WasapiDevice* dev,
-                       unsigned channel,
-                       unsigned framesToOutput,
-                       float* wasapiSharedOutput,
-                       unsigned numEndpointChans)
-{
-    if (dev->m_outputEndPoints.at(ep).m_isExclusiveMode==false)
-    {
-        for (unsigned j=0;j<framesToOutput;j++)
-        {
-            wasapiSharedOutput[j*numEndpointChans+channel]=0.0f;
-        }
-    } else
-    {
-        for (unsigned j=0;j<framesToOutput;j++)
-        {
-            wasapiExclusiveOutput[j*numEndpointChans+channel]=0;
-        }
-    }
-}
+	struct operation {
+		operation(const operation&) = delete;
+		void operator=(operation) = delete;
+		operation(operation&& from) :data(from.data), num_channels(from.num_channels), num_frames(from.num_frames), ab(from.ab) { from.num_channels = 0; }
+		operation(float *data, int ch, int fr, audio_buffer& ab) :data(data), num_channels(ch), num_frames(fr), ab(ab) {}
+		float *data;
+		int num_channels;
+		int num_frames;
+		audio_buffer& ab;
+	};
 
-DWORD WINAPI WasapiThreadFunction(LPVOID params)
-{
-	WasapiDevice* dev=(WasapiDevice*)params;
-    try
-    {
-        if (dev->m_outputEndPoints.size()==0)
-        {
-            return 0;
-        }
-		LARGE_INTEGER perf_freq;
-        LARGE_INTEGER perf_t0;
-        LARGE_INTEGER perf_t1;
-        COMInitRAIIHelper com_initer;
-        if (com_initer.didInitialize()==false)
-            return 0;
-        dev->EnableMultiMediaThreadPriority(true);
-        //cout << "*** Starting wasapi audio thread "<<GetCurrentThreadId()<<"\n";
-        WinEventContainer waitEvents;
-        // 1 is used as a hack until rendering multiple endpoints can be properly tested
-        const unsigned numOutputEndPoints=1; //dev->m_outputEndPoints.size();
-        const unsigned numInputEndPoints=1;
-        HRESULT hr=0;
-        for (unsigned int i=0;i<numOutputEndPoints;i++)
-        {
-            HANDLE h=waitEvents.addEvent();
-            dev->m_outputEndPoints.at(i).m_AudioClient->SetEventHandle(h);
-            hr=dev->m_outputEndPoints.at(i).m_AudioClient->Start();
-            CheckHResult(hr,"Wasapi Output Start audio");
-        }
-        for (unsigned int i=0;i<numInputEndPoints;i++)
-        {
-            HANDLE h=waitEvents.addEvent();
-            dev->m_inputEndPoints.at(i).m_AudioClient->SetEventHandle(h);
-            hr=dev->m_inputEndPoints.at(i).m_AudioClient->Start();
-            CheckHResult(hr,"Wasapi Input Start audio");
-        }
-        int counter=0;
-        int nFramesInBuffer=dev->currentConfiguration.GetBufferSize();
-        BYTE* captureData=0;
-        BYTE* renderData=0;
-        std::vector<float> inputConvertBuffer(4096);
-        //throw std::exception("test pad exceptioopn");
-        while (dev->m_threadShouldStop==false)
-        {
-			
-			std::uint64_t timeStamp = 0;
-            while (dev->m_currentState==WasapiDevice::WASS_Playing)
-            {
-                const AudioStreamConfiguration curConf=dev->currentConfiguration;
-                if (waitEvents.waitForEvents(10000)==true)
-                {
-                    unsigned framesToOutput=0;
-                    QueryPerformanceFrequency(&perf_freq);
-                    QueryPerformanceCounter(&perf_t0);
-                    UINT32 minFramesInput=65536;
-                    for (unsigned ep=0;ep<numInputEndPoints;ep++)
-                    {
-                        UINT32 nFramesOfPadding;
-                        hr = dev->m_inputEndPoints.at(ep).m_AudioClient->GetCurrentPadding(&nFramesOfPadding);
-                        if (nFramesOfPadding==nFramesInBuffer)
-                        {
-                            dev->m_inputGlitchCounter++;
-                        }
-                        UINT32 framesInPacket=0;
-                        DWORD bufferStatus=0;
-                        hr = dev->m_inputEndPoints.at(ep).m_AudioCaptureClient->GetBuffer(&captureData, &framesInPacket, &bufferStatus, NULL, NULL);
-                        if (hr>=0 && captureData!=nullptr)
-                        {
-                            if (framesInPacket<minFramesInput)
-                                minFramesInput=framesInPacket;
-                            float* pf=(float*)captureData;
-                            unsigned numStreamChans=curConf.GetNumStreamInputs();
-                            unsigned numEndpointChans=dev->m_inputEndPoints.at(ep).m_numChannels;
-                            unsigned k=0;
-                            float* wasapiInputBuffer=pf;
-                            short* baz=(short*)captureData;
-                            if (dev->m_inputEndPoints.at(ep).m_isExclusiveMode==true)
-                            {
-                                wasapiInputBuffer=inputConvertBuffer.data();
-                                // as a hack handles just 16 bit format now
+	struct write_buffer : public operation {
+		write_buffer(write_buffer&& from) : operation(std::move(from)) {}
+		write_buffer(operation&& from) :operation(std::move(from)) {}
+		~write_buffer() {
+			ab.position += num_frames;
+		}
+		inline float& operator[](int i) { assert(i >= 0 && i < num_frames*num_channels); return data[i]; }
+		inline float& operator()(int frame, int ch = 0) { return operator[](frame * num_channels + ch); }
+	};
 
-                                for (unsigned i=0;i<framesInPacket*numEndpointChans;i++)
-                                {
-                                    wasapiInputBuffer[i]=scale_value_from_range_to_range<float>(baz[i],
-                                                                                                -32768,
-                                                                                                32767,
-                                                                                                -1.0,
-                                                                                                1.0);
-                                    //wasapiInputBuffer[i]=-1.0+(2.0/32767)*baz[i];
-                                }
-                            }
-                            for (unsigned i=0;i<numEndpointChans;i++)
-                            {
-                                if (dev->m_enabledDeviceInputs.at(i)==true)
-                                {
-                                    for (unsigned j=0;j<framesInPacket;j++)
-                                    {
-                                        dev->m_delegateInputBuffer[j*numStreamChans+k]=wasapiInputBuffer[j*numEndpointChans+i];
-                                    }
-                                    k++;
-                                } else
-                                {
-                                    if (dev->m_inputEndPoints.at(ep).m_isExclusiveMode==false)
-                                    {
-                                        for (unsigned j=0;j<framesInPacket;j++)
-                                        {
-                                            dev->m_delegateInputBuffer[j*numStreamChans+k]=0.0f;
-                                        }
-                                    } else
-                                    {
-                                        for (unsigned j=0;j<framesInPacket;j++)
-                                        {
-                                            baz[j*numStreamChans+k]=0;
-                                        }
-                                    }
-                                }
-                            }
-                            hr = dev->m_inputEndPoints.at(ep).m_AudioCaptureClient->ReleaseBuffer(framesInPacket);
-                        }
-                    }
-                    for (unsigned ep=0;ep<numOutputEndPoints;ep++)
-                    {
-                        UINT32 nFramesOfPadding;
-                        hr = dev->m_outputEndPoints.at(ep).m_AudioClient->GetCurrentPadding(&nFramesOfPadding);
-                        if (nFramesOfPadding==nFramesInBuffer)
-                        {
-                            dev->m_outputGlitchCounter++;
-                        }
-                        framesToOutput=nFramesInBuffer-nFramesOfPadding;
-                        if (minFramesInput!=65536)
-                            framesToOutput=minFramesInput;
-                        hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->GetBuffer(framesToOutput, &renderData);
-                        if (hr>=0 && renderData!=nullptr)
-                        {
-							IO io{
-								curConf,
-								dev->m_delegateInputBuffer.data(),
-								dev->m_delegateOutputBuffer.data(),
-								timeStamp,
-								framesToOutput
-							};
-
-							timeStamp += framesToOutput;
-
-							if (dev->GetBufferSwitchLock()) {
-								lock_guard<recursive_mutex> lock(*dev->GetBufferSwitchLock());
-								dev->BufferSwitch(io);
-							} else {
-								dev->BufferSwitch(io);
-							}
-
-                            float* pf=(float*)renderData;
-                            unsigned numStreamChans=curConf.GetNumStreamOutputs();
-                            unsigned numEndpointChans=dev->m_outputEndPoints.at(ep).m_numChannels;
-                            unsigned k=0;
-                            short* wasapiOutput=(short*)renderData;
-                            for (unsigned i=0;i<numEndpointChans;i++)
-                            {
-                                if (dev->m_enabledDeviceOutputs[i]==true)
-                                {
-                                    if (dev->m_outputEndPoints.at(ep).m_isExclusiveMode==false)
-                                    {
-                                        for (unsigned j=0;j<framesToOutput;j++)
-                                        {
-                                            pf[j*numEndpointChans+i]=dev->m_delegateOutputBuffer[j*numStreamChans+k];
-                                        }
-                                    } else
-                                    {
-                                        // hack, handles only 16 bit format
-
-                                        fill_output_16bit(dev, framesToOutput, numStreamChans, numEndpointChans, k, wasapiOutput, i);
-                                    }
-                                    k++;
-                                } else
-                                {
-                                    fill_with_silence(wasapiOutput, ep, dev, i, framesToOutput, pf, numEndpointChans);
-                                }
-                            }
-                            hr = dev->m_outputEndPoints.at(ep).m_AudioRenderClient->ReleaseBuffer(framesToOutput, 0);
-                        }
-                    }
-                    counter++;
-                    QueryPerformanceCounter(&perf_t1);
-                    double elapsed_ms=double( perf_t1.QuadPart - perf_t0.QuadPart ) / perf_freq.QuadPart * 1000.0;
-                    if (framesToOutput>0)
-                    {
-                        double buflen_ms=1000.0/dev->currentConfiguration.GetSampleRate()*framesToOutput;
-                        dev->m_current_cpu_load=1.0/buflen_ms*elapsed_ms;
-                    }
-
-                } else
-                {
-                    cwindbg() << "PAD/WASAPI : Audio thread had to wait unusually long for end point events\n";
-                }
-            }
-            Sleep(1);
-        }
-        for (unsigned i=0;i<numOutputEndPoints;i++)
-        {
-            hr=dev->m_outputEndPoints.at(i).m_AudioClient->Stop();
-        }
-        for (unsigned i=0;i<numInputEndPoints;i++)
-        {
-            hr=dev->m_inputEndPoints.at(i).m_AudioClient->Stop();
-        }
-        if (dev->m_outputGlitchCounter>0)
-            cwindbg() << "ended wasapi audio thread. "<<dev->m_outputGlitchCounter<< " glitches detected\n";
+	write_buffer write(int num_channels, int num_frames) {
+		size_t required = (position + num_frames) * num_channels;
+		if (data.size() < required) data.resize(required);
+		return operation{ data.data() + position*num_channels, num_channels, num_frames, *this };
 	}
-    catch (std::exception& ex) { cwindbg() << "PAD WASAPI audio thread exception : " << ex.what() << "\n"; }
-    return 0;
+
+	void consume(int num_channels, int num_frames) {
+		assert(position * num_channels <= data.size() && num_frames <= position);
+		if (num_frames == 0 || num_channels == 0) return;
+		int unread = num_channels * num_frames;
+		for (int i(unread);i < position * num_channels;++i) {
+			data[i - unread] = data[i];
+		}
+		position -= num_frames;
+		assert(position >= 0);
+#ifndef NDEBUG
+		for (int i(position*num_channels);i < data.size();++i) data[i] = 0;
+#endif
+	}
+
+	struct read_buffer : public operation {
+		read_buffer(read_buffer&& from) : operation(std::move(from)) {}
+		read_buffer(operation&& from) : operation(std::move(from)) {}
+		~read_buffer() {
+			ab.consume(num_channels, num_frames);
+		}
+		inline float operator[](int i) const { assert(i >= 0 && i < num_frames*num_channels); return data[i]; }
+		inline float operator()(int frame, int ch = 0) const { return operator[](frame * num_channels + ch); }
+	};
+
+	read_buffer read(int num_channels, int num_frames) {
+		assert(num_frames <= position && position * num_channels <= data.size());
+		return operation{ data.data(), num_channels, num_frames, *this };
+	}
+};
+
+
+DWORD WINAPI WasapiThreadFunctionEvents(LPVOID params) {
+	auto self = (WasapiDevice*)params;
+	const auto& cfg = self->currentConfiguration;
+
+	COMInitRAIIHelper com_init;
+	assert(com_init.didInitialize());
+	self->EnableMultiMediaThreadPriority(true);
+
+	WinEventContainer wait_handles;
+
+	const size_t num_out_endpoints = self->m_outputEndPoints.size();
+	const size_t num_in_endpoints = self->m_inputEndPoints.size();
+
+	auto& in_ep(self->m_inputEndPoints);
+	auto& out_ep(self->m_outputEndPoints);
+
+	std::vector<int> input_base, output_base;
+
+	size_t num_outs(0);
+	for (auto& ep : out_ep) {
+		ep.m_AudioClient->SetEventHandle(wait_handles.addEvent());
+		CheckHResult(ep.m_AudioClient->Start());
+		output_base.push_back(num_outs);
+		num_outs += ep.m_numChannels;
+	}
+
+	size_t num_ins(0);
+	for (auto& ep : in_ep) {
+		ep.m_AudioClient->SetEventHandle(wait_handles.addEvent());
+		CheckHResult(ep.m_AudioClient->Start());
+		input_base.push_back(num_ins);
+		num_ins += ep.m_numChannels;
+	}
+
+	try {
+
+		std::vector<int> inch_map(num_ins, -1), outch_map(num_outs, -1);
+		int stream_outputs(0), stream_inputs(0);
+
+		for (auto& cr : cfg.GetOutputRanges())
+			for (auto i = cr.begin(); i != cr.end();++i)
+				outch_map[i] = stream_outputs++;
+
+		for (auto& cr : cfg.GetInputRanges())
+			for (auto i = cr.begin();i != cr.end();++i)
+				inch_map[i] = stream_inputs++;
+
+		std::vector<audio_buffer> input(in_ep.size()), output(out_ep.size());
+		std::vector<float> del_in, del_out;
+
+		using exc_smp_t = HostSample<int16_t, float, -(1 << 15), (1 << 15) - 1, 0, false>;
+		using smp_t = float;
+
+		while (!self->m_threadShouldStop) {
+			std::uint64_t thread_time = 0;
+			while (self->m_currentState == WasapiDevice::WASS_Playing) {
+				size_t wakeup(WAIT_FAILED);
+				bool has_input(true);
+				for (int i(0);i < in_ep.size();++i) {
+					if (!input[i].underrun && input[i].position < cfg.GetBufferSize()) {
+						has_input = false;
+						break;
+					}
+				}
+
+				if (has_input) {
+					wakeup = wait_handles.wait(100);
+				} else {
+					wakeup = wait_handles.partial_wait(num_out_endpoints, 100);
+				}
+
+				if (wakeup == WAIT_FAILED) continue;
+
+				if (wakeup < num_out_endpoints) {
+					// buffer swap on output side
+					auto dev = wakeup;
+
+					if (output[dev].position == 0) {
+						// underflow; switch!
+						auto avail = cfg.GetBufferSize() * 4;
+						for (auto& ib : input) { if (ib.underrun == false && avail > ib.position) avail = ib.position; }
+
+						size_t in_size = avail * stream_inputs;
+						size_t out_size = avail * stream_outputs;
+						if (del_in.size() < in_size) del_in.resize(in_size, 0);
+						if (del_out.size() < out_size) del_out.resize(out_size, 0);
+
+						// splat input
+						for (int dev = 0; dev < in_ep.size(); ++dev) {
+							const auto num_ch = in_ep[dev].m_numChannels;
+							auto frames = avail;
+							if (input[dev].underrun) {
+								memset(del_in.data(), 0, sizeof(float)*del_in.size());
+								input[dev].underrun = false;
+								if (input[dev].position < frames) frames = input[dev].position;
+							}
+							const auto src(input[dev].read(num_ch, frames));
+							for (int ch = 0; ch < num_ch; ++ch) {
+								int stream_ch = inch_map[input_base[dev] + ch];
+								if (stream_ch >= 0) {
+									for (int i = 0;i < frames;++i) del_in[i * stream_inputs + stream_ch] = src(i, ch);
+								}
+							}
+						}
+
+						IO io{
+							cfg,
+							(const float*)del_in.data(),
+							del_out.data(),
+							thread_time,
+							avail
+						};
+
+						memset(del_out.data(), 0, sizeof(float)*del_out.size());
+
+						thread_time += avail;
+
+						if (self->GetBufferSwitchLock()) {
+							lock_guard<recursive_mutex> lock(*self->GetBufferSwitchLock());
+							self->BufferSwitch(io);
+						} else {
+							self->BufferSwitch(io);
+						}
+
+						// splat output
+						for (int dev(0);dev < out_ep.size();++dev) {
+							const auto num_ch = out_ep[dev].m_numChannels;
+							auto dst = output[dev].write(num_ch, avail);
+
+							for (int c(0);c < num_ch;++c) {
+								int stream_ch = outch_map[output_base[dev] + c];
+								if (stream_ch >= 0) {
+									const float *src = del_out.data() + stream_ch;
+									for (int i(0);i < avail;++i) dst(i, c) = src[i * stream_outputs];
+								}
+							}
+						}
+					}
+
+					UINT32 padding(0), avail_buffer(0);
+					int avail_frames = output[dev].position;
+
+					if (out_ep[dev].m_isExclusiveMode) {
+						avail_buffer = cfg.GetBufferSize();
+					} else {
+						out_ep[dev].m_AudioClient->GetCurrentPadding(&padding);
+						avail_buffer = cfg.GetBufferSize() - padding;
+					}
+
+					if (avail_frames > avail_buffer) {
+						avail_frames = avail_buffer;
+					}
+
+					const auto num_ch = out_ep[dev].m_numChannels;
+
+					int num_smps = avail_frames * num_ch;
+					auto src = output[dev].read(num_ch, avail_frames);
+
+					BYTE* data(nullptr);
+					CheckHResult(out_ep[dev].m_AudioRenderClient->GetBuffer(avail_frames, &data), "GetBuffer");;
+
+					if (out_ep[dev].m_isExclusiveMode) {
+						exc_smp_t *dst_buffer = (exc_smp_t*)data;
+						for (int i(0);i < num_smps;++i) dst_buffer[i] = src[i];
+					} else {
+						smp_t *dst_buffer = (smp_t*)data;
+						for (int i(0);i < num_smps;++i) dst_buffer[i] = src[i];
+					}
+
+					CheckHResult(out_ep[dev].m_AudioRenderClient->ReleaseBuffer(avail_frames, 0), "ReleaseBuffer");
+				} else {
+					// buffer swap on input side
+					BYTE* data(nullptr);
+					UINT32 frames2(0), pad(0);
+					UINT64 device_pos;
+					DWORD status(0);
+					auto dev = wakeup - num_out_endpoints;
+					const auto num_ch = in_ep[dev].m_numChannels;
+
+					UINT32 pending(1);
+					for (;pending;in_ep[dev].m_AudioCaptureClient->GetNextPacketSize(&pending)) {
+						auto hr = in_ep[dev].m_AudioCaptureClient->GetBuffer(&data, &frames2, &status, &device_pos, NULL);
+						if (hr >= 0 && data) {
+							if (device_pos && (status & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY) != 0) {
+								//input[dev].underrun = true;
+								cwindbg() << "x";
+							}
+							auto dst = input[dev].write(num_ch, frames2);
+							int num_smps = num_ch * frames2;
+
+							if (in_ep[dev].m_isExclusiveMode) {
+								exc_smp_t* src_buffer = ((exc_smp_t*)data);
+								for (int i = 0;i < num_smps;++i) dst[i] = src_buffer[i];
+							} else {
+								smp_t* src_buffer = ((smp_t*)data);
+								for (int i = 0;i < num_smps;++i) dst[i] = src_buffer[i];
+							}
+							input[dev].last_device_position = device_pos;
+							in_ep[dev].m_AudioCaptureClient->ReleaseBuffer(frames2);
+						}
+					}
+				}
+			}
+		}
+	} catch (...) {
+		for (auto ep : in_ep) ep.m_AudioClient->Stop();
+		for (auto ep : out_ep) ep.m_AudioClient->Stop();
+		throw;
+	}
+	return 0;
+}
+
+DWORD WINAPI WasapiThreadFunction(LPVOID params) {
+	return WasapiThreadFunctionEvents(params);
 }
 
 }
