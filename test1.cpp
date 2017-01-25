@@ -1,6 +1,6 @@
 #ifndef PAD_EXPORT_STATIC_LIB
 #include <iostream>
-#include "pad.h"
+#include "PAD.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <thread>
