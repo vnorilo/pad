@@ -7,7 +7,6 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-	message(STATUS "Setting up MSVC compiler flags...")
 	add_definitions(
 			-D_CRT_SECURE_NO_DEPREATE 
 			-D_CRT_NONSTDC_NO_DEPRECATE 
