@@ -105,7 +105,7 @@ set_target_properties( pad
 		       PROPERTIES 
 		       PUBLIC_HEADER "PAD.h;PADErrors.h")
 
-option(PAD_LIBRARY_ONLY "Do not build test driver, export or install targets")
+set(PAD_LIBRARY_ONLY ON CACHE BOOL "Do not build test driver, export or install targets")
 
 if (NOT PAD_LIBRARY_TARGET_ONLY)
 add_executable(pad_test "test1.cpp")
