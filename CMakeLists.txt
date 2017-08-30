@@ -34,8 +34,6 @@ elseif (APPLE)
 	set(PAD_AVAILABLE_HOSTAPIS coreaudio)
 	set(CMAKE_OSX_DEPLOYMENT_TARGET "10.8" CACHE STRING "OS X Deployment target")
 	set(CMAKE_OSX_BUILD_ARCHITECTURE "x86_64" CACHE STRING "Build architecture")
-else (APPLE)
-	set(PAD_AVAILABLE_HOSTAPIS jack)
 endif()
 
 include(FindJack.cmake)
@@ -107,6 +105,9 @@ set_target_properties( pad
 		       PROPERTIES 
 		       PUBLIC_HEADER "PAD.h;PADErrors.h")
 
+option(PAD_LIBRARY_ONLY "Do not build test driver, export or install targets")
+
+if (NOT PAD_LIBRARY_TARGET_ONLY)
 add_executable(pad_test "test1.cpp")
 target_link_libraries( pad_test pad )
 
@@ -148,3 +149,4 @@ install(FILES
 
 export(EXPORT PADTargets FILE pad-config.cmake NAMESPACE PAD::)
 export(PACKAGE pad)
+endif()
