@@ -22,6 +22,7 @@
 #include "pad_channels.h"
 
 #pragma comment(lib,"Ole32.lib")
+#pragma comment(lib,"Winmm.lib")
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
@@ -240,7 +241,7 @@ public:
 										m_enabledDeviceOutputs[i] = currentConfiguration.IsOutputEnabled(i);
 									}
 
-									theClient->GetService(__uuidof(IAudioClock), (void**)m_inputEndPoints[endPointToActivate].m_AudioClock.NullAndGetPtrAddress());
+									theClient->GetService(__uuidof(IAudioClock), (void**)m_outputEndPoints[endPointToActivate].m_AudioClock.NullAndGetPtrAddress());
 
 									m_currentState = WASS_Open;
 								}
@@ -252,73 +253,66 @@ public:
                     } else cwindbg() << "PAD/WASAPI : Could not initialize IAudioClient\n";
                 }
             }
-            if (m_inputEndPoints.size()>0 && m_currentState==WASS_Open)
-            {
-                //if (currentConfiguration.GetNumStreamInputs()>m_inputEndPoints.at(endPointToActivate).m_numChannels)
-                //{
-                //    currentConfiguration.SetDeviceChannelLimits(0,m_outputEndPoints.at(endPointToActivate).m_numChannels);
-                //}
-                PadComSmartPointer<IAudioClient> theClient;
-                hr = m_inputEndPoints.at(endPointToActivate).m_Endpoint->Activate(
-                            __uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)theClient.NullAndGetPtrAddress());
-                if (CheckHResult(hr,"PAD/WASAPI : Activate input audioclient")==true)
-                {
-                    if (theClient!=nullptr)
-                    {
-                        WAVEFORMATEX *pMixformat=nullptr;
-                        hr = theClient->GetMixFormat(&pMixformat);
+			if (m_inputEndPoints.size() > 0 && m_currentState == WASS_Open) {
+				for (int endPointToActivate = 0;endPointToActivate < m_inputEndPoints.size();++endPointToActivate) {
+
+				//if (currentConfiguration.GetNumStreamInputs()>m_inputEndPoints.at(endPointToActivate).m_numChannels)
+				//{
+				//    currentConfiguration.SetDeviceChannelLimits(0,m_outputEndPoints.at(endPointToActivate).m_numChannels);
+				//}
+				PadComSmartPointer<IAudioClient> theClient;
+				hr = m_inputEndPoints.at(endPointToActivate).m_Endpoint->Activate(
+					__uuidof (IAudioClient), CLSCTX_ALL, nullptr, (void**)theClient.NullAndGetPtrAddress());
+				if (CheckHResult(hr, "PAD/WASAPI : Activate input audioclient") == true) {
+					if (theClient != nullptr) {
+						WAVEFORMATEX *pMixformat = nullptr;
+						hr = theClient->GetMixFormat(&pMixformat);
 						REFERENCE_TIME hnsMinimumPeriod = 0, hnsDefaultPeriod = 0;
 						hr = theClient->GetDevicePeriod(&hnsDefaultPeriod, &hnsMinimumPeriod);
-						if (m_inputEndPoints.at(endPointToActivate).m_isExclusiveMode==true)
-                        {
-                            WAVEFORMATEXTENSIBLE format;
-                            memset(&format,0,sizeof(WAVEFORMATEXTENSIBLE));
-                            format.SubFormat=KSDATAFORMAT_SUBTYPE_PCM;
-                            format.dwChannelMask=KSAUDIO_SPEAKER_STEREO;
-                            format.Format.wFormatTag=WAVE_FORMAT_PCM;
-                            format.Format.nChannels=2;
-                            format.Format.cbSize=0; //sizeof(WAVEFORMATEXTENSIBLE);
-                            format.Format.nSamplesPerSec=44100;
-                            format.Format.wBitsPerSample=16;
-                            format.Format.nBlockAlign=(format.Format.nChannels*format.Format.wBitsPerSample)/8;
-                            format.Format.nAvgBytesPerSec=format.Format.nSamplesPerSec*format.Format.nBlockAlign;
-                            hr = theClient->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-                                                       hnsMinimumPeriod,hnsMinimumPeriod,(WAVEFORMATEX*)&format, NULL);
-                        } else
-                        {
-                            hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED,AUDCLNT_STREAMFLAGS_EVENTCALLBACK,hnsDefaultPeriod,hnsDefaultPeriod,pMixformat, NULL);
-                        }
-                        if (CheckHResult(hr,"PAD/WASAPI : Initialize audio capture client")==true)
-                        {
-                            UINT32 nFramesInBuffer=0;
-                            hr = theClient->GetBufferSize(&nFramesInBuffer);
-							if (nFramesInBuffer > 7 && nFramesInBuffer < 32769)
-							{
+						if (m_inputEndPoints.at(endPointToActivate).m_isExclusiveMode == true) {
+							WAVEFORMATEXTENSIBLE format;
+							memset(&format, 0, sizeof(WAVEFORMATEXTENSIBLE));
+							format.SubFormat = KSDATAFORMAT_SUBTYPE_PCM;
+							format.dwChannelMask = KSAUDIO_SPEAKER_STEREO;
+							format.Format.wFormatTag = WAVE_FORMAT_PCM;
+							format.Format.nChannels = 2;
+							format.Format.cbSize = 0; //sizeof(WAVEFORMATEXTENSIBLE);
+							format.Format.nSamplesPerSec = 44100;
+							format.Format.wBitsPerSample = 16;
+							format.Format.nBlockAlign = (format.Format.nChannels*format.Format.wBitsPerSample) / 8;
+							format.Format.nAvgBytesPerSec = format.Format.nSamplesPerSec*format.Format.nBlockAlign;
+							hr = theClient->Initialize(AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+													   hnsMinimumPeriod, hnsMinimumPeriod, (WAVEFORMATEX*)&format, NULL);
+						} else {
+							hr = theClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, hnsDefaultPeriod, hnsDefaultPeriod, pMixformat, NULL);
+						}
+						if (CheckHResult(hr, "PAD/WASAPI : Initialize audio capture client") == true) {
+							UINT32 nFramesInBuffer = 0;
+							hr = theClient->GetBufferSize(&nFramesInBuffer);
+							if (nFramesInBuffer > 7 && nFramesInBuffer < 32769) {
 								m_delegateInputBuffer.resize(nFramesInBuffer*m_numInputs);
 								currentConfiguration.SetBufferSize(nFramesInBuffer);
 								PadComSmartPointer<IAudioCaptureClient> theAudioCaptureClient;
 								hr = theClient->GetService(__uuidof(IAudioCaptureClient), (void**)theAudioCaptureClient.NullAndGetPtrAddress());
-								if (theAudioCaptureClient != nullptr)
-								{
+								if (theAudioCaptureClient != nullptr) {
 									m_inputEndPoints[endPointToActivate].m_AudioClient = theClient;
 									m_inputEndPoints[endPointToActivate].m_AudioCaptureClient = theAudioCaptureClient;
 									m_enabledDeviceInputs.resize(m_numInputs);
-									for (unsigned i = 0; i < m_numInputs; i++)
-									{
+									for (unsigned i = 0; i < m_numInputs; i++) {
 										m_enabledDeviceInputs[i] = currentConfiguration.IsInputEnabled(i);
 									}
-									
-									m_currentState = WASS_Open;
-								}
-								else
-									cwindbg() << "PAD/WASAPI : Audio capture client was not initialized properly\n";
-							} else 
-								cwindbg() << "PAD/WASAPI : Input audio client has an unusual buffer size "<<nFramesInBuffer<<"\n";
-                        }
 
-                    } else cwindbg() << "PAD/WASAPI : Could not initialize IAudioClient\n";
-                }
-            }
+									m_currentState = WASS_Open;
+								} else
+									cwindbg() << "PAD/WASAPI : Audio capture client was not initialized properly\n";
+							} else
+								cwindbg() << "PAD/WASAPI : Input audio client has an unusual buffer size " << nFramesInBuffer << "\n";
+						}
+
+					} else cwindbg() << "PAD/WASAPI : Could not initialize IAudioClient\n";
+				}
+			}
+			}
         }
         if (m_currentState!=WASS_Open)
             return currentConfiguration;
@@ -426,6 +420,14 @@ public:
 
     double CPU_Load() const { return m_current_cpu_load; }
 	
+	std::chrono::microseconds DeviceTimeNow() const {
+		LARGE_INTEGER pc, pcFreq;
+		QueryPerformanceCounter(&pc);
+		QueryPerformanceFrequency(&pcFreq);
+
+		return std::chrono::microseconds(pc.QuadPart * 1000'000ull / pcFreq.QuadPart);
+	}
+
 	void EnableMultiMediaThreadPriority(bool proAudio=false)
     {
         HMODULE hModule=LoadLibraryA("avrt.dll");
@@ -548,14 +550,6 @@ struct WasapiPublisher : public HostAPIPublisher
         result.first=epo;
         return result;
     }
-
-	std::chrono::microseconds DeviceTimeNow() {
-		LARGE_INTEGER pc, pcFreq;
-		QueryPerformanceCounter(&pc);
-		QueryPerformanceFrequency(&pcFreq);
-
-		return std::chrono::microseconds(pc.QuadPart * 1000'000ull / pcFreq.QuadPart);
-	}
 
     std::string GetEndPointAdapterName(const PadComSmartPointer<IMMDevice>& epo)
     {

@@ -47,15 +47,14 @@ namespace {
 		operator ASIO::Callbacks*() { return &cb; }
 	};
 
-	enum AsioState {
-		Idle,
-		Loaded,
-		Initialized,
-		Prepared,
-		Running
-	} State = Idle;
-
 	class AsioDevice : public AudioDevice {
+		enum AsioState {
+			Idle,
+			Loaded,
+			Initialized,
+			Prepared,
+			Running
+		} State = AsioState::Idle;
 
 		double CPU_Load( ) const { return current_cpu_load; }
 		
@@ -163,8 +162,6 @@ namespace {
 			memset(&time, 0, sizeof(ASIO::Time));
 			time.timeInfo.flags = ASIO::SystemTimeValid | ASIO::SamplePositionValid | ASIO::SampleRateValid;
 			time.timeInfo.sampleRate = currentConfiguration.GetSampleRate( );
-			ASIO::Samples sPos(0);
-			ASIO::TimeStamp tStamp;
 			driver->getSamplePosition(&time.timeInfo.samplePosition, &time.timeInfo.systemTime);
 			BufferSwitchTimeInfo(&time, doubleBufferIndex, directProcess);
 		}
@@ -184,7 +181,7 @@ namespace {
 			outputLatency = std::chrono::microseconds(outLatency * 1000'000ull / (std::int64_t)sr);
 		}
 
-		std::chrono::microseconds DeviceTimeNow() {
+		std::chrono::microseconds DeviceTimeNow() const {
 			std::chrono::milliseconds msTime(timeGetTime());
 			return msTime;
 		}
@@ -447,7 +444,6 @@ namespace {
 			}
 			
 			using MicroSecTy = std::chrono::duration<std::chrono::microseconds>;
-			using MicroSecTp = std::chrono::time_point<MicroSecTy>;
 
 			// system time is in ms
 			std::chrono::milliseconds sysTime(params->timeInfo.systemTime);
