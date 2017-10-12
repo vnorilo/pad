@@ -7,6 +7,7 @@
 #include <functional>
 #include <iosfwd>
 #include <cassert>
+#include <chrono>
 
 #include "PADErrors.h"
 
@@ -159,8 +160,8 @@ namespace PAD {
 		const AudioStreamConfiguration& config;
 		const float *input;
 		float *output;
-		uint64_t timeStamp;
 		unsigned numFrames;
+		std::chrono::microseconds inputBufferTime, outputBufferTime;
 	};
  
 	class AudioDevice {
@@ -202,6 +203,8 @@ namespace PAD {
 
 		std::shared_ptr<std::recursive_mutex>& GetBufferSwitchLock( ) { return deviceMutex; }
 		void SetBufferSwitchLock(std::shared_ptr<std::recursive_mutex> lock) { deviceMutex = std::move(lock); }
+
+		virtual std::chrono::microseconds DeviceTimeNow() const = 0;
 
 		Event<IO> BufferSwitch;
 		Event<AudioStreamConfiguration> AboutToBeginStream;

@@ -71,6 +71,7 @@ namespace {
 		vector<ASIO::ChannelInfo> channelInfos;
 		vector<float> delegateBufferInput, delegateBufferOutput;
 		unsigned callbackBufferFrames, streamNumInputs, streamNumOutputs;
+		std::chrono::microseconds inputLatency, outputLatency;
 
 		AudioStreamConfiguration defaultMono, defaultStereo, defaultAll;
 		AudioStreamConfiguration DefaultMono( ) const { return defaultMono; }
@@ -162,6 +163,9 @@ namespace {
 			memset(&time, 0, sizeof(ASIO::Time));
 			time.timeInfo.flags = ASIO::SystemTimeValid | ASIO::SamplePositionValid | ASIO::SampleRateValid;
 			time.timeInfo.sampleRate = currentConfiguration.GetSampleRate( );
+			ASIO::Samples sPos(0);
+			ASIO::TimeStamp tStamp;
+			driver->getSamplePosition(&time.timeInfo.samplePosition, &time.timeInfo.systemTime);
 			BufferSwitchTimeInfo(&time, doubleBufferIndex, directProcess);
 		}
 
@@ -169,6 +173,20 @@ namespace {
 			currentConfiguration.SetSampleRate(sRate);
 			StreamConfigurationDidChange(AudioStreamConfiguration::SampleRateDidChange,
 				currentConfiguration);
+		}
+
+		void UpdateLatencies() {
+			ASIO::SampleRate sr = 44100;
+			driver->getSampleRate(&sr);
+			long inLatency = 0, outLatency = 0;
+			driver->getLatencies(&inLatency, &outLatency);
+			inputLatency  = std::chrono::microseconds(inLatency  * 1000'000ull / (std::int64_t)sr);
+			outputLatency = std::chrono::microseconds(outLatency * 1000'000ull / (std::int64_t)sr);
+		}
+
+		std::chrono::microseconds DeviceTimeNow() {
+			std::chrono::milliseconds msTime(timeGetTime());
+			return msTime;
 		}
 
 		long AsioMessage(long selector, long value, void* message, double* opt) {
@@ -189,8 +207,10 @@ namespace {
 			case ASIO::ResetRequest:
 				return 1L;
 				break;
-			case ASIO::ResyncRequest:
 			case ASIO::LatenciesChanged:
+				UpdateLatencies();
+				break;
+			case ASIO::ResyncRequest:
 			case ASIO::SupportsTimeInfo:
 			case ASIO::SupportsTimeCode:
 				return 1L;
@@ -425,13 +445,20 @@ namespace {
 					Format<Input>(blockType, delegateBufferInput.data( ) + beg, (void**)bufferPtr, callbackBufferFrames, streamNumInputs - beg, streamNumInputs);
 				}
 			}
+			
+			using MicroSecTy = std::chrono::duration<std::chrono::microseconds>;
+			using MicroSecTp = std::chrono::time_point<MicroSecTy>;
+
+			// system time is in ms
+			std::chrono::milliseconds sysTime(params->timeInfo.systemTime);
 
 			IO io{
 				currentConfiguration,
 				delegateBufferInput.data( ),
 				delegateBufferOutput.data( ),
-				0ll,
-				callbackBufferFrames
+				callbackBufferFrames,
+				sysTime - inputLatency,
+				sysTime + outputLatency
 			};
 
 			AudioDevice::BufferSwitch(io);
@@ -485,6 +512,7 @@ namespace {
 			Prepare( );
 
 			currentConfiguration.SetBufferSize(callbackBufferFrames);
+			UpdateLatencies();
 
 			AboutToBeginStream(currentConfiguration);
 

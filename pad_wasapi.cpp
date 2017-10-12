@@ -73,7 +73,8 @@ public:
         PadComSmartPointer<IAudioClient> m_AudioClient;
         PadComSmartPointer<IAudioRenderClient> m_AudioRenderClient;
         PadComSmartPointer<IAudioCaptureClient> m_AudioCaptureClient;
-        PadComSmartPointer<IMMDevice> m_Endpoint;
+		PadComSmartPointer<IMMDevice> m_Endpoint;
+		PadComSmartPointer<IAudioClock> m_AudioClock;
         unsigned m_numChannels;
         std::string m_name;
         unsigned m_sortID;
@@ -238,6 +239,9 @@ public:
 									{
 										m_enabledDeviceOutputs[i] = currentConfiguration.IsOutputEnabled(i);
 									}
+
+									theClient->GetService(__uuidof(IAudioClock), (void**)m_inputEndPoints[endPointToActivate].m_AudioClock.NullAndGetPtrAddress());
+
 									m_currentState = WASS_Open;
 								}
 								else 
@@ -303,6 +307,7 @@ public:
 									{
 										m_enabledDeviceInputs[i] = currentConfiguration.IsInputEnabled(i);
 									}
+									
 									m_currentState = WASS_Open;
 								}
 								else
@@ -543,6 +548,14 @@ struct WasapiPublisher : public HostAPIPublisher
         result.first=epo;
         return result;
     }
+
+	std::chrono::microseconds DeviceTimeNow() {
+		LARGE_INTEGER pc, pcFreq;
+		QueryPerformanceCounter(&pc);
+		QueryPerformanceFrequency(&pcFreq);
+
+		return std::chrono::microseconds(pc.QuadPart * 1000'000ull / pcFreq.QuadPart);
+	}
 
     std::string GetEndPointAdapterName(const PadComSmartPointer<IMMDevice>& epo)
     {
@@ -800,7 +813,8 @@ private:
 struct audio_buffer {
 	std::vector<float> data;
 	int position = 0;
-	std::int64_t last_device_position = 0;
+	std::uint64_t last_device_position = 0;
+	std::uint64_t position_measured_at = 0;
 	bool underrun = false;
 
 	struct operation {
@@ -914,8 +928,9 @@ DWORD WINAPI WasapiThreadFunctionEvents(LPVOID params) {
 		using exc_smp_t = HostSample<int16_t, float, -(1 << 15), (1 << 15) - 1, 0, false>;
 		using smp_t = float;
 
+		size_t stream_frames = 0;
+
 		while (!self->m_threadShouldStop) {
-			std::uint64_t thread_time = 0;
 			while (self->m_currentState == WasapiDevice::WASS_Playing) {
 				size_t wakeup(WAIT_FAILED);
 				bool has_input(true);
@@ -948,6 +963,13 @@ DWORD WINAPI WasapiThreadFunctionEvents(LPVOID params) {
 						if (del_in.size() < in_size) del_in.resize(in_size, 0);
 						if (del_out.size() < out_size) del_out.resize(out_size, 0);
 
+						IO io{
+							cfg,
+							(const float*)del_in.data(),
+							del_out.data(),
+							avail
+						};
+
 						// splat input
 						for (int dev = 0; dev < in_ep.size(); ++dev) {
 							const auto num_ch = in_ep[dev].m_numChannels;
@@ -956,6 +978,8 @@ DWORD WINAPI WasapiThreadFunctionEvents(LPVOID params) {
 								memset(del_in.data(), 0, sizeof(float)*del_in.size());
 								input[dev].underrun = false;
 								if (input[dev].position < frames) frames = input[dev].position;
+							} else {
+								io.inputBufferTime = std::chrono::microseconds(input[dev].position_measured_at / 10);
 							}
 							const auto src(input[dev].read(num_ch, frames));
 							for (int ch = 0; ch < num_ch; ++ch) {
@@ -966,17 +990,18 @@ DWORD WINAPI WasapiThreadFunctionEvents(LPVOID params) {
 							}
 						}
 
-						IO io{
-							cfg,
-							(const float*)del_in.data(),
-							del_out.data(),
-							thread_time,
-							avail
-						};
-
 						memset(del_out.data(), 0, sizeof(float)*del_out.size());
 
-						thread_time += avail;
+						if (out_ep.size() && out_ep[0].m_AudioClock.getRawPointer()) {
+							UINT64 streamPosBytes, pcPos, bytesPerSecond;
+							out_ep[0].m_AudioClock->GetFrequency(&bytesPerSecond);
+							out_ep[0].m_AudioClock->GetPosition(&streamPosBytes, &pcPos);
+							std::chrono::microseconds streamPlayed(streamPosBytes * 1000'000ull / bytesPerSecond);
+							std::chrono::microseconds streamRendered(stream_frames * 1000'000ull / (UINT64)cfg.GetSampleRate());
+							auto latency = streamRendered - streamPlayed;
+							std::chrono::microseconds systemTime(pcPos / 10);
+							io.outputBufferTime = systemTime + latency;
+						}
 
 						if (self->GetBufferSwitchLock()) {
 							lock_guard<recursive_mutex> lock(*self->GetBufferSwitchLock());
@@ -985,11 +1010,13 @@ DWORD WINAPI WasapiThreadFunctionEvents(LPVOID params) {
 							self->BufferSwitch(io);
 						}
 
+						stream_frames += io.numFrames;
+
 						// splat output
 						for (int dev(0);dev < out_ep.size();++dev) {
 							const auto num_ch = out_ep[dev].m_numChannels;
 							auto dst = output[dev].write(num_ch, avail);
-
+														
 							for (int c(0);c < num_ch;++c) {
 								int stream_ch = outch_map[output_base[dev] + c];
 								if (stream_ch >= 0) {
@@ -1035,14 +1062,14 @@ DWORD WINAPI WasapiThreadFunctionEvents(LPVOID params) {
 					// buffer swap on input side
 					BYTE* data(nullptr);
 					UINT32 frames2(0), pad(0);
-					UINT64 device_pos;
+					UINT64 device_pos, measured_at;
 					DWORD status(0);
 					auto dev = wakeup - num_out_endpoints;
 					const auto num_ch = in_ep[dev].m_numChannels;
 
 					UINT32 pending(1);
 					for (;pending;in_ep[dev].m_AudioCaptureClient->GetNextPacketSize(&pending)) {
-						auto hr = in_ep[dev].m_AudioCaptureClient->GetBuffer(&data, &frames2, &status, &device_pos, NULL);
+						auto hr = in_ep[dev].m_AudioCaptureClient->GetBuffer(&data, &frames2, &status, &device_pos, &measured_at);
 						if (hr >= 0 && data) {
 							if (device_pos && (status & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY) != 0) {
 								//input[dev].underrun = true;
@@ -1059,6 +1086,7 @@ DWORD WINAPI WasapiThreadFunctionEvents(LPVOID params) {
 								for (int i = 0;i < num_smps;++i) dst[i] = src_buffer[i];
 							}
 							input[dev].last_device_position = device_pos;
+							input[dev].position_measured_at = measured_at;
 							in_ep[dev].m_AudioCaptureClient->ReleaseBuffer(frames2);
 						}
 					}
