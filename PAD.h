@@ -117,17 +117,22 @@ namespace PAD {
 		friend class EventSubscriber;
 		std::forward_list<std::pair<IEventSubscriber*, std::function<void(ARGS...)>>> handlers;
 		void AddSubscriber(IEventSubscriber* sub, const std::function<void(ARGS...)>& func) {
-			handlers.push_back(std::make_pair(sub, func));
+			handlers.emplace_front(sub, func);
 		}
 
 		void RemoveSubscriber(IEventSubscriber *sub) {
 			handlers.remove_if(
 				[sub](const std::pair<IEventSubscriber*, std::function<void(ARGS...)>>& p) { return p.first == sub; });
 		}
-	public:
-		~Event( ) {
+
+		void Clear() {
 			for (auto& h : handlers) if (h.first) h.first->RemoveEvent(this);
 		}
+	public:
+		~Event( ) {
+			Clear();
+		}
+
 
 		void operator()(const ARGS&... args) {
 			for (auto& h : handlers) h.second(args...);
@@ -151,7 +156,11 @@ namespace PAD {
 
 		void RemoveEvent(IEvent *evt) { subscriptions.remove(evt); }
 
-		template <typename... ARGS> void When(Event<ARGS...>& evt, const std::function<void(ARGS...)>& f) {
+		void Reset() {
+			subscriptions.clear();
+		}
+
+		template <typename FN, typename... ARGS> void When(Event<ARGS...>& evt, const FN& f) {
 			evt.AddSubscriber(this, f);
 		}
 	};

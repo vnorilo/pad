@@ -172,7 +172,6 @@ public:
             cwindbg() << "Open called when already playing\n";
             return currentConfiguration;
         }
-        const unsigned endPointToActivate=0;
         //cout << "Wasapi::Open, thread id "<<GetCurrentThreadId()<<"\n";
         m_outputGlitchCounter=0;
 //        currentDelegate = &conf.GetAudioDelegate();
@@ -181,7 +180,7 @@ public:
         if (m_currentState==WASS_Closed || m_currentState==WASS_Idle)
         {
             HRESULT hr=0;
-            if (m_outputEndPoints.size()>0)
+			for (int endPointToActivate = 0;endPointToActivate < m_outputEndPoints.size();++endPointToActivate)
             {
                 if (currentConfiguration.GetNumStreamOutputs()>m_outputEndPoints.at(endPointToActivate).m_numChannels)
                 {
@@ -619,7 +618,7 @@ struct WasapiPublisher : public HostAPIPublisher
             }
             EDataFlow audioDirection=getAudioDirection(endpoint);
             PadComSmartPointer<IAudioClient> tempClient;
-            hr = endpoint->Activate(__uuidof (IAudioClient), CLSCTX_ALL,nullptr, (void**)tempClient.NullAndGetPtrAddress());
+            hr = endpoint->Activate(, CLSCTX_ALL,nullptr, (void**)tempClient.NullAndGetPtrAddress());
             if (tempClient==nullptr)
             {
                 cwindbg() << "pad : wasapi : could not create temp client for " << i << " to get channel counts etc\n";
