@@ -66,7 +66,7 @@ endif()
 
 LIST_CONTAINS(contains wasapi ${PAD_HOSTAPIS})
 if (contains)
-	list(APPEND PAD_SOURCES pad_wasapi.cpp)
+	list(APPEND PAD_SOURCES pad_wasapi2.cpp)
 	add_definitions(-DPAD_LINK_WASAPI)
 endif()
 
