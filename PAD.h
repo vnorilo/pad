@@ -24,11 +24,12 @@ namespace PAD {
 	class ChannelRange {
 		unsigned b, e;
 	public:
-		ChannelRange(unsigned b = 0, unsigned e = -1) :b(b), e(e) { if (e < b) throw SoftError(ChannelRangeInvalid, "Invalid channel range"); }
+		ChannelRange() :b(-1), e(-1) {}
+		ChannelRange(unsigned c) :b(c), e(c + 1) {};
+		ChannelRange(unsigned b, unsigned e) :b(b), e(e) { if (e < b) throw SoftError(ChannelRangeInvalid, "Invalid channel range"); }
 		unsigned begin( ) const { return b; }
 		unsigned end( ) const { return e; }
-		bool Overlaps(ChannelRange);
-		bool Contains(unsigned);
+		bool Touches(ChannelRange);
 	};
 
 	struct Channel : public ChannelRange {
@@ -45,6 +46,7 @@ namespace PAD {
 		unsigned bufferSize;
 		bool startSuspended;
 		bool valid;
+		static void Normalize(std::vector<ChannelRange>&);
 	public:
 		AudioStreamConfiguration(double sampleRate = 44100.0, bool valid = true);
 		void SetSampleRate(double newRate) { sampleRate = newRate; }
@@ -92,8 +94,8 @@ namespace PAD {
 		const std::vector<ChannelRange> GetInputRanges( ) const { return inputRanges; }
 		const std::vector<ChannelRange> GetOutputRanges( ) const { return outputRanges; }
 
-		void SetInputRanges(std::vector<ChannelRange> cr = std::vector<ChannelRange>( )) { inputRanges = std::move(cr); }
-		void SetOutputRanges(std::vector<ChannelRange> cr = std::vector<ChannelRange>( )) { outputRanges = std::move(cr); }
+		void SetInputRanges(std::initializer_list<ChannelRange> cr) { inputRanges = std::move(cr); Normalize(inputRanges); }
+		void SetOutputRanges(std::initializer_list<ChannelRange> cr) { outputRanges = std::move(cr); Normalize(outputRanges); }
 
 		enum ConfigurationChangeFlags {
 			SampleRateDidChange = 0x0001,

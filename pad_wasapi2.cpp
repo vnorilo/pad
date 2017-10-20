@@ -250,8 +250,9 @@ namespace {
 			ComRef<T> service;
 			std::vector<std::pair<int, int>> map;
 			RingBuffer<4096> data;
+			unsigned numEpChannels;
 			size_t GetNumChannels() const {
-				return map.size();
+				return numEpChannels;
 			}
 		};
 
@@ -264,6 +265,7 @@ namespace {
 			err = ac->GetMixFormat(&fmt);
 			WAVEFORMATEXTENSIBLE *fmtEx = (WAVEFORMATEXTENSIBLE*)fmt;
 			auto mixFormat = Canonical(fmt->nChannels, (int)cfg.GetSampleRate());
+			pm.numEpChannels = fmt->nChannels;
 
 			if (S_OK == ac->QueryInterface(&ac3)) {
 				// win10
@@ -305,7 +307,7 @@ namespace {
 				err = ac->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, hnsBuffer, hnsBuffer, (WAVEFORMATEX*)&mixFormat, nullptr);
 			}
 
-			ac->SetEventHandle(bufferSwitch);
+			if (bufferSwitch != INVALID_HANDLE_VALUE) ac->SetEventHandle(bufferSwitch);
 			err = ac->GetService(__uuidof(typename PORTMAP::ServiceTy), (void**)pm.service.Reset());
 		}
 
@@ -317,11 +319,14 @@ namespace {
 				std::atomic_flag streaming;
 				std::atomic_flag runTask;
 
+				size_t rendered = 0;
+				ComRef<IAudioClock> clock;
+
 				std::vector<float> delegateIn, delegateOut;
 
 				struct RTWQState {
 					DWORD Queue, Task;
-					HANDLE inputEvent, outputEvent;
+					HANDLE Event, SecondaryEvent;
 					HANDLE Done;
 					ComRef<IRtwqAsyncResult> Result;
 				} RTWQ;
@@ -345,6 +350,7 @@ namespace {
 				void SplatInput(PAD::IO& io) {
 					auto streamIns = cfg.GetNumStreamInputs();
 					auto frames = io.numFrames;
+					unsigned gap = 0;
 
 					if (delegateIn.size() < streamIns * frames) {
 						delegateIn.resize(streamIns * frames);
@@ -353,17 +359,8 @@ namespace {
 					for (auto &ep : in) {
 						auto numCh = ep.second.GetNumChannels();
 						auto toDo = ep.second.data.ReadAvailable() / numCh;
-						unsigned gap = 0;
 
-						if (io.numFrames > toDo) {
-							gap = io.numFrames - toDo;
-							std::cout << "Missing " << gap << " frames of input\n";
-							for (auto c : ep.second.map) {
-								for (unsigned i = 0;i < gap; ++i) {
-									delegateIn[i * streamIns + c.second] = 0;
-								}
-							}
-						} else if (toDo > io.numFrames) {
+						if (toDo > io.numFrames) {
 							toDo = io.numFrames;
 						}
 
@@ -373,7 +370,7 @@ namespace {
 
 							for (auto c : ep.second.map) {
 								for (unsigned i = 0;i < doNow;++i) {
-									delegateIn[(i+gap) * streamIns + c.second] = rr[i * numCh + c.first];
+									delegateIn[(i + gap) * streamIns + c.second] = rr[i * numCh + c.first];
 								}
 							}
 							toDo -= doNow;
@@ -389,8 +386,14 @@ namespace {
 						BYTE* data;
 						ep.second.service->GetBuffer(io.numFrames, &data);
 						float *epData = (float*)data;
+						
 						auto epChannels = ep.second.GetNumChannels();
 						auto delChannels = cfg.GetNumStreamOutputs();
+
+						if (delChannels < epChannels) {
+							memset(epData, 0, sizeof(float)*io.numFrames*epChannels);
+						}
+
 						for (auto c : ep.second.map) {
 							for (unsigned i = 0; i < io.numFrames;++i) {
 								epData[i * epChannels + c.first] = delegateOut[i * delChannels + c.second];
@@ -411,8 +414,6 @@ namespace {
 				STDMETHODIMP Invoke(IRtwqAsyncResult* result) override {
 					RTWQWORKITEM_KEY wik;
 
-					ResetEvent(RTWQ.outputEvent);
-
 					if (!runTask.test_and_set()) {
 						SetEvent(RTWQ.Done);
 						result->SetStatus(S_OK);
@@ -430,6 +431,7 @@ namespace {
 					}
 
 					// pull input
+					UINT64 earliestTime = 0ull;
 					for (auto &ep : in) {
 						UINT32 pending;
 						do {
@@ -438,6 +440,7 @@ namespace {
 							UINT64 streamTime = 0, pcTime = 0;
 							UINT32 frames = 0;
 							ep.second.service->GetBuffer(&data, &frames, &flags, &streamTime, &pcTime);
+							earliestTime = std::min(pcTime, earliestTime);
 							auto numSamples = frames * ep.second.GetNumChannels();
 							auto didWrite = ep.second.data.Write((const float*)data, numSamples);
 							ep.second.service->ReleaseBuffer(frames);
@@ -446,23 +449,35 @@ namespace {
 						} while (pending);
 
 						if (io.numFrames > ep.second.data.ReadAvailable()) {
-							// need more data, emit silence
-							auto gap = io.numFrames - ep.second.data.ReadAvailable();
-							while (gap) {
-								auto gapWr = ep.second.data.Write(gap);
-								memset(gapWr.region, 0, sizeof(float) * gapWr.size);
-								gap -= gapWr.size;
-							}
+							io.numFrames = ep.second.data.ReadAvailable();
 						}
 					}
 
-					SplatInput(io);
-					AllocateOutput(io);
-					dev->BufferSwitch(io);
-					SplatOutput(io);
+					if (io.numFrames) {
+						// 100ns to us
+						io.inputBufferTime = std::chrono::microseconds(earliestTime / 10);
+
+						SplatInput(io);
+						AllocateOutput(io);
+
+						if (clock.Get()) {
+							UINT64 streamPosBytes, pcPos, bytesPerSecond;
+							clock->GetFrequency(&bytesPerSecond);
+							clock->GetPosition(&streamPosBytes, &pcPos);
+							std::chrono::microseconds streamPlayed(streamPosBytes * 1000'000ull / bytesPerSecond);
+							std::chrono::microseconds streamRendered(rendered * 1000'000ull / (UINT64)cfg.GetSampleRate());
+							auto latency = streamRendered - streamPlayed;
+							std::chrono::microseconds systemTime(pcPos / 10);
+							io.outputBufferTime = systemTime + latency;
+						}
+
+						dev->BufferSwitch(io);
+						rendered += io.numFrames;
+						SplatOutput(io);
+					}
 
 					result->SetStatus(S_OK);
-					return RtwqPutWaitingWorkItem(RTWQ.inputEvent, 1, result, &wik);
+					return RtwqPutWaitingWorkItem(RTWQ.Event, 1, result, &wik);
 				}
 
 				Stream(WasapiDevice* dev, const AudioStreamConfiguration& desired) :cfg(desired),dev(dev) {
@@ -495,12 +510,16 @@ namespace {
 
 					WinError::Context("Opening output endpoints");
 					
-					RTWQ.inputEvent = CreateEvent(nullptr, false, false, nullptr);
-					RTWQ.outputEvent = CreateEvent(nullptr, false, false, nullptr);
+					RTWQ.Event = CreateEvent(nullptr, false, false, nullptr);
+					RTWQ.SecondaryEvent = CreateEvent(nullptr, false, false, nullptr);
 					RTWQ.Done = CreateEvent(nullptr, false, false, nullptr);
 
-					for (auto &iep : in) dev->InitializePort(cfg, iep.first, iep.second, RTWQ.inputEvent);
-					for (auto &oep : out) dev->InitializePort(cfg, oep.first, oep.second, RTWQ.outputEvent);
+					for (auto &iep : in) dev->InitializePort(cfg, iep.first, iep.second, RTWQ.Event);
+					for (auto &oep : out) dev->InitializePort(cfg, oep.first, oep.second, in.empty() ? RTWQ.Event : RTWQ.SecondaryEvent);
+
+					for (auto &ep : out) {
+						if (ep.first->GetService(__uuidof(IAudioClock), (void**)clock.Reset()) == S_OK) break;
+					}
 
 					RTWQ.Queue = RTWQ_MULTITHREADED_WORKQUEUE;
 					RTWQ.Task = 0;
@@ -510,7 +529,9 @@ namespace {
 					runTask.test_and_set(); 
 					err = RtwqCreateAsyncResult(nullptr, this, nullptr, RTWQ.Result.Reset());
 					err = RtwqLockSharedWorkQueue(L"Audio", 0, &RTWQ.Task, &RTWQ.Queue);
-					err = RtwqPutWaitingWorkItem(RTWQ.outputEvent, 2, RTWQ.Result.Get(), &wik);
+
+					// wait on input first, output subsequently
+					err = RtwqPutWaitingWorkItem(RTWQ.Event, 2, RTWQ.Result.Get(), &wik);
 
 					if (cfg.HasSuspendOnStartup() == false) Activate(true);
 				}
@@ -520,8 +541,8 @@ namespace {
 					runTask.clear();
 					WaitForSingleObject(RTWQ.Done, 1000);
 					CloseHandle(RTWQ.Done);
-					CloseHandle(RTWQ.outputEvent);
-					CloseHandle(RTWQ.inputEvent);
+					CloseHandle(RTWQ.Event);
+					CloseHandle(RTWQ.SecondaryEvent);
 					RtwqUnlockWorkQueue(RTWQ.Queue);
 					RtwqShutdown();
 				}
