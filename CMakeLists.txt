@@ -45,7 +45,7 @@ if (PAD_AVAILABLE_HOSTAPIS)
 	set(PAD_HOSTAPIS ${PAD_AVAILABLE_HOSTAPIS} CACHE STRING "Build PAD for a subset of asio;wasapi;coreaudio;jack")
 endif (PAD_AVAILABLE_HOSTAPIS)
 
-set(PAD_SOURCES HostAPI.cpp PAD.cpp)
+set(PAD_SOURCES HostAPI.cpp PAD.cpp pad.h pad_channels.h HostAPI.h pad_samples.h PADErrors.h)
 
 message(STATUS "Linking ${PAD_HOSTAPIS}")
 
@@ -66,7 +66,7 @@ endif()
 
 LIST_CONTAINS(contains wasapi ${PAD_HOSTAPIS})
 if (contains)
-	list(APPEND PAD_SOURCES pad_wasapi2.cpp)
+	list(APPEND PAD_SOURCES pad_wasapi2.cpp cog/cog.h)
 	add_definitions(-DPAD_LINK_WASAPI)
 endif()
 

@@ -318,7 +318,7 @@ public:
 
 		AboutToBeginStream(currentConfiguration);
 
-        if (m_currentState==WASS_Open)
+        if (m_currentState==WASS_Open) 
             InitAudioThread();
         if (m_currentState==WASS_Open && conf.HasSuspendOnStartup() == false)
             Run();
