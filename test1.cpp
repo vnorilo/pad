@@ -37,8 +37,6 @@ int main()
         };
       }
 	  auto defaultConf = d.DefaultAllChannels();
-	  defaultConf.SetBufferSize(32);
-	  defaultConf.SetOutputRanges({ 0 });
 	  d.Open(defaultConf);
       std::this_thread::sleep_for(std::chrono::seconds(10));
       d.Close();
