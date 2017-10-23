@@ -227,6 +227,7 @@ namespace {
 					frames -= wr.size;
 					written += wr.size;
 				}
+				return written;
 			}
 
 			unsigned WriteAvailable() const {
