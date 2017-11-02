@@ -9,7 +9,7 @@
 #include <cassert>
 #include <chrono>
 
-#include "PADErrors.h"
+#include "pad_errors.h"
 
 #define PAD_GUI_CONTROL_PANEL_SUPPORT 1
 
