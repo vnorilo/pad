@@ -1,6 +1,7 @@
 #pragma once
 #include <Windows.h>
 #include "Unknwn.h"
+#include "cog/cog.h"
 
 #include <string>
 #include <vector>
@@ -227,28 +228,11 @@ namespace ASIO {
 		virtual Error outputReady() = 0;
 	};
 
-	template <typename T>
-	class ComRef {
-		T* ptr;
-	public:
-		ComRef& operator=(const ComRef& c) {if (ptr!=c.ptr) {c.ptr->AddRef();ptr->Release();ptr=c.ptr;} return *this; }
-		ComRef& operator=(ComRef&& c) { std::swap(this->ptr,c.ptr); return *this; }
-		ComRef(T* ptr=0):ptr(ptr) {if (ptr) ptr->AddRef();}
-		ComRef(const ComRef& c):ptr(c.ptr) {if (ptr) ptr->AddRef();}
-		ComRef(ComRef&& c):ptr(c.ptr){c.ptr=0;}
-		~ComRef() {if (ptr) ptr->Release();}
-		operator T*() {return ptr;}
-		T* operator->() {return ptr;}
-		T** Placement() {*this = ComRef();return &ptr;}
-		unsigned GetCount() {if (ptr) {ptr->AddRef(); return ptr->Release();} else return 0;}
-		bool NotNull() const {return ptr!=0;}
-	};
-
 	struct DriverRecord {
 		int driverID;
 		CLSID classID;
 		std::string driverName;
-		ComRef<IASIO> Load();
+		COG::ComRef<IASIO> Load();
 	};
 
 	std::vector<DriverRecord> GetDrivers();
