@@ -385,22 +385,26 @@ namespace {
 				void SplatOutput(PAD::IO& io) {
 					for (auto &ep : out) {
 						BYTE* data;
-						ep.second.service->GetBuffer(io.numFrames, &data);
-						float *epData = (float*)data;
-						
-						auto epChannels = ep.second.GetNumChannels();
-						auto delChannels = cfg.GetNumStreamOutputs();
+						auto err = ep.second.service->GetBuffer(io.numFrames, &data);
+						if (data) {
+							float *epData = (float*)data;
 
-						if (delChannels < epChannels) {
-							memset(epData, 0, sizeof(float)*io.numFrames*epChannels);
-						}
+							auto epChannels = ep.second.GetNumChannels();
+							auto delChannels = cfg.GetNumStreamOutputs();
 
-						for (auto c : ep.second.map) {
-							for (unsigned i = 0; i < io.numFrames;++i) {
-								epData[i * epChannels + c.first] = delegateOut[i * delChannels + c.second];
+							if (delChannels < epChannels) {
+								memset(epData, 0, sizeof(float)*io.numFrames*epChannels);
 							}
+
+							for (auto c : ep.second.map) {
+								for (unsigned i = 0; i < io.numFrames;++i) {
+									epData[i * epChannels + c.first] = delegateOut[i * delChannels + c.second];
+								}
+							}
+							ep.second.service->ReleaseBuffer(io.numFrames, 0);
+						} else {
+							printf("Wasapi error %x\n", err);
 						}
-						ep.second.service->ReleaseBuffer(io.numFrames, 0);
 					}
 				}
 
