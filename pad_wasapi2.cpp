@@ -519,8 +519,8 @@ namespace {
 					RTWQ.SecondaryEvent = CreateEvent(nullptr, false, false, nullptr);
 					RTWQ.Done = CreateEvent(nullptr, false, false, nullptr);
 
-					for (auto &iep : in) dev->InitializePort(cfg, iep.first, iep.second, RTWQ.Event);
-					for (auto &oep : out) dev->InitializePort(cfg, oep.first, oep.second, in.empty() ? RTWQ.Event : RTWQ.SecondaryEvent);
+					for (auto &iep : in) dev->InitializePort(cfg, iep.first, iep.second, out.empty() ? RTWQ.Event : RTWQ.SecondaryEvent);
+					for (auto &oep : out) dev->InitializePort(cfg, oep.first, oep.second, RTWQ.Event);
 
 					for (auto &ep : out) {
 						if (ep.first->GetService(__uuidof(IAudioClock), (void**)clock.Reset()) == S_OK) break;
