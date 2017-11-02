@@ -4,7 +4,7 @@
 
 #include <iostream> // kludge
 
-#include "PAD.h"
+#include "pad.h"
 #include "HostAPI.h"
 
 #include "pad_samples.h"
@@ -110,6 +110,9 @@ namespace{
 		JackPortList inputPorts;
 		JackPortList outputPorts;
 		vector<float> clientInputBuffer, clientOutputBuffer;
+
+		jack_nframes_t inputLatency, outputLatency;
+
 		virtual const AudioStreamConfiguration& Open(const AudioStreamConfiguration& conf)
 		{
 			Unwind(Idle);
@@ -121,6 +124,7 @@ namespace{
 
 			currentConf = conf;
 			unsigned numCh = max(conf.GetNumStreamInputs(),conf.GetNumStreamOutputs());
+			inputLatency = outputLatency = 0;
 			for(unsigned i(0);i<numCh;++i)
 			{
 				char name[32];
@@ -130,6 +134,13 @@ namespace{
 					jack_port_t* in = jack_port_register(client,name,JACK_DEFAULT_AUDIO_TYPE,JackPortIsInput,0);
 					if (in) inputPorts.add(in);
 					else break;
+
+					_jack_latency_range latency;
+					jack_port_get_latency_range(in, JackCaptureLatency, &latency);
+
+					inputLatency = std::max(inputLatency, latency.max);
+					
+					
 				}
 
 				if (i < conf.GetNumStreamOutputs())
@@ -138,6 +149,11 @@ namespace{
 					jack_port_t* out = jack_port_register(client,name,JACK_DEFAULT_AUDIO_TYPE,JackPortIsOutput,0);
 					if (out) outputPorts.add(out);
 					else break;
+
+					_jack_latency_range latency;
+					jack_port_get_latency_range(out, JackPlaybackLatency, &latency);
+
+					outputLatency = std::max(latency.max, outputLatency);
 				}
 			}
 
@@ -195,6 +211,11 @@ namespace{
 
 		int Process(jack_nframes_t frames)
 		{
+			jack_nframes_t current_frames;
+			jack_time_t current_usecs, next_usecs;
+			float period_usecs;
+			jack_get_cycle_times(client, &current_frames, &current_usecs, &next_usecs, &period_usecs);
+
 			typedef Converter::HostSample<float,float,-1,1,0,SYSTEM_BIGENDIAN> jack_smp_t;
 			static const unsigned channelPackage = 32;
 			auto todo = inputPorts.size();
@@ -207,7 +228,17 @@ namespace{
 				todo-=now;
 			}
 
-			BufferSwitch(PAD::IO { currentConf,clientInputBuffer.data(),clientOutputBuffer.data(),timeStamp,frames});
+			std::uint64_t inputTime = current_usecs - (inputLatency * 1000000 / currentConf.GetSampleRate());
+			std::uint64_t outputTime = current_usecs + (outputLatency * 1000000 / currentConf.GetSampleRate());
+
+			BufferSwitch(PAD::IO { 
+				currentConf,
+				clientInputBuffer.data(),
+				clientOutputBuffer.data(),
+				frames, 
+				std::chrono::microseconds(inputTime),
+				std::chrono::microseconds(outputTime)
+			});
 
 			todo = outputPorts.size();
 			while(todo>0)
@@ -219,6 +250,10 @@ namespace{
 				todo-=now;
 			}
 			return 0;
+		}
+
+		std::chrono::microseconds DeviceTimeNow() const {
+			return std::chrono::microseconds(jack_get_time());
 		}
 
 		static int Process(jack_nframes_t frames, void *arg)
