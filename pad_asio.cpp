@@ -59,7 +59,7 @@ namespace {
 		double CPU_Load( ) const { return current_cpu_load; }
 		
 		ASIO::DriverRecord driverInfo;
-		ASIO::ComRef<ASIO::IASIO> driver;
+		COG::ComRef<ASIO::IASIO> driver;
 		string deviceName;
 
 		unsigned numInputs, numOutputs;
@@ -78,12 +78,12 @@ namespace {
 		AudioStreamConfiguration DefaultAllChannels( ) const { return defaultAll; }
 
 		ASIO::IASIO& ASIO( ) {
-			if (driver.GetCount( ) < 1) {
-				THROW_FALSE(DeviceInitializationFailure, (driver = driverInfo.Load( )));
+			if (driver.Get() == nullptr) {
+				THROW_FALSE(DeviceInitializationFailure, (driver = driverInfo.Load( )).Get());
 				THROW_FALSE(DeviceInitializationFailure, driver->init(GetDesktopWindow( )));
 			}
 
-			return *driver;
+			return *driver.Get();
 		}
 
 		void _AsioUnwind(AsioState to) {
@@ -103,7 +103,7 @@ namespace {
 				State = Loaded;
 				if (to == Loaded) break;
 			case Idle:
-				driver = ASIO::ComRef<ASIO::IASIO>( );
+				driver.Reset();
 				break;
 			}
 
@@ -541,7 +541,7 @@ namespace {
 		~AsioPublisher( ) { devices.clear( ); while (coInitializeCount > 0) { CoUninitialize( ); coInitializeCount--; } }
 
 		void RegisterDevice(Session& PADInstance, AsioDevice dev) {
-			devices.push_back(dev);
+			devices.push_back(std::move(dev));
 			PADInstance.Register(&devices.back( ));
 		}
 
@@ -561,8 +561,8 @@ namespace {
 						long numInputs = 0;
 						long numOutputs = 0;
 
-						ASIO::ComRef<ASIO::IASIO> driver = drv.Load( );
-						if (driver) {
+						auto driver = drv.Load( );
+						if (driver.Get()) {
 							try {
 								ASIO::SampleRate currentSampleRate;
 

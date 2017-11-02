@@ -5,6 +5,7 @@
 
 #include <codecvt>
 #include <string>
+#include <memory>
 
 namespace COG {
 	namespace detail {
@@ -22,9 +23,13 @@ namespace COG {
 		template <typename OBJ, typename... ARGS> struct ArgDeducer<HRESULT(OBJ::*)(ARGS...)> {
 			using ReturnObjectTy = typename ReturnObject<ARGS...>::type;
 		};
+
+		template <typename... ARGS> struct ArgDeducer<HRESULT(*)(ARGS...)> {
+			using ReturnObjectTy = typename ReturnObject<ARGS...>::type;
+		};
 	}
 
-	std::string toUtf8(std::wstring ucs) {
+	static std::string toUtf8(std::wstring ucs) {
 		std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>, wchar_t> cvt;
 		return cvt.to_bytes(ucs);
 	}
@@ -153,17 +158,19 @@ namespace COG {
 
 	template <typename T> using CoTaskPointer = std::unique_ptr<T, decltype(&CoTaskMemFree)>;
 
-	template <typename T, typename... STUFF> CoTaskPointer<T> GetCoTaskMem(STUFF&&... stuff) {
-		auto comFn = std::bind(std::forward<STUFF>(stuff)..., std::placeholders::_1);
+	// all COM functions take only scalar  POD parameters, so forwarding is a waste of keystrokes.
+	// much like this comment.
+	template <typename T, typename... STUFF> CoTaskPointer<T> GetCoTaskMem(STUFF... stuff) {
+		auto comFn = std::bind(stuff..., std::placeholders::_1);
 		T* raw = nullptr;
 		WinError err = comFn(&raw);
 		return CoTaskPointer<T>(raw, CoTaskMemFree);
 	}
 
-	template <typename T, typename... STUFF> ComRef<T> ComObject(STUFF&&... stuff) {
-		auto comFn = std::bind(std::forward<STUFF>(stuff)..., std::placeholders::_1);
+	template <typename T, typename... STUFF> auto ComObject(STUFF... stuff) {
+		auto comFn = std::bind(stuff..., std::placeholders::_1);
 		ComRef<T> ref;
-		WinError err = comFn((void**)ref.Reset());
+		WinError err = comFn((LPVOID*)ref.Reset());
 		return ref;
 	}
 
