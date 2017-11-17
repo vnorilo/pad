@@ -155,7 +155,7 @@ namespace {
 			REFERENCE_TIME bufferSz, min;
 			outputPorts.front()->GetDevicePeriod(&bufferSz, &min);
 			bufferSz *= (REFERENCE_TIME)def.GetSampleRate();
-			def.SetBufferSize((unsigned)bufferSz / 10'000'000);
+			def.SetBufferSize((unsigned)(bufferSz / 10000000ll));
 			return def;
 		}
 
@@ -469,13 +469,15 @@ namespace {
 							UINT64 streamPosBytes, pcPos, bytesPerSecond;
 							clock->GetFrequency(&bytesPerSecond);
 							clock->GetPosition(&streamPosBytes, &pcPos);
-							std::chrono::microseconds streamPlayed(streamPosBytes * 1000'000ull / bytesPerSecond);
-							std::chrono::microseconds streamRendered(rendered * 1000'000ull / (UINT64)cfg.GetSampleRate());
+							std::chrono::microseconds streamPlayed(UINT64(streamPosBytes * 1000000. / bytesPerSecond));
+							std::chrono::microseconds streamRendered(UINT64(rendered * 1000000. / cfg.GetSampleRate()));
 							auto latency = streamRendered - streamPlayed;
 							std::chrono::microseconds systemTime(pcPos / 10);
 							io.outputBufferTime = systemTime + latency;
+
 						}
 
+						auto refTime = dev->DeviceTimeNow();
 						dev->BufferSwitch(io);
 						rendered += io.numFrames;
 						SplatOutput(io);
@@ -599,7 +601,8 @@ namespace {
 			LARGE_INTEGER pc, pcFreq;
 			QueryPerformanceCounter(&pc);
 			QueryPerformanceFrequency(&pcFreq);
-			return std::chrono::microseconds(pc.QuadPart * 1000'000ull / pcFreq.QuadPart);
+			double factor = 1000000. / pcFreq.QuadPart;
+			return std::chrono::microseconds(std::int64_t(pc.QuadPart * factor));
 		}
 	};
 
