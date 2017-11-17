@@ -45,6 +45,7 @@ namespace {
 		void Allocate(AsioDevice&);
 		void Release(AsioDevice&);
 		operator ASIO::Callbacks*() { return &cb; }
+		ASIO::Callbacks* operator->() { return &cb; }
 	};
 
 	class AsioDevice : public AudioDevice {
@@ -268,7 +269,7 @@ namespace {
 
 		void Run( ) {
 			if (State < Running) {
-				ASIO( ).start( );
+				THROW_ERROR(DeviceOpenStreamFailure, ASIO( ).start( ));
 				State = Running;
 			}
 		}

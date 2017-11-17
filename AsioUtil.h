@@ -11,8 +11,20 @@
 #pragma pack(push,4)
 
 namespace ASIO {
-	typedef int64_t Samples;
-	typedef int64_t TimeStamp;
+	struct QuadWord {
+		uint32_t hi;
+		uint32_t lo;
+		operator uint64_t() const {
+			int64_t quad = hi;
+			quad <<= 32;
+			quad += lo;
+			return quad;
+		}
+	};
+
+	typedef QuadWord Samples;
+	typedef QuadWord TimeStamp;
+
 	typedef double SampleRate;
 	typedef long Bool;
 	typedef long SampleType;
