@@ -183,4 +183,19 @@ namespace COG {
 			return E_NOINTERFACE;
 		}
 	};
+
+	struct Holder {
+		Holder() {
+			CoInitialize(nullptr);
+		}
+
+		~Holder() {
+			CoUninitialize();
+		}
+
+		Holder(const Holder&) = delete;
+		Holder& operator=(const Holder&) = delete;
+	};
+
+	using Handle = std::unique_ptr<Holder>;
 }
