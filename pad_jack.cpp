@@ -177,7 +177,6 @@ namespace{
 
 		void Stop()
 		{
-			timeStamp = 0ll;
 			jack_deactivate(client);
 		}
 
@@ -206,8 +205,6 @@ namespace{
 		{
 			Unwind(Idle);
 		};
-
-		std::uint64_t timeStamp;
 
 		int Process(jack_nframes_t frames)
 		{
