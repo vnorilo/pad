@@ -447,10 +447,8 @@ namespace {
 				}
 			}
 			
-			using MicroSecTy = std::chrono::duration<std::chrono::microseconds>;
-
-			// system time is in ms
-			std::chrono::milliseconds sysTime(params->timeInfo.systemTime);
+			// system time is in nanosecs
+			std::chrono::microseconds sysTime(params->timeInfo.systemTime / 1000);
 
 			IO io{
 				currentConfiguration,
