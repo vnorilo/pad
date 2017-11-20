@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vector>
-#include "pad.h"
+#include "PAD.h"
 
 namespace PAD{
 	class HostAPIPublisher : public IHostAPI {

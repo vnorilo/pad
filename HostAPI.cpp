@@ -5,7 +5,7 @@
 #include <mutex>
 
 #include "HostAPI.h"
-#include "pad.h"
+#include "PAD.h"
 
 namespace PAD {
 	using namespace std;
