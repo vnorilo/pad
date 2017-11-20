@@ -6,6 +6,7 @@
 #include <CoreServices/CoreServices.h>
 #include <CoreAudio/CoreAudio.h>
 #include <AudioUnit/AudioUnit.h>
+#include <mach/mach_time.h>
 
 #include <string>
 #include <vector>
@@ -15,6 +16,8 @@
 #include <algorithm>
 
 #include <iostream>
+
+#include <chrono>
 
 #define THROW_ERROR(code,statement) {auto err = statement; if (err != noErr) throw SoftError(code,string(#statement ": ") + StatusString(err));}
 
@@ -83,21 +86,25 @@ namespace {
 		AudioStreamConfiguration Conform(AudioStreamConfiguration c) const {
 			return c;
 		}
+        
+        mach_timebase_info_data_t timebaseInfo;
 
 	public:
 		CoreAudioDevice(AudioDeviceID id)
 			:caID(id), numInputs(CountChannels(true, inputChannelFormat)), numOutputs(CountChannels(false, outputChannelFormat)),
-			devName(GetName(true) + "/" + GetName(false)) { }
+			devName(GetName(true) + "/" + GetName(false)) {
+            mach_timebase_info(&timebaseInfo);
+        }
 
         ~CoreAudioDevice() { Close(); }
-		const char* GetName( ) const { return devName.c_str( ); }
-		unsigned GetNumInputs( ) const { return numInputs; }
-		unsigned GetNumOutputs( ) const { return numOutputs; }
-		const char *GetHostAPI( ) const { return "CoreAudio"; }
+		const char* GetName( ) const override { return devName.c_str( ); }
+		unsigned GetNumInputs( ) const override { return numInputs; }
+		unsigned GetNumOutputs( ) const override { return numOutputs; }
+		const char *GetHostAPI( ) const override { return "CoreAudio"; }
 
-		AudioStreamConfiguration DefaultMono( ) const { return Conform(AudioStreamConfiguration(44100).Input(0).Output(0)); }
-		AudioStreamConfiguration DefaultStereo( ) const { return Conform(AudioStreamConfiguration(44100).StereoInput(0).StereoOutput(0)); }
-		AudioStreamConfiguration DefaultAllChannels( ) const { return Conform(AudioStreamConfiguration(44100).Inputs(ChannelRange(0, numInputs)).Outputs(ChannelRange(0, numOutputs))); }
+		AudioStreamConfiguration DefaultMono( ) const override { return Conform(AudioStreamConfiguration(44100).Input(0).Output(0)); }
+		AudioStreamConfiguration DefaultStereo( ) const override  { return Conform(AudioStreamConfiguration(44100).StereoInput(0).StereoOutput(0)); }
+		AudioStreamConfiguration DefaultAllChannels( ) const override  { return Conform(AudioStreamConfiguration(44100).Inputs(ChannelRange(0, numInputs)).Outputs(ChannelRange(0, numOutputs))); }
 
 		AudioStreamConfiguration currentConfiguration;
 
@@ -113,7 +120,6 @@ namespace {
 
 
 		vector<float> delegateInputBuffer;
-		std::uint64_t padTimeStamp = 0;
 
 		OSStatus AUHALProc(AudioUnitRenderActionFlags* ioFlags, const AudioTimeStamp *timeStamp, UInt32 Bus, UInt32 frames, AudioBufferList *io) {
 			if (Bus == 0) {
@@ -133,18 +139,29 @@ namespace {
 
 					}
 				}
+                
+                auto sysTime = timeStamp->mHostTime;
+                sysTime *= timebaseInfo.numer;
+                sysTime /= timebaseInfo.denom; // nanosec to usec
+                
+                auto outputTime = std::chrono::microseconds(sysTime / 1000);
+                auto inputTime = outputTime; // todo: compute latency!!
 
+                IO ioData{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, frames, inputTime, outputTime};
 				if (GetBufferSwitchLock( )) {
 					std::lock_guard<recursive_mutex> lock(*GetBufferSwitchLock( ));
-                    
-                    BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, padTimeStamp, frames});
-                                 
-                } else BufferSwitch(IO{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, padTimeStamp, frames});
-
-		padTimeStamp += frames;
+                    BufferSwitch(ioData);
+                } else BufferSwitch(ioData);
 			}
 			return noErr;
 		}
+        
+        std::chrono::microseconds DeviceTimeNow() const override {
+            auto sysTime = mach_absolute_time();
+            sysTime *= timebaseInfo.numer;
+            sysTime /= timebaseInfo.denom; // nanosec to usec
+            return std::chrono::microseconds(sysTime / 1000);
+        }
 
 
 		static OSStatus AUHALCallback(void *inRefCon, AudioUnitRenderActionFlags* ioFlags, const AudioTimeStamp *timeStamp, UInt32 Bus, UInt32 frames, AudioBufferList *io) {
@@ -152,7 +169,7 @@ namespace {
 			return cadev->AUHALProc(ioFlags, timeStamp, Bus, frames, io);
 		}
 
-		const AudioStreamConfiguration& Open(const AudioStreamConfiguration& c) {
+		const AudioStreamConfiguration& Open(const AudioStreamConfiguration& c) override {
 
 			currentConfiguration = c;
 
@@ -214,21 +231,20 @@ namespace {
 
 			THROW_ERROR(DeviceInitializationFailure, AudioUnitInitialize(AUHAL));
 
-			padTimeStamp = 0ul;
 			if (currentConfiguration.HasSuspendOnStartup( ) == false) Resume( );
 
 			return currentConfiguration;
 		}
 
-		void Resume( ) {
+		void Resume( ) override {
 			THROW_ERROR(DeviceStartStreamFailure, AudioOutputUnitStart(AUHAL));
 		}
 
-		void Suspend( ) {
+		void Suspend( ) override {
 			THROW_ERROR(DeviceStopStreamFailure, AudioOutputUnitStop(AUHAL));
 		}
 
-		void Close( )
+		void Close( ) override
         {
             if (AUHAL!=nullptr)
             {
@@ -240,9 +256,9 @@ namespace {
             }
         }
 
-		bool Supports(const AudioStreamConfiguration&) const { return false; }
+		bool Supports(const AudioStreamConfiguration&) const override { return false; }
 
-		double CPU_Load( ) const { return 0.0; }
+		double CPU_Load( ) const override { return 0.0; }
 	};
 
 
