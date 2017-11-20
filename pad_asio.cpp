@@ -78,8 +78,11 @@ namespace {
 		AudioStreamConfiguration DefaultStereo( ) const { return defaultStereo; }
 		AudioStreamConfiguration DefaultAllChannels( ) const { return defaultAll; }
 
+		COG::Handle ComHandle;
+
 		ASIO::IASIO& ASIO( ) {
 			if (driver.Get() == nullptr) {
+				ComHandle = std::make_unique<COG::Holder>();
 				THROW_FALSE(DeviceInitializationFailure, (driver = driverInfo.Load( )).Get());
 				THROW_FALSE(DeviceInitializationFailure, driver->init(GetDesktopWindow( )));
 			}
@@ -537,12 +540,14 @@ namespace {
 	struct AsioPublisher : public HostAPIPublisher {
 		vector<unique_ptr<recursive_mutex>> deviceMutex;
 		list<AsioDevice> devices;
-		int coInitializeCount;
-		AsioPublisher( ) :coInitializeCount(0) { }
-		~AsioPublisher( ) { devices.clear( ); while (coInitializeCount > 0) { CoUninitialize( ); coInitializeCount--; } }
 
-		void RegisterDevice(Session& PADInstance, AsioDevice dev) {
-			devices.push_back(std::move(dev));
+		COG::Handle initHandle;
+
+		~AsioPublisher( ) { devices.clear( ); }
+
+		template <typename... ARGS>
+		void RegisterDevice(Session& PADInstance, ARGS&&... args) {
+			devices.emplace_back(std::forward<ARGS>(args)...);
 			PADInstance.Register(&devices.back( ));
 		}
 
@@ -554,7 +559,9 @@ namespace {
 			BlackList.insert("JackRouter");
 
 			std::vector<ASIO::DriverRecord> drivers = ASIO::GetDrivers( );
-			if (drivers.size( ) && coInitializeCount < 1) { CoInitialize(0); coInitializeCount++; }
+			if (drivers.size()) {
+				initHandle = std::make_unique<COG::Holder>();
+			}
 
 			for (auto drv : drivers) {
 				try {
@@ -571,7 +578,7 @@ namespace {
 								THROW_ERROR(DeviceInitializationFailure, driver->getChannels(&numInputs, &numOutputs));
 								THROW_ERROR(DeviceInitializationFailure, driver->getSampleRate(&currentSampleRate));
 
-								RegisterDevice(PADInstance, AsioDevice(drv, make_shared<recursive_mutex>( ), currentSampleRate, drv.driverName, numInputs, numOutputs));
+								RegisterDevice(PADInstance, drv, make_shared<recursive_mutex>( ), currentSampleRate, drv.driverName, numInputs, numOutputs);
 							} catch (PAD::Error &) {
 								// device failed to open
 								char name[256];
@@ -590,7 +597,6 @@ namespace {
 
 		void Cleanup(PAD::Session&) {
 			devices.clear( );
-			if (coInitializeCount > 0) { coInitializeCount--; CoUninitialize( ); }
 		}
 	} publisher;
 

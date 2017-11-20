@@ -368,12 +368,14 @@ namespace {
 						while (toDo) {
 							auto rr = ep.second.data.Read(toDo * numCh);
 							auto doNow = rr.size / numCh;
+							if (doNow == 0) break;
 
 							for (auto c : ep.second.map) {
 								for (unsigned i = 0;i < doNow;++i) {
 									delegateIn[(i + gap) * streamIns + c.second] = rr[i * numCh + c.first];
 								}
 							}
+
 							toDo -= doNow;
 							gap += doNow;
 						}
