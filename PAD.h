@@ -164,6 +164,7 @@ namespace PAD {
 
 		template <typename FN, typename... ARGS> void When(Event<ARGS...>& evt, const FN& f) {
 			evt.AddSubscriber(this, f);
+			subscriptions.emplace_front(&evt);
 		}
 	};
 
