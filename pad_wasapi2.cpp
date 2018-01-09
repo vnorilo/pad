@@ -366,7 +366,7 @@ namespace {
 						}
 
 						while (toDo) {
-							auto rr = ep.second.data.Read(toDo * numCh);
+							auto rr = ep.second.data.Read((unsigned)(toDo * numCh));
 							auto doNow = rr.size / numCh;
 							if (doNow == 0) break;
 
@@ -377,7 +377,7 @@ namespace {
 							}
 
 							toDo -= doNow;
-							gap += doNow;
+							gap += (unsigned)doNow;
 						}
 					}
 
@@ -449,7 +449,7 @@ namespace {
 							ep.second.service->GetBuffer(&data, &frames, &flags, &streamTime, &pcTime);
 							earliestTime = std::min(pcTime, earliestTime);
 							auto numSamples = frames * ep.second.GetNumChannels();
-							auto didWrite = ep.second.data.Write((const float*)data, numSamples);
+							auto didWrite = ep.second.data.Write((const float*)data, (unsigned)numSamples);
 							ep.second.service->ReleaseBuffer(frames);
 							if (didWrite != numSamples) break;
 							ep.second.service->GetNextPacketSize(&pending);
