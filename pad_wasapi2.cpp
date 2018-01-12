@@ -372,7 +372,7 @@ namespace {
 
 							for (auto c : ep.second.map) {
 								for (unsigned i = 0;i < doNow;++i) {
-									delegateIn[(i + gap) * streamIns + c.second] = rr[i * numCh + c.first];
+									delegateIn[(i + gap) * streamIns + c.second] = rr[(unsigned)(i * numCh + c.first)];
 								}
 							}
 
