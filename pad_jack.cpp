@@ -10,6 +10,7 @@
 #include "pad_samples.h"
 #include "pad_samples_sse2.h"
 #include "pad_channels.h"
+#include "pad_errors.h"
 
 #pragma warning(disable: 4267)
 
@@ -81,6 +82,7 @@ namespace{
 			{
 				jack_status_t status;
 				client = jack_client_open(name.c_str(),JackNoStartServer,&status);
+				if (!client) throw PAD::HardError(PAD::DeviceDriverFailure, "Could not initialize JACK Audio Connection Kit");
 				jack_set_process_callback(client,JackDevice::Process,this);
 				jack_on_shutdown(client,JackDevice::Shutdown,this);
 				currentState = Initialized;
