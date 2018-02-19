@@ -1,4 +1,4 @@
-#include "PAD.h"
+#include "pad.h"
 #include "HostAPI.h"
 
 #include "pad_samples.h"
@@ -40,8 +40,6 @@ namespace {
 
 	class CoreAudioDevice : public AudioDevice {
 		AudioDeviceID caID;
-		unsigned numIns, numOuts;
-
 
 		vector<ChannelPackage> inputChannelFormat;
 		vector<ChannelPackage> outputChannelFormat;
