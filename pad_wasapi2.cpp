@@ -154,7 +154,7 @@ namespace {
 			def.AddDeviceInputs(ChannelRange(0, std::min<unsigned>(numInputs, (unsigned)Cfg().inputChannel.size())));
 			REFERENCE_TIME bufferSz, min;
 			outputPorts.front()->GetDevicePeriod(&bufferSz, &min);
-			bufferSz *= (REFERENCE_TIME)def.GetSampleRate();
+			bufferSz *= 2 * (REFERENCE_TIME)def.GetSampleRate();
 			def.SetBufferSize((unsigned)(bufferSz / 10000000ll));
 			return def;
 		}
