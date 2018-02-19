@@ -5,7 +5,6 @@
 #include <memory>
 #include <cstdint>
 #include <functional>
-#include <iosfwd>
 #include <cassert>
 #include <chrono>
 
