@@ -23,11 +23,6 @@ if(APPLE)
 	set(CMAKE_OSX_ARCHITECTURES "x86_64" CACHE STRING "Build architecture")
 endif()
 
-if(CMAKE_GENERATOR STREQUAL Xcode)
-    set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD "c++11")
-    set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")	
-endif()
-
 if (WIN32)
 	set(PAD_AVAILABLE_HOSTAPIS asio wasapi)
 elseif (APPLE)
@@ -86,6 +81,18 @@ if (contains)
 	add_definitions(-DPAD_LINK_JACK)
 endif()
 
+# check for o2
+if(O2_DIR)
+	set(BUILD_TESTS false)
+	add_subdirectory(${O2_DIR} o2)
+	set_target_properties(o2_static PROPERTIES FOLDER libs)
+
+	include_directories(${O2_DIR}/src)
+
+	add_definitions(-DPAD_LINK_O2)
+	list(APPEND PAD_SOURCES pad_o2.cpp)
+endif()
+
 add_library(pad STATIC ${PAD_SOURCES})
 
 LIST_CONTAINS(contains jack ${PAD_HOSTAPIS})
@@ -101,52 +108,62 @@ if (contains)
 	target_link_libraries( pad ${AUDIOUNIT_FRAMEWORK} ${COREAUDIO_FRAMEWORK})
 endif()
 
+if(O2_DIR)
+	target_link_libraries( pad o2_static )
+	set(PAD_O2_APPLICATION_DEFAULT_NAME PAD CACHE STRING "Default name for O2 application")
+	add_definitions(-DPAD_O2_APPLICATION="${PAD_O2_APPLICATION_DEFAULT_NAME}")
+endif()
+
 set_target_properties( pad 
 		       PROPERTIES 
 		       PUBLIC_HEADER "pad.h;pad_errors.h")
 
 set(PAD_TARGET_LIBRARY_ONLY ON CACHE BOOL "Do not build test driver, export or install targets")
+set(PAD_EXPORT ON CACHE BOOL "Make installer and CMake export")
 
-if (NOT PAD_LIBRARY_TARGET_ONLY)
-add_executable(pad_test "test1.cpp")
-target_link_libraries( pad_test pad )
+if (NOT PAD_TARGET_LIBRARY_ONLY)
+	add_executable(pad_test "test1.cpp")
+	target_link_libraries( pad_test pad )
+endif()
 
-target_include_directories(pad INTERFACE 
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-	$<INSTALL_INTERFACE:include>)
+if(PAD_EXPORT)
+	target_include_directories(pad INTERFACE 
+		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+		$<INSTALL_INTERFACE:include>)
 
-install( TARGETS pad EXPORT PADTargets
-	LIBRARY DESTINATION lib 
-	ARCHIVE DESTINATION lib 
-	PUBLIC_HEADER DESTINATION include 
-    FRAMEWORK DESTINATION "/Library/Frameworks" )
+	install( TARGETS pad EXPORT PADTargets
+		LIBRARY DESTINATION lib 
+		ARCHIVE DESTINATION lib 
+		PUBLIC_HEADER DESTINATION include 
+	    FRAMEWORK DESTINATION "/Library/Frameworks" )
 
-include(CMakePackageConfigHelpers)
-write_basic_package_Version_file(
-	"${CMAKE_CURRENT_BINARY_DIR}/pad/PADConfigVersion.cmake"
-	VERSION "${CPACK_PACKAGE_VERSION}"
-	COMPATIBILITY AnyNewerVersion
-)
+	include(CMakePackageConfigHelpers)
+	write_basic_package_Version_file(
+		"${CMAKE_CURRENT_BINARY_DIR}/pad/PADConfigVersion.cmake"
+		VERSION "${CPACK_PACKAGE_VERSION}"
+		COMPATIBILITY AnyNewerVersion
+	)
 
-export(EXPORT PADTargets
-	FILE "${CMAKE_CURRENT_BINARY_DIR}/pad/PADTargets.cmake"
-	NAMESPACE PAD::)
+	export(EXPORT PADTargets
+		FILE "${CMAKE_CURRENT_BINARY_DIR}/pad/PADTargets.cmake"
+		NAMESPACE PAD::)
 
-configure_file(PADConfig.cmake
-	"${CMAKE_CURRENT_BINARY_DIR}/pad/PADConfig.cmake"
-	COPYONLY)
+	configure_file(PADConfig.cmake
+		"${CMAKE_CURRENT_BINARY_DIR}/pad/PADConfig.cmake"
+		COPYONLY)
 
-set(ConfigPackageLocation share/pad/cmake)
-install(EXPORT PADTargets
-		FILE PADTargets.cmake
-		NAMESPACE PAD::
+	set(ConfigPackageLocation share/pad/cmake)
+
+	install(EXPORT PADTargets
+			FILE PADTargets.cmake
+			NAMESPACE PAD::
+			DESTINATION ${ConfigPackageLocation})
+
+	install(FILES
+		PADConfig.cmake
+		"${CMAKE_CURRENT_BINARY_DIR}/pad/PADConfigVersion.cmake"
 		DESTINATION ${ConfigPackageLocation})
 
-install(FILES
-	PADConfig.cmake
-	"${CMAKE_CURRENT_BINARY_DIR}/pad/PADConfigVersion.cmake"
-	DESTINATION ${ConfigPackageLocation})
-
-export(EXPORT PADTargets FILE pad-config.cmake NAMESPACE PAD::)
-export(PACKAGE pad)
+	export(EXPORT PADTargets FILE pad-config.cmake NAMESPACE PAD::)
+	export(PACKAGE pad)
 endif()
