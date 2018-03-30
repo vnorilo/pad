@@ -161,6 +161,7 @@ namespace PAD {
 	IHostAPI* LinkASIO( );
 	IHostAPI* LinkWASAPI( );
 	IHostAPI* LinkJACK( );
+	IHostAPI* LinkO2( );
 
 	std::vector<IHostAPI*> GetLinkedAPIs( ) {
 		std::vector<IHostAPI*> hosts;
@@ -169,6 +170,9 @@ namespace PAD {
 #endif
 #ifdef PAD_LINK_WASAPI
 		hosts.push_back(LinkWASAPI( ));
+#endif
+#ifdef PAD_LINK_O2
+		hosts.push_back(LinkO2( ));
 #endif
 #ifdef PAD_LINK_COREAUDIO
 		hosts.push_back(LinkCoreAudio());
