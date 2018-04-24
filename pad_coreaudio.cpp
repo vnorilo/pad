@@ -142,7 +142,7 @@ namespace {
                 sysTime *= timebaseInfo.numer;
                 sysTime /= timebaseInfo.denom; // nanosec to usec
                 
-                auto outputTime = std::chrono::microseconds(sysTime / 1000);
+                auto outputTime = std::chrono::microseconds((sysTime + 500) / 1000);
                 auto inputTime = outputTime; // todo: compute latency!!
 
                 IO ioData{currentConfiguration, delegateInputBuffer.data(), (float*)io->mBuffers[0].mData, frames, inputTime, outputTime};
