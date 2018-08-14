@@ -72,7 +72,7 @@ namespace PAD {
 		bool testAgain;
 		do {
 			testAgain = false;
-			for (int i = 1;i < cr.size();++i) {
+			for (size_t i = 1;i < cr.size();++i) {
 				if (cr[i - 1].Touches(cr[i])) {
 					cr[i - 1] = {
 						std::min(cr[i - 1].begin(), cr[i].begin()),
