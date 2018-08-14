@@ -64,7 +64,7 @@ namespace {
 						WinError err = ports[i]->GetMixFormat(&format);
 						config->defaultSampleRate = format->nSamplesPerSec;
 						for (int c = 0; c < format->nChannels; ++c) {
-							endpointChannels.emplace_back(i, c);
+							endpointChannels.emplace_back((int)i, c);
 						}
 					}
 				};
