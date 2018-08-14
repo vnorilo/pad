@@ -59,7 +59,7 @@ namespace {
 				WinError::Context("Retrieving device capabilities");
 
 				auto channelMapper = [&](auto& ports, auto& endpointChannels) {
-					for (int i = 0;i < ports.size();++i) {
+					for (size_t i = 0;i < ports.size();++i) {
 						WAVEFORMATEX* format;
 						WinError err = ports[i]->GetMixFormat(&format);
 						config->defaultSampleRate = format->nSamplesPerSec;

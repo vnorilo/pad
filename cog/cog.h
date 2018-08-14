@@ -20,11 +20,11 @@ namespace COG {
 			using type = typename ReturnObject<B, REST...>::type;
 		};
 
-		template <typename OBJ, typename... ARGS> struct ArgDeducer<HRESULT(OBJ::*)(ARGS...)> {
+		template <typename OBJ, typename... ARGS> struct ArgDeducer<HRESULT (__stdcall OBJ::*)(ARGS...)> {
 			using ReturnObjectTy = typename ReturnObject<ARGS...>::type;
 		};
 
-		template <typename... ARGS> struct ArgDeducer<HRESULT(*)(ARGS...)> {
+		template <typename... ARGS> struct ArgDeducer<HRESULT (__stdcall *)(ARGS...)> {
 			using ReturnObjectTy = typename ReturnObject<ARGS...>::type;
 		};
 	}
