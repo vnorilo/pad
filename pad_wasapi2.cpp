@@ -10,7 +10,6 @@
 #include <Audioclient.h>
 #include <Avrt.h>
 #include <Functiondiscoverykeys_devpkey.h>
-#include <RTWorkQ.h>
 #include <Mfidl.h>
 #include <Mfapi.h>
 
@@ -541,13 +540,14 @@ namespace {
 					}
 
 
-					RTWQ.Queue = RTWQ_MULTITHREADED_WORKQUEUE;
+					RTWQ.Queue = MF_MULTITHREADED_WORKQUEUE;
 					RTWQ.TaskID = 0;
 					WinError::Context("Creating real time work queue");
-					WinError err = RtwqStartup();
-					RTWQWORKITEM_KEY wik;
+					MFWORKITEM_KEY wik = 0;
 					runTask.test_and_set(); 
-					err = MFCreateAsyncResult(nullptr, this, nullptr, RTWQ.Result.Reset());
+					
+					MFStartup(MF_VERSION, MFSTARTUP_LITE);
+					WinError err = MFCreateAsyncResult(nullptr, this, nullptr, RTWQ.Result.Reset());
 					err = MFLockSharedWorkQueue(L"Audio", 10, &RTWQ.TaskID, &RTWQ.Queue);
 
 					// wait on input first, output subsequently
@@ -563,7 +563,7 @@ namespace {
 					CloseHandle(RTWQ.Done);
 					CloseHandle(RTWQ.Callback);
 					MFUnlockWorkQueue(RTWQ.Queue);
-					RtwqShutdown();
+					MFShutdown();
 				}
 
 				virtual void Activate(bool onOff) {
@@ -613,7 +613,7 @@ namespace {
 			LARGE_INTEGER pc, pcFreq;
 			QueryPerformanceCounter(&pc);
 			QueryPerformanceFrequency(&pcFreq);
-			double factor = 1000000. / pcFreq.QuadPart;
+			double factor = 1'000'000. / pcFreq.QuadPart;
 			return std::chrono::microseconds(std::int64_t(pc.QuadPart * factor));
 		}
 	};
