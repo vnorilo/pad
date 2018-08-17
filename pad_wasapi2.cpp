@@ -1,6 +1,6 @@
 #pragma comment(lib,"Ole32.lib")
 #pragma comment(lib,"Winmm.lib")
-#pragma comment(lib,"RTWorkQ.lib")
+#pragma comment(lib,"Mfplat.lib")
 
 #define NO_MINMAX
 #include "pad.h"
