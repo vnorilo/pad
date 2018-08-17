@@ -11,6 +11,8 @@
 #include <Avrt.h>
 #include <Functiondiscoverykeys_devpkey.h>
 #include <RTWorkQ.h>
+#include <Mfidl.h>
+#include <Mfapi.h>
 
 #include "cog/cog.h"
 
@@ -117,12 +119,11 @@ namespace {
 			return "WASAPI";
 		}
 
-		bool Supports(const AudioStreamConfiguration& cfg) const {
-			WinError::Context("Querying format support");
+		std::unordered_set<IAudioClient*> GetEndpointClients(const AudioStreamConfiguration& cfg) const {
 			std::unordered_set<IAudioClient*> endpoints;
 			for (auto range : cfg.GetInputRanges()) {
 				for (auto c = range.begin(); c != range.end(); ++c) {
-					endpoints.emplace(inputPorts[Cfg().inputChannel[c].first].Get());					
+					endpoints.emplace(inputPorts[Cfg().inputChannel[c].first].Get());
 				}
 			}
 
@@ -131,8 +132,13 @@ namespace {
 					endpoints.emplace(outputPorts[Cfg().outputChannel[c].first].Get());
 				}
 			}
+			return endpoints;
+		}
 
-			for (auto ep : endpoints) {
+		bool Supports(const AudioStreamConfiguration& cfg) const {
+			WinError::Context("Querying format support");
+
+			for (auto ep : GetEndpointClients(cfg)) {
 				WAVEFORMATEX *mixFormat;
 				WinError err = ep->GetMixFormat(&mixFormat);
 				auto testFormat = Canonical(mixFormat->nChannels, (int)cfg.GetSampleRate());
@@ -154,8 +160,11 @@ namespace {
 			def.AddDeviceInputs(ChannelRange(0, std::min<unsigned>(numInputs, (unsigned)Cfg().inputChannel.size())));
 			REFERENCE_TIME bufferSz, min;
 			outputPorts.front()->GetDevicePeriod(&bufferSz, &min);
-			bufferSz *= 2 * (REFERENCE_TIME)def.GetSampleRate();
+		
+			bufferSz *= 2 * (REFERENCE_TIME)def.GetSampleRate();		
+			
 			def.SetBufferSize((unsigned)(bufferSz / 10000000ll));
+			
 			return def;
 		}
 
@@ -268,22 +277,21 @@ namespace {
 			auto mixFormat = Canonical(fmt->nChannels, (int)cfg.GetSampleRate());
 			pm.numEpChannels = fmt->nChannels;
 
+			const auto streamFlags =
+				AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
+
 			if (S_OK == ac->QueryInterface(&ac3)) {
 				// win10
 				UINT32 defaultPeriod(0), fundamentalPeriod(0), minPeriod(0), maxPeriod(0);
 				err = ac3->GetSharedModeEnginePeriod((WAVEFORMATEX*)&mixFormat,
 													 &defaultPeriod, &fundamentalPeriod, &minPeriod, &maxPeriod);
-				if (cfg.GetBufferSize() <= minPeriod) {
-					cfg.SetBufferSize(minPeriod);
-				} else if (cfg.GetBufferSize() < defaultPeriod) {
-					cfg.SetBufferSize(defaultPeriod);
-				} else {
-					cfg.SetBufferSize(maxPeriod);
-				}
+
+				UINT32 requestPeriod = fundamentalPeriod + fundamentalPeriod * (cfg.GetBufferSize() / fundamentalPeriod);
+				requestPeriod = std::min(maxPeriod, std::max(requestPeriod, minPeriod));
 
 				err = ac3->InitializeSharedAudioStream(
-					AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-					cfg.GetBufferSize(),
+					streamFlags,
+					requestPeriod,
 					(WAVEFORMATEX*)&mixFormat,
 					nullptr);
 
@@ -291,6 +299,8 @@ namespace {
 					UINT32 current;
 					err = ac3->GetCurrentSharedModeEnginePeriod(&fmt, &current);
 					cfg.SetBufferSize(current);
+				} else {
+					cfg.SetBufferSize(requestPeriod);
 				}
 			} else {
 				// pre-win10
@@ -305,7 +315,7 @@ namespace {
 					cfg.SetBufferSize((unsigned)defaultPeriod);
 				}
 				REFERENCE_TIME hnsBuffer = cfg.GetBufferSize() * 10'000'000 / (unsigned)cfg.GetSampleRate();
-				err = ac->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, hnsBuffer, hnsBuffer, (WAVEFORMATEX*)&mixFormat, nullptr);
+				err = ac->Initialize(AUDCLNT_SHAREMODE_SHARED, streamFlags, hnsBuffer, 0, (WAVEFORMATEX*)&mixFormat, nullptr);
 			}
 
 			if (bufferSwitch != INVALID_HANDLE_VALUE) ac->SetEventHandle(bufferSwitch);
@@ -314,7 +324,7 @@ namespace {
 
 		const AudioStreamConfiguration& Open(const AudioStreamConfiguration& cfg) {
 			stream.reset();
-			struct Stream : public IStream, public IRtwqAsyncCallback {
+			struct Stream : public IStream, public IMFAsyncCallback {
 				AudioStreamConfiguration cfg;
 				WasapiDevice* dev;
 				std::atomic_flag streaming;
@@ -326,10 +336,10 @@ namespace {
 				std::vector<float> delegateIn, delegateOut;
 
 				struct RTWQState {
-					DWORD Queue, Task;
-					HANDLE Event, SecondaryEvent;
+					HANDLE Callback;
 					HANDLE Done;
-					ComRef<IRtwqAsyncResult> Result;
+					DWORD Queue, TaskID;
+					ComRef<IMFAsyncResult> Result;
 				} RTWQ;
 
 				bool InputUnityMapped, OutputUnityMapped;
@@ -344,7 +354,7 @@ namespace {
 				}
 
 				STDMETHODIMP GetParameters(DWORD* flags, DWORD *queue) override {
-					*flags = 0; *queue = RTWQ.Queue; return S_OK;
+					*flags = 0; *queue = RTWQ.Queue;
 					return S_OK;
 				}
 
@@ -388,6 +398,12 @@ namespace {
 					for (auto &ep : out) {
 						BYTE* data;
 						auto err = ep.second.service->GetBuffer(io.numFrames, &data);
+
+						if (S_OK != err) {
+							auto code = WinError::Format(err);
+							printf("%s", code.c_str());
+						}
+
 						if (data) {
 							float *epData = (float*)data;
 
@@ -404,9 +420,7 @@ namespace {
 								}
 							}
 							ep.second.service->ReleaseBuffer(io.numFrames, 0);
-						} else {
-							printf("Wasapi error %x\n", err);
-						}
+						} 
 					}
 				}
 
@@ -418,9 +432,7 @@ namespace {
 					memset(io.output, 0, sizeof(float) * io.numFrames * cfg.GetNumStreamOutputs());
 				}
 
-				STDMETHODIMP Invoke(IRtwqAsyncResult* result) override {
-					RTWQWORKITEM_KEY wik;
-
+				STDMETHODIMP Invoke(IMFAsyncResult * result) override {
 					if (!runTask.test_and_set()) {
 						SetEvent(RTWQ.Done);
 						result->SetStatus(S_OK);
@@ -428,7 +440,7 @@ namespace {
 					}
 
 					PAD::IO io{ cfg };
-					io.numFrames = cfg.GetBufferSize();
+					io.numFrames = cfg.GetBufferSize() * 4;
 
 					// how many frames?
 					for (auto &ep : out) {
@@ -484,9 +496,8 @@ namespace {
 						rendered += io.numFrames;
 						SplatOutput(io);
 					}
-
-					result->SetStatus(S_OK);
-					return RtwqPutWaitingWorkItem(RTWQ.Event, 1, result, &wik);
+					auto hr = MFPutWaitingWorkItem(RTWQ.Callback, 0, result, nullptr);
+					return hr;
 				}
 
 				Stream(WasapiDevice* dev, const AudioStreamConfiguration& desired) :cfg(desired),dev(dev) {
@@ -519,28 +530,28 @@ namespace {
 
 					WinError::Context("Opening output endpoints");
 					
-					RTWQ.Event = CreateEvent(nullptr, false, false, nullptr);
-					RTWQ.SecondaryEvent = CreateEvent(nullptr, false, false, nullptr);
+					RTWQ.Callback = CreateEvent(nullptr, false, false, nullptr);
 					RTWQ.Done = CreateEvent(nullptr, false, false, nullptr);
 
-					for (auto &iep : in) dev->InitializePort(cfg, iep.first, iep.second, out.empty() ? RTWQ.Event : RTWQ.SecondaryEvent);
-					for (auto &oep : out) dev->InitializePort(cfg, oep.first, oep.second, RTWQ.Event);
+					for (auto &iep : in) dev->InitializePort(cfg, iep.first, iep.second, RTWQ.Callback);
+					for (auto &oep : out) dev->InitializePort(cfg, oep.first, oep.second, RTWQ.Callback);
 
 					for (auto &ep : out) {
 						if (ep.first->GetService(__uuidof(IAudioClock), (void**)clock.Reset()) == S_OK) break;
 					}
 
+
 					RTWQ.Queue = RTWQ_MULTITHREADED_WORKQUEUE;
-					RTWQ.Task = 0;
+					RTWQ.TaskID = 0;
 					WinError::Context("Creating real time work queue");
 					WinError err = RtwqStartup();
 					RTWQWORKITEM_KEY wik;
 					runTask.test_and_set(); 
-					err = RtwqCreateAsyncResult(nullptr, this, nullptr, RTWQ.Result.Reset());
-					err = RtwqLockSharedWorkQueue(L"Audio", 0, &RTWQ.Task, &RTWQ.Queue);
+					err = MFCreateAsyncResult(nullptr, this, nullptr, RTWQ.Result.Reset());
+					err = MFLockSharedWorkQueue(L"Audio", 10, &RTWQ.TaskID, &RTWQ.Queue);
 
 					// wait on input first, output subsequently
-					err = RtwqPutWaitingWorkItem(RTWQ.Event, 2, RTWQ.Result.Get(), &wik);
+					err = MFPutWaitingWorkItem(RTWQ.Callback, 0, RTWQ.Result.Get(), &wik);
 
 					if (cfg.HasSuspendOnStartup() == false) Activate(true);
 				}
@@ -550,9 +561,8 @@ namespace {
 					runTask.clear();
 					WaitForSingleObject(RTWQ.Done, 1000);
 					CloseHandle(RTWQ.Done);
-					CloseHandle(RTWQ.Event);
-					CloseHandle(RTWQ.SecondaryEvent);
-					RtwqUnlockWorkQueue(RTWQ.Queue);
+					CloseHandle(RTWQ.Callback);
+					MFUnlockWorkQueue(RTWQ.Queue);
 					RtwqShutdown();
 				}
 
