@@ -400,7 +400,7 @@ namespace {
 
 						if (S_OK != err) {
 							auto code = WinError::Format(err);
-							printf("%s", code.c_str());
+							cwindbg() << code << "\n";
 						}
 
 						if (data) {
