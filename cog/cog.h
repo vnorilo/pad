@@ -97,16 +97,22 @@ namespace COG {
 	public:
 		ComRef() {}
 
-		ComRef(ComRef& src) :ptr(src.ptr) {
-			if (ptr) ptr->AddRef();
-		}
-
-		~ComRef() {
-			if (ptr) ptr->Release();
+		ComRef(const ComRef& src) :ptr(src.ptr) {
+			if (ptr) {
+				ptr->AddRef();
+			}
 		}
 
 		ComRef(ComRef&& src) {
 			std::swap(ptr, src.ptr);
+		}
+
+		~ComRef() {
+			if (ptr) {
+				if (ptr->Release() == 0) {
+					OutputDebugStringA(typeid(T).name());
+				}
+			}
 		}
 
 		ComRef& operator=(ComRef src) {
@@ -120,7 +126,9 @@ namespace COG {
 		}
 
 		WinError Instantiate(REFCLSID rclsid, DWORD context) {
-			return CoCreateInstance(rclsid, nullptr, context, __uuidof(T), (void**)Reset());
+			auto err = CoCreateInstance(rclsid, nullptr, context, __uuidof(T), (void**)Reset());
+			ptr->AddRef();
+			return err;
 		}
 
 		static ComRef Make(REFCLSID rclsid, DWORD context) {
@@ -167,10 +175,16 @@ namespace COG {
 		return CoTaskPointer<T>(raw, CoTaskMemFree);
 	}
 
-	template <typename T, typename... STUFF> auto ComObject(STUFF... stuff) {
+	template <typename T, typename... STUFF> auto TransferObjectOwnership(STUFF... stuff) {
 		auto comFn = std::bind(stuff..., std::placeholders::_1);
 		ComRef<T> ref;
 		WinError err = comFn((LPVOID*)ref.Reset());
+		return ref;
+	}
+
+	template <typename T, typename... STUFF> auto GetAndRetainObject(STUFF... stuff) {
+		auto ref = TransferObjectOwnership<T, STUFF...>(std::forward<STUFF>(stuff)...);
+		ref->AddRef();
 		return ref;
 	}
 
@@ -185,8 +199,8 @@ namespace COG {
 	};
 
 	struct Holder {
-		Holder() {
-			CoInitialize(nullptr);
+		Holder(tagCOINIT flags = (tagCOINIT)0) {
+			CoInitializeEx(nullptr, flags);
 		}
 
 		~Holder() {

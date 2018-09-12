@@ -183,82 +183,10 @@ namespace {
 
 		std::unique_ptr<IStream> stream;
 
-		template <int SIZE>
-		class RingBuffer {
-			std::array<float, SIZE> buffer;
-			unsigned read = 0;
-			unsigned write = 0;
-			unsigned Available(unsigned p, unsigned limit) const {
-				unsigned avail = (limit - p) & mask;
-				return avail;
-			}
-
-			float *Op(unsigned maxFrames, unsigned &actualFrames, unsigned p, unsigned limit) {
-				auto avail = Available(p, limit);
-				const unsigned contg = SIZE - p;
-				actualFrames = std::min(maxFrames, std::min(contg, avail));
-				return buffer.data();
-			}
-		public:
-
-			struct Region {
-				~Region() {
-					commit += size;
-				}
-				unsigned& commit;
-				unsigned size;
-				float *const region;
-				float& operator[](unsigned i) {
-					assert(i<size);
-					return region[i];
-				}
-			};
-
-			static constexpr int mask = (SIZE - 1);
-			static_assert((SIZE & (SIZE - 1)) == 0, "RingBuffer size must be a power of two");
-
-
-			Region Write(unsigned maxFrames) {
-				unsigned actualFrames;
-				float* ptr = Op(maxFrames, actualFrames, write, read);
-				if (actualFrames == 0) actualFrames = std::min<unsigned>(SIZE, maxFrames);
-				return Region{ write, actualFrames, ptr };
-			}
-
-			unsigned Write(const float* source, unsigned frames) {
-				unsigned written = 0;
-				while (frames) {
-					auto wr = Write(frames);
-					if (wr.size == 0) return written;
-					memcpy(wr.region, source, sizeof(float) * wr.size);
-					source += wr.size;
-					frames -= wr.size;
-					written += wr.size;
-				}
-				return written;
-			}
-
-			unsigned WriteAvailable() const {
-				return Available(write, read);
-			}
-
-			Region Read(unsigned maxFrames) {
-				unsigned actualFrames;
-				float* ptr = Op(maxFrames, actualFrames, read, write);
-				return Region{ read, actualFrames, ptr };
-			}
-
-			unsigned ReadAvailable() const {
-				return Available(read, write);
-			}
-
-		};
-
 		template <typename T> struct PortMap {
 			using ServiceTy = T;
 			ComRef<T> service;
 			std::vector<std::pair<int, int>> map;
-			RingBuffer<4096> data;
 			unsigned numEpChannels;
 			size_t GetNumChannels() const {
 				return numEpChannels;
@@ -266,7 +194,7 @@ namespace {
 		};
 
 		template <typename PORTMAP>
-		void InitializePort(AudioStreamConfiguration& cfg, IAudioClient* ac, PORTMAP& pm, HANDLE bufferSwitch) {
+		void InitializePort(AudioStreamConfiguration& cfg, IAudioClient* ac, PORTMAP& pm, HANDLE bufferSwitch = INVALID_HANDLE_VALUE) {
 			WinError err;
 			IAudioClient3* ac3 = nullptr;
 
@@ -277,7 +205,7 @@ namespace {
 			pm.numEpChannels = fmt->nChannels;
 
 			const auto streamFlags =
-				AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
+				(bufferSwitch != INVALID_HANDLE_VALUE ? AUDCLNT_STREAMFLAGS_EVENTCALLBACK : 0);
 
 			if (S_OK == ac->QueryInterface(&ac3)) {
 				// win10
@@ -361,6 +289,7 @@ namespace {
 					auto streamIns = cfg.GetNumStreamInputs();
 					auto frames = io.numFrames;
 					unsigned gap = 0;
+					UINT64 earliestTime = -1ull;
 
 					if (delegateIn.size() < streamIns * frames) {
 						delegateIn.resize(streamIns * frames);
@@ -368,29 +297,28 @@ namespace {
 
 					for (auto &ep : in) {
 						auto numCh = ep.second.GetNumChannels();
-						auto toDo = ep.second.data.ReadAvailable() / numCh;
 
-						if (toDo > io.numFrames) {
-							toDo = io.numFrames;
-						}
+						DWORD flags = 0;
+						BYTE* data = nullptr;
+						UINT64 streamTime = 0, pcTime = 0;
+						UINT32 frames = 0;
+						ep.second.service->GetBuffer(&data, &frames, &flags, &streamTime, &pcTime);
+						earliestTime = std::min(pcTime, earliestTime);
 
-						while (toDo) {
-							auto rr = ep.second.data.Read((unsigned)(toDo * numCh));
-							auto doNow = rr.size / numCh;
-							if (doNow == 0) break;
-
+						if (data) {
+							const float *fdata = (const float*)data;
 							for (auto c : ep.second.map) {
-								for (unsigned i = 0;i < doNow;++i) {
-									delegateIn[(i + gap) * streamIns + c.second] = rr[(unsigned)(i * numCh + c.first)];
+								for (unsigned i = 0;i < io.numFrames;++i) {
+									delegateIn[i * streamIns + c.second] = fdata[(unsigned)(i * numCh + c.first)];
 								}
 							}
 
-							toDo -= doNow;
-							gap += (unsigned)doNow;
+							ep.second.service->ReleaseBuffer(frames);
 						}
 					}
 
 					io.input = delegateIn.data();
+					io.inputBufferTime = std::chrono::microseconds(earliestTime / 10);
 				}
 
 				void SplatOutput(PAD::IO& io) {
@@ -441,6 +369,8 @@ namespace {
 					PAD::IO io{ cfg };
 					io.numFrames = cfg.GetBufferSize() * 4;
 
+					auto hr = MFPutWaitingWorkItem(RTWQ.Callback, 0, result, nullptr);
+
 					// how many frames?
 					for (auto &ep : out) {
 						UINT32 usedFrames;
@@ -448,32 +378,13 @@ namespace {
 						io.numFrames = std::min(io.numFrames, cfg.GetBufferSize() - usedFrames);
 					}
 
-					// pull input
-					UINT64 earliestTime = 0ull;
 					for (auto &ep : in) {
-						UINT32 pending;
-						do {
-							DWORD flags = 0;
-							BYTE* data = nullptr;
-							UINT64 streamTime = 0, pcTime = 0;
-							UINT32 frames = 0;
-							ep.second.service->GetBuffer(&data, &frames, &flags, &streamTime, &pcTime);
-							earliestTime = std::min(pcTime, earliestTime);
-							auto numSamples = frames * ep.second.GetNumChannels();
-							auto didWrite = ep.second.data.Write((const float*)data, (unsigned)numSamples);
-							ep.second.service->ReleaseBuffer(frames);
-							if (didWrite != numSamples) break;
-							ep.second.service->GetNextPacketSize(&pending);
-						} while (pending);
-
-						if (io.numFrames > ep.second.data.ReadAvailable()) {
-							io.numFrames = ep.second.data.ReadAvailable();
-						}
+						UINT32 pendingFrames;
+						ep.second.service->GetNextPacketSize(&pendingFrames);
+						io.numFrames = std::min(io.numFrames, pendingFrames);
 					}
 
 					if (io.numFrames) {
-						// 100ns to us
-						io.inputBufferTime = std::chrono::microseconds(earliestTime / 10);
 
 						SplatInput(io);
 						AllocateOutput(io);
@@ -491,11 +402,12 @@ namespace {
 						}
 
 						auto refTime = dev->DeviceTimeNow();
+
 						dev->BufferSwitch(io);
-						rendered += io.numFrames;
+
 						SplatOutput(io);
+						rendered += io.numFrames;
 					}
-					auto hr = MFPutWaitingWorkItem(RTWQ.Callback, 0, result, nullptr);
 					return hr;
 				}
 
@@ -532,7 +444,7 @@ namespace {
 					RTWQ.Callback = CreateEvent(nullptr, false, false, nullptr);
 					RTWQ.Done = CreateEvent(nullptr, false, false, nullptr);
 
-					for (auto &iep : in) dev->InitializePort(cfg, iep.first, iep.second, RTWQ.Callback);
+					for (auto &iep : in) dev->InitializePort(cfg, iep.first, iep.second);
 					for (auto &oep : out) dev->InitializePort(cfg, oep.first, oep.second, RTWQ.Callback);
 
 					for (auto &ep : out) {
@@ -548,7 +460,7 @@ namespace {
 					
 					MFStartup(MF_VERSION, MFSTARTUP_LITE);
 					WinError err = MFCreateAsyncResult(nullptr, this, nullptr, RTWQ.Result.Reset());
-					err = MFLockSharedWorkQueue(L"Audio", 10, &RTWQ.TaskID, &RTWQ.Queue);
+					err = MFLockSharedWorkQueue(L"Pro Audio", THREAD_PRIORITY_TIME_CRITICAL, &RTWQ.TaskID, &RTWQ.Queue);
 
 					// wait on input first, output subsequently
 					err = MFPutWaitingWorkItem(RTWQ.Callback, 0, RTWQ.Result.Get(), &wik);
@@ -652,7 +564,7 @@ namespace {
 				auto ep = epDevice.Query<IMMEndpoint>();
 				EDataFlow flow; ep->GetDataFlow(&flow);
 
-				auto epClient = ComObject<IAudioClient>(&IMMDevice::Activate, 
+				auto epClient = TransferObjectOwnership<IAudioClient>(&IMMDevice::Activate, 
 					epDevice.Get(), __uuidof(IAudioClient), CLSCTX_ALL, nullptr);
 
 				switch (flow) {
@@ -673,10 +585,10 @@ namespace {
 				&IMMDeviceEnumerator::GetDefaultAudioEndpoint, eCapture, eMultimedia);			
 
 			defaultDevice->outputPorts.emplace_back(
-				ComObject<IAudioClient>(&IMMDevice::Activate, defaultOut.Get(), 
+				TransferObjectOwnership<IAudioClient>(&IMMDevice::Activate, defaultOut.Get(),
 										__uuidof(IAudioClient), CLSCTX_ALL, nullptr));
 			defaultDevice->inputPorts.emplace_back(
-				ComObject<IAudioClient>(&IMMDevice::Activate, defaultIn.Get(),
+				TransferObjectOwnership<IAudioClient>(&IMMDevice::Activate, defaultIn.Get(),
 										__uuidof(IAudioClient), CLSCTX_ALL, nullptr));
 		}
 
@@ -690,7 +602,7 @@ namespace {
 	public:
 
 		void Publish(Session& PAD, DeviceErrorDelegate& errors) {
-			CoInitialize(nullptr);
+			COG::Holder comHolder;
 			Enumerate();
 			Configure();
 			PAD.Register(defaultDevice.get());

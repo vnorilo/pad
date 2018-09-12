@@ -93,20 +93,22 @@ namespace {
 		void _AsioUnwind(AsioState to) {
 			switch (State) {
 			case Running:
-				if (to == Running) break;
-				THROW_ERROR(DeviceStopStreamFailure, ASIO( ).stop( ));
-			case Prepared:
+				if (to >= Running) break;
+				THROW_ERROR(DeviceStopStreamFailure, ASIO().stop());
 				State = Prepared;
-				if (to == Prepared) break;
-				THROW_ERROR(DeviceCloseStreamFailure, ASIO( ).disposeBuffers( ));
-			case Initialized:
+			case Prepared:
+				if (to >= Prepared) break;
+				THROW_ERROR(DeviceCloseStreamFailure, ASIO().disposeBuffers());
 				State = Initialized;
+			case Initialized:
+				if (to >= Initialized) break;
 				callbacks.Release(*this);
-				if (to == Initialized) break;
-			case Loaded:
 				State = Loaded;
-				if (to == Loaded) break;
+			case Loaded:
+				if (to >= Loaded) break;
+				State = Idle;
 			case Idle:
+				if (to >= Idle) break;
 				driver.Reset();
 				break;
 			}
@@ -162,12 +164,16 @@ namespace {
 		double current_cpu_load = 0.0;
 
 		void BufferSwitch(long doubleBufferIndex, ASIO::Bool directProcess) {
-			ASIO::Time time;
-			memset(&time, 0, sizeof(ASIO::Time));
-			time.timeInfo.flags = ASIO::SystemTimeValid | ASIO::SamplePositionValid | ASIO::SampleRateValid;
-			time.timeInfo.sampleRate = currentConfiguration.GetSampleRate( );
-			driver->getSamplePosition(&time.timeInfo.samplePosition, &time.timeInfo.systemTime);
-			BufferSwitchTimeInfo(&time, doubleBufferIndex, directProcess);
+			try {
+				ASIO::Time time;
+				memset(&time, 0, sizeof(ASIO::Time));
+				time.timeInfo.flags = ASIO::SystemTimeValid | ASIO::SamplePositionValid | ASIO::SampleRateValid;
+				time.timeInfo.sampleRate = currentConfiguration.GetSampleRate();
+				driver->getSamplePosition(&time.timeInfo.samplePosition, &time.timeInfo.systemTime);
+				BufferSwitchTimeInfo(&time, doubleBufferIndex, directProcess);
+			} catch (...) {
+				OutputDebugStringA("exception in ASIO callback");
+			}
 		}
 
 		void SampleRateDidChange(ASIO::SampleRate sRate) {
@@ -235,6 +241,9 @@ namespace {
 				THROW_ERROR(DeviceOpenStreamFailure, ASIO( ).getBufferSize(&minBuf, &maxBuf, &prefBuf, &bufGran));
 				callbackBufferFrames = prefBuf;
 
+				long numInputs, numOutputs;
+				ASIO().getChannels(&numInputs, &numOutputs);
+
 				bufferInfos.clear( );
 				for (unsigned i(0); i < GetNumInputs( ); ++i) {
 					if (currentConfiguration.IsInputEnabled(i)) {
@@ -256,17 +265,16 @@ namespace {
 				streamNumOutputs = (unsigned)bufferInfos.size( ) - streamNumInputs;
 				delegateBufferOutput.resize(callbackBufferFrames * streamNumOutputs);
 
-				THROW_ERROR(DeviceOpenStreamFailure, ASIO( ).createBuffers(bufferInfos.data( ), (long)bufferInfos.size( ), callbackBufferFrames, callbacks));
-				State = Prepared;
-
-				channelInfos.clear( );
-				channelInfos.resize(bufferInfos.size( ));
-				for (unsigned i(0); i < bufferInfos.size( ); ++i) {
+				channelInfos.clear();
+				channelInfos.resize(bufferInfos.size());
+				for (unsigned i(0); i < bufferInfos.size(); ++i) {
 					channelInfos[i].channel = bufferInfos[i].channelNum;
 					channelInfos[i].isInput = bufferInfos[i].isInput;
-					THROW_ERROR(DeviceOpenStreamFailure, ASIO( ).getChannelInfo(&channelInfos[i]));
+					THROW_ERROR(DeviceOpenStreamFailure, ASIO().getChannelInfo(&channelInfos[i]));
 				}
 
+				THROW_ERROR(DeviceOpenStreamFailure, ASIO( ).createBuffers(bufferInfos.data( ), (long)bufferInfos.size( ), callbackBufferFrames, callbacks));
+				State = Prepared;
 			}
 		}
 
@@ -567,23 +575,21 @@ namespace {
 						long numInputs = 0;
 						long numOutputs = 0;
 
-						auto driver = drv.Load( );
-						if (driver.Get()) {
-							try {
-								ASIO::SampleRate currentSampleRate;
+						try {
+							auto driver = drv.Load( );
+							if (driver.Get()) {
+									ASIO::SampleRate currentSampleRate;
 
-								THROW_FALSE(DeviceInitializationFailure, driver->init(GetDesktopWindow( )));
-								THROW_ERROR(DeviceInitializationFailure, driver->getChannels(&numInputs, &numOutputs));
-								THROW_ERROR(DeviceInitializationFailure, driver->getSampleRate(&currentSampleRate));
+									THROW_FALSE(DeviceInitializationFailure, driver->init(GetDesktopWindow( )));
+									THROW_ERROR(DeviceInitializationFailure, driver->getChannels(&numInputs, &numOutputs));
+									THROW_ERROR(DeviceInitializationFailure, driver->getSampleRate(&currentSampleRate));
 
-								RegisterDevice(PADInstance, drv, make_shared<recursive_mutex>( ), currentSampleRate, drv.driverName, numInputs, numOutputs);
-							} catch (PAD::Error &) {
-								// device failed to open
-								char name[256];
-								driver->getDriverName(name);
-								cwindbg( ) << "[ASIO] " << name << " failed to initialize\n";
+									RegisterDevice(PADInstance, drv, make_shared<recursive_mutex>( ), currentSampleRate, drv.driverName, numInputs, numOutputs);					
 							}
-						}
+						} catch (std::exception& e) {
+							// device failed to open
+							cwindbg() << "[ASIO] " << drv.driverName << " failed to initialize: " << e.what() << "\n";
+						} 
 					}
 				} catch (SoftError s) {
 					handler.Catch(s);
@@ -601,8 +607,12 @@ namespace {
 	static ASIO::Time dummyTime;
 	template <int IDX> class CallbackForwarder {
 		static void bufferSwitch(long doubleBufferIndex, ASIO::Bool directProcess) {
-			AsioDevice* ad(GetDevice( ));
-			if (ad) ad->BufferSwitch(doubleBufferIndex, directProcess);
+			__try {
+				AsioDevice* ad(GetDevice());
+				if (ad) ad->BufferSwitch(doubleBufferIndex, directProcess);
+			} __except (EXCEPTION_EXECUTE_HANDLER) {
+				DWORD code = GetExceptionCode();
+			}
 		}
 
 		static void sampleRateDidChange(ASIO::SampleRate sRate) {
