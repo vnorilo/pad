@@ -130,8 +130,7 @@ namespace ASIO{
 		return drivers;
 	}
 
-	COG::ComRef<IASIO> DriverRecord::Load()
-	{
-		return COG::ComObject<IASIO>(CoCreateInstance, classID, nullptr, CLSCTX_INPROC_SERVER, classID);
+	COG::ComRef<IASIO> DriverRecord::Load() {
+		return COG::GetAndRetainObject<IASIO>(CoCreateInstance, classID, nullptr, CLSCTX_INPROC_SERVER, classID);
 	}
 }
