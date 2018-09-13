@@ -117,9 +117,7 @@ namespace COG {
 
 		~ComRef() {
 			if (ptr) {
-				if (ptr->Release() == 0) {
-					OutputDebugStringA(typeid(T).name());
-				}
+				ptr->Release();
 			}
 		}
 
