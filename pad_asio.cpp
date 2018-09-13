@@ -79,7 +79,7 @@ namespace {
 
 		ASIO::IASIO& ASIO( ) {
 			if (State < Loaded) {
-				driverInfo.driverObject->init(GetDesktopWindow());
+				ASIO::Error err = driverInfo.driverObject->init(GetDesktopWindow());
 				State = Loaded;
 			}
 			return *driverInfo.driverObject.Get();
@@ -497,7 +497,7 @@ namespace {
 			AsioUnwind(Initialized);
 
 			ASIO::SampleRate sr(0);
-			ASIO( ).getSampleRate(&sr);
+			ASIO::Error err = ASIO( ).getSampleRate(&sr);
 
 			if (sr != conf.GetSampleRate( )) ASIO( ).setSampleRate(conf.GetSampleRate( ));
 
@@ -505,7 +505,7 @@ namespace {
 
 			/* canonicalize passed format */
 			currentConfiguration = conf;
-			ASIO( ).getSampleRate(&sr);
+			err = ASIO( ).getSampleRate(&sr);
 			currentConfiguration.SetSampleRate(sr);
 			currentConfiguration.SetDeviceChannelLimits(GetNumInputs( ), GetNumOutputs( ));
 
