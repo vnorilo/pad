@@ -92,17 +92,26 @@ namespace ASIO{
 					uint16_t	wData[100];
 					MultiByteToWideChar(CP_ACP,0,(LPCSTR)databuf,-1,(LPWSTR)wData,100);
 
-					drivers.push_back(DriverRecord());
-					auto &asioDriver(drivers.back());
+					DriverRecord asioDriver;
 
 					CLSIDFromString((LPOLESTR)wData,(LPCLSID)&asioDriver.classID);
 
 					datatype = REG_SZ;
 					datasize = _datasize;
+
 					if (RegQueryValueExA(hksub,ASIODRV_DESC,0,&datatype,(LPBYTE)databuf,&datasize) == ERROR_SUCCESS)
 						asioDriver.driverName = std::string((const char*)databuf,(const char*)databuf+datasize-1);
 					else
-						asioDriver.driverName = keyname;				
+						asioDriver.driverName = keyname;
+
+					try {
+						COG::WinError::Context("ASIO driver instantiation");
+						asioDriver.driverObject = COG::GetAndRetainObject<IASIO>(CoCreateInstance, asioDriver.classID, nullptr, CLSCTX_INPROC_SERVER, asioDriver.classID);
+						drivers.emplace_back(std::move(asioDriver));
+					} catch (std::exception &e) {
+						std::string msg = "[ASIO] error " + asioDriver.driverName + ": " + e.what();
+						OutputDebugStringA(msg.c_str());
+					}
 				}
 			}
 		}
@@ -128,9 +137,5 @@ namespace ASIO{
 		}
 
 		return drivers;
-	}
-
-	COG::ComRef<IASIO> DriverRecord::Load() {
-		return COG::GetAndRetainObject<IASIO>(CoCreateInstance, classID, nullptr, CLSCTX_INPROC_SERVER, classID);
 	}
 }

@@ -60,6 +60,14 @@ namespace COG {
 			return tmp;
 		}
 
+		bool IsError(std::string& explain) {
+			if (err != S_OK) {
+				explain = Format(err);
+				return true;
+			}
+			return false;
+		}
+
 		static std::string Format(HRESULT err) {
 			LPTSTR errorText = nullptr;
 			FormatMessage(
@@ -199,7 +207,7 @@ namespace COG {
 	};
 
 	struct Holder {
-		Holder(tagCOINIT flags = (tagCOINIT)0) {
+		Holder(tagCOINIT flags = COINIT_MULTITHREADED) {
 			CoInitializeEx(nullptr, flags);
 		}
 
