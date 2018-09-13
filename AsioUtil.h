@@ -244,7 +244,8 @@ namespace ASIO {
 		int driverID;
 		CLSID classID;
 		std::string driverName;
-		COG::ComRef<IASIO> Load();
+		COG::ComRef<IASIO> driverObject;
+		std::shared_ptr<COG::Holder> com;
 	};
 
 	std::vector<DriverRecord> GetDrivers();

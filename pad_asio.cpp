@@ -60,7 +60,6 @@ namespace {
 		double CPU_Load( ) const { return current_cpu_load; }
 		
 		ASIO::DriverRecord driverInfo;
-		COG::ComRef<ASIO::IASIO> driver;
 		string deviceName;
 
 		unsigned numInputs, numOutputs;
@@ -78,16 +77,12 @@ namespace {
 		AudioStreamConfiguration DefaultStereo( ) const { return defaultStereo; }
 		AudioStreamConfiguration DefaultAllChannels( ) const { return defaultAll; }
 
-		COG::Handle ComHandle;
-
 		ASIO::IASIO& ASIO( ) {
-			if (driver.Get() == nullptr) {
-				ComHandle = std::make_unique<COG::Holder>();
-				THROW_FALSE(DeviceInitializationFailure, (driver = driverInfo.Load( )).Get());
-				THROW_FALSE(DeviceInitializationFailure, driver->init(GetDesktopWindow( )));
+			if (State < Loaded) {
+				driverInfo.driverObject->init(GetDesktopWindow());
+				State = Loaded;
 			}
-
-			return *driver.Get();
+			return *driverInfo.driverObject.Get();
 		}
 
 		void _AsioUnwind(AsioState to) {
@@ -108,8 +103,7 @@ namespace {
 				if (to >= Loaded) break;
 				State = Idle;
 			case Idle:
-				if (to >= Idle) break;
-				driver.Reset();
+				if (to >= Idle) break;				
 				break;
 			}
 
@@ -169,7 +163,7 @@ namespace {
 				memset(&time, 0, sizeof(ASIO::Time));
 				time.timeInfo.flags = ASIO::SystemTimeValid | ASIO::SamplePositionValid | ASIO::SampleRateValid;
 				time.timeInfo.sampleRate = currentConfiguration.GetSampleRate();
-				driver->getSamplePosition(&time.timeInfo.samplePosition, &time.timeInfo.systemTime);
+				ASIO().getSamplePosition(&time.timeInfo.samplePosition, &time.timeInfo.systemTime);
 				BufferSwitchTimeInfo(&time, doubleBufferIndex, directProcess);
 			} catch (...) {
 				OutputDebugStringA("exception in ASIO callback");
@@ -184,9 +178,9 @@ namespace {
 
 		void UpdateLatencies() {
 			ASIO::SampleRate sr = 44100;
-			driver->getSampleRate(&sr);
+			ASIO().getSampleRate(&sr);
 			long inLatency = 0, outLatency = 0;
-			driver->getLatencies(&inLatency, &outLatency);
+			ASIO().getLatencies(&inLatency, &outLatency);
 			inputLatency  = std::chrono::microseconds(inLatency  * 1000'000ull / (std::int64_t)sr);
 			outputLatency = std::chrono::microseconds(outLatency * 1000'000ull / (std::int64_t)sr);
 		}
@@ -549,7 +543,18 @@ namespace {
 
 		COG::Handle initHandle;
 
-		~AsioPublisher( ) { devices.clear( ); }
+		std::vector<ASIO::DriverRecord> AsioRecords;
+		
+		AsioPublisher() {
+			CoInitialize(nullptr);
+			AsioRecords = ASIO::GetDrivers();
+		}
+
+		~AsioPublisher( ) { 
+			devices.clear( ); 
+			AsioRecords.clear();
+			CoUninitialize();
+		}
 
 		template <typename... ARGS>
 		void RegisterDevice(Session& PADInstance, ARGS&&... args) {
@@ -559,24 +564,25 @@ namespace {
 
 		const char* GetName( ) const { return "ASIO"; }
 
+		const std::thread::id mainThread = std::this_thread::get_id();
+
 		void Publish(Session& PADInstance, DeviceErrorDelegate& handler) {
 			const unsigned MaxNameLength = 64;
 			static  set<string> BlackList;
 			BlackList.insert("JackRouter");
 
-			std::vector<ASIO::DriverRecord> drivers = ASIO::GetDrivers( );
-			if (drivers.size()) {
-				initHandle = std::make_unique<COG::Holder>();
-			}
+/*			if (std::this_thread::get_id() != mainThread) {
+				throw PAD::HardError(PAD::ErrorCode::DeviceDriverFailure, "ASIO drivers can not be initialized on secondary threads.");
+			}*/
 
-			for (auto drv : drivers) {
+			for (auto drv : AsioRecords) {
 				try {
 					if (BlackList.find(drv.driverName) == BlackList.end( )) {
 						long numInputs = 0;
 						long numOutputs = 0;
 
 						try {
-							auto driver = drv.Load( );
+							auto driver = drv.driverObject;
 							if (driver.Get()) {
 									ASIO::SampleRate currentSampleRate;
 
