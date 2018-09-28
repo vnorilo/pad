@@ -238,6 +238,7 @@ namespace PAD {
 		bool operator==(const AudioDeviceIterator& rhs) const { return ptr == rhs.ptr; }
 		bool operator!=(const AudioDeviceIterator& rhs) const { return !(*this == rhs); }
 		AudioDevice& operator*() { assert(ptr); return **ptr; }
+
 		AudioDevice* operator->() { assert(ptr); return *ptr; }
 		operator AudioDevice*() { assert(ptr);  return *ptr; }
 		AudioDeviceIterator& operator++() { ptr++; return *this; }
