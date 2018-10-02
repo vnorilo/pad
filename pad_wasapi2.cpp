@@ -263,10 +263,10 @@ namespace {
 				std::vector<float> delegateIn, delegateOut;
 
 				struct RTWQState {
-					HANDLE Callback;
+					HANDLE InputCallback, OutputCallback;
 					HANDLE Done;
 					DWORD Queue, TaskID;
-					ComRef<IMFAsyncResult> Result;
+					ComRef<IMFAsyncResult> InputResult, OutputResult;
 				} RTWQ;
 
 				bool InputUnityMapped, OutputUnityMapped;
@@ -367,54 +367,73 @@ namespace {
 					}
 
 					PAD::IO io{ cfg };
-					io.numFrames = cfg.GetBufferSize() * 4;
 
-					auto hr = MFPutWaitingWorkItem(RTWQ.Callback, 0, result, nullptr);
-
-					// how many frames?
-					for (auto &ep : out) {
-						UINT32 usedFrames;
-						ep.first->GetCurrentPadding(&usedFrames);
-						io.numFrames = std::min(io.numFrames, cfg.GetBufferSize() - usedFrames);
+					if (TryEnterCriticalSection(&audioCS) == false) {
+						return S_OK;
 					}
 
-					for (auto &ep : in) {
-						UINT32 pendingFrames;
-						ep.second.service->GetNextPacketSize(&pendingFrames);
-						io.numFrames = std::min(io.numFrames, pendingFrames);
-					}
+					for (;;) {
+						// cap processing at four times device period
+						io.numFrames = cfg.GetBufferSize() * 4;
 
-					if (io.numFrames) {
-
-						SplatInput(io);
-						AllocateOutput(io);
-
-						if (clock.Get()) {
-							UINT64 streamPosBytes, pcPos, bytesPerSecond;
-							clock->GetFrequency(&bytesPerSecond);
-							clock->GetPosition(&streamPosBytes, &pcPos);
-							std::chrono::microseconds streamPlayed(UINT64(streamPosBytes * 1000000. / bytesPerSecond));
-							std::chrono::microseconds streamRendered(UINT64(rendered * 1000000. / cfg.GetSampleRate()));
-							auto latency = streamRendered - streamPlayed;
-							std::chrono::microseconds systemTime(pcPos / 10);
-							io.outputBufferTime = systemTime + latency;
-
+						for (auto &ep : out) {
+							UINT32 usedFrames;
+							ep.first->GetCurrentPadding(&usedFrames);
+							if (io.numFrames > cfg.GetBufferSize() - usedFrames) {
+								io.numFrames = cfg.GetBufferSize() - usedFrames;
+							}
 						}
 
-						auto refTime = dev->DeviceTimeNow();
+						for (auto &ep : in) {
+							UINT32 pendingFrames;
+							ep.second.service->GetNextPacketSize(&pendingFrames);
+							if (io.numFrames > pendingFrames) {
+								io.numFrames = pendingFrames;
+							}
+						}
 
-						dev->BufferSwitch(io);
+						if (io.numFrames) {
 
-						SplatOutput(io);
-						rendered += io.numFrames;
+							SplatInput(io);
+							AllocateOutput(io);
+
+							if (clock.Get()) {
+								UINT64 streamPosBytes, pcPos, bytesPerSecond;
+								clock->GetFrequency(&bytesPerSecond);
+								clock->GetPosition(&streamPosBytes, &pcPos);
+								std::chrono::microseconds streamPlayed(UINT64(streamPosBytes * 1000000. / bytesPerSecond));
+								std::chrono::microseconds streamRendered(UINT64(rendered * 1000000. / cfg.GetSampleRate()));
+								auto latency = streamRendered - streamPlayed;
+								std::chrono::microseconds systemTime(pcPos / 10);
+								io.outputBufferTime = systemTime + latency;
+
+							}
+
+							auto refTime = dev->DeviceTimeNow();
+
+							dev->BufferSwitch(io);
+
+							SplatOutput(io);
+							rendered += io.numFrames;
+						} else {
+							break;
+						}
 					}
+					LeaveCriticalSection(&audioCS);
+
+					auto hr = MFPutWaitingWorkItem(result == RTWQ.InputResult.Get() ? RTWQ.InputCallback
+												   : RTWQ.OutputCallback, 0, result, nullptr);
+
 					return hr;
 				}
+
+				CRITICAL_SECTION audioCS;
 
 				Stream(WasapiDevice* dev, const AudioStreamConfiguration& desired) :cfg(desired),dev(dev) {
 					int streamChannel = 0;
 					auto &dCfg(dev->Cfg());
 					streaming.clear();
+					InitializeCriticalSection(&audioCS);
 
 					cfg.SetDeviceChannelLimits((unsigned int)dCfg.inputChannel.size(), (unsigned)dCfg.outputChannel.size());
 
@@ -441,11 +460,12 @@ namespace {
 
 					WinError::Context("Opening output endpoints");
 					
-					RTWQ.Callback = CreateEvent(nullptr, false, false, nullptr);
+					RTWQ.InputCallback = CreateEvent(nullptr, false, false, nullptr);
+					RTWQ.OutputCallback = CreateEvent(nullptr, false, false, nullptr);
 					RTWQ.Done = CreateEvent(nullptr, false, false, nullptr);
 
-					for (auto &iep : in) dev->InitializePort(cfg, iep.first, iep.second);
-					for (auto &oep : out) dev->InitializePort(cfg, oep.first, oep.second, RTWQ.Callback);
+					for (auto &iep : in) dev->InitializePort(cfg, iep.first, iep.second, RTWQ.InputCallback);
+					for (auto &oep : out) dev->InitializePort(cfg, oep.first, oep.second, RTWQ.OutputCallback);
 
 					for (auto &ep : out) {
 						if (ep.first->GetService(__uuidof(IAudioClock), (void**)clock.Reset()) == S_OK) break;
@@ -459,11 +479,13 @@ namespace {
 					runTask.test_and_set(); 
 					
 					MFStartup(MF_VERSION, MFSTARTUP_LITE);
-					WinError err = MFCreateAsyncResult(nullptr, this, nullptr, RTWQ.Result.Reset());
+					WinError err = MFCreateAsyncResult(nullptr, this, nullptr, RTWQ.InputResult.Reset());
+					err = MFCreateAsyncResult(nullptr, this, nullptr, RTWQ.OutputResult.Reset());
 					err = MFLockSharedWorkQueue(L"Pro Audio", THREAD_PRIORITY_TIME_CRITICAL, &RTWQ.TaskID, &RTWQ.Queue);
 
 					// wait on input first, output subsequently
-					err = MFPutWaitingWorkItem(RTWQ.Callback, 0, RTWQ.Result.Get(), &wik);
+//					err = MFPutWaitingWorkItem(RTWQ.InputCallback, 0, RTWQ.InputResult.Get(), &wik);
+					err = MFPutWaitingWorkItem(RTWQ.OutputCallback, 0, RTWQ.OutputResult.Get(), &wik);
 
 					if (cfg.HasSuspendOnStartup() == false) Activate(true);
 				}
@@ -473,9 +495,11 @@ namespace {
 					runTask.clear();
 					WaitForSingleObject(RTWQ.Done, 1000);
 					CloseHandle(RTWQ.Done);
-					CloseHandle(RTWQ.Callback);
+					CloseHandle(RTWQ.InputCallback);
+					CloseHandle(RTWQ.OutputCallback);
 					MFUnlockWorkQueue(RTWQ.Queue);
 					MFShutdown();
+					DeleteCriticalSection(&audioCS);
 				}
 
 				virtual void Activate(bool onOff) {
