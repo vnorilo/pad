@@ -81,7 +81,7 @@ namespace{
 			if (currentState < Initialized)
 			{
 				jack_status_t status;
-				client = jack_client_open(name.c_str(),JackNoStartServer,&status);
+				client = jack_client_open(name.c_str(),JackNullOption,&status);
 				if (!client) throw PAD::HardError(PAD::DeviceDriverFailure, "Could not initialize JACK Audio Connection Kit");
 				jack_set_process_callback(client,JackDevice::Process,this);
 				jack_on_shutdown(client,JackDevice::Shutdown,this);
