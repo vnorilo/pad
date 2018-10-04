@@ -95,6 +95,11 @@ namespace {
         }
 
         ~CoreAudioDevice() { Close(); }
+        
+        AudioDeviceID CoreAudioID() const {
+            return caID;
+        }
+        
 		const char* GetName( ) const override { return devName.c_str( ); }
 		unsigned GetNumInputs( ) const override { return numInputs; }
 		unsigned GetNumOutputs( ) const override { return numOutputs; }
@@ -273,8 +278,21 @@ namespace {
 
 			vector<AudioDeviceID> devids(propsize / sizeof(AudioDeviceID));
 			THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyData(kAudioObjectSystemObject, &theAddress, 0, NULL, &propsize, devids.data( )));
+            
+            AudioDeviceID defaultOutputDevice = 0;
+            theAddress = { kAudioHardwarePropertyDefaultOutputDevice,
+                kAudioObjectPropertyScopeGlobal,
+                kAudioObjectPropertyElementMaster };
+            
+            AudioObjectGetPropertyData(kAudioObjectSystemObject,
+                                       &theAddress,
+                                       0,
+                                       NULL,
+                                       &propsize,
+                                       &defaultOutputDevice);
 
-			for (auto dev : devids) {
+            
+            for (auto dev : devids) {
 				try {
 					devices.emplace_back(dev);
 				} catch (SoftError se) {
@@ -283,8 +301,10 @@ namespace {
 					errorHandler.Catch(he);
 				}
 			}
-
-			devices.sort([](const CoreAudioDevice& a, const CoreAudioDevice& b) {
+            
+			devices.sort([defaultOutputDevice](const CoreAudioDevice& a, const CoreAudioDevice& b) {
+                if (a.CoreAudioID() == defaultOutputDevice) return b.CoreAudioID() != defaultOutputDevice;
+                if (b.CoreAudioID() == defaultOutputDevice && a.CoreAudioID() != defaultOutputDevice) return false;
 				if (a.GetNumOutputs() > b.GetNumOutputs()) return true;
 				if (a.GetNumOutputs() < b.GetNumOutputs()) return false;
 				return a.GetNumInputs() > b.GetNumInputs();
