@@ -626,7 +626,7 @@ namespace {
 	public:
 
 		void Publish(Session& PAD, DeviceErrorDelegate& errors) {
-			COG::Holder comHolder;
+			CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 			Enumerate();
 			Configure();
 			PAD.Register(defaultDevice.get());

@@ -30,9 +30,9 @@ namespace PAD {
 	void Session::InitializeApi(HostAPIPublisher* api, DeviceErrorDelegate &errHandler) {
 		static recursive_mutex publisherMutex;
 		lock_guard<recursive_mutex> guard(publisherMutex);
-		AvailablePublishers( ).remove(api);
 		heldAPIProviders.push_back(api);
 		api->Publish(*this, errHandler);
+		AvailablePublishers().remove(api);
 	}
 
 	recursive_mutex& PublisherMutex() {
