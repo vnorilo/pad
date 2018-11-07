@@ -133,7 +133,7 @@ namespace COG {
 
 		WinError Instantiate(REFCLSID rclsid, DWORD context) {
 			auto err = CoCreateInstance(rclsid, nullptr, context, __uuidof(T), (void**)Reset());
-			ptr->AddRef();
+			if (ptr) ptr->AddRef();
 			return err;
 		}
 
