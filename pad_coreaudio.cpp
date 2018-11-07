@@ -190,15 +190,18 @@ namespace {
 			THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_EnableIO, kAudioUnitScope_Input, 1, &enable, sizeof(enable)));
 			THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_EnableIO, kAudioUnitScope_Output, 0, &enable, sizeof(enable)));
 
+            UInt32 numStreamIns = c.GetNumStreamInputs();
+            UInt32 numStreamOuts = c.GetNumStreamOutputs();
+            
 			AudioStreamBasicDescription inputFmt = {
 				currentConfiguration.GetSampleRate( ), 'lpcm',
 				kLinearPCMFormatFlagIsFloat + kLinearPCMFormatFlagIsPacked,
-				UInt32(sizeof(float)*numInputs), 1,
-				UInt32(sizeof(float)*numInputs), numInputs, 32, 0};
+				UInt32(sizeof(float)*numStreamIns), 1,
+				UInt32(sizeof(float)*numStreamIns), numStreamIns, 32, 0};
 
 			AudioStreamBasicDescription outputFmt = inputFmt;
-			outputFmt.mChannelsPerFrame = numOutputs;
-			outputFmt.mBytesPerFrame = sizeof(float)*numOutputs;
+			outputFmt.mChannelsPerFrame = numStreamOuts;
+			outputFmt.mBytesPerFrame = sizeof(float)*numStreamOuts;
 			outputFmt.mBytesPerPacket = outputFmt.mBytesPerFrame;
 
 			// AUHAL unit inputs are hardware outputs and vice versa
