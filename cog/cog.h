@@ -6,6 +6,7 @@
 #include <codecvt>
 #include <string>
 #include <memory>
+#include <functional>
 
 namespace COG {
 	namespace detail {
