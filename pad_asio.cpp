@@ -45,22 +45,21 @@ namespace {
 		void Allocate(AsioDevice&);
 		void Release(AsioDevice&);
 		operator ASIO::Callbacks*() { return &cb; }
+		ASIO::Callbacks* operator->() { return &cb; }
 	};
 
-	enum AsioState {
-		Idle,
-		Loaded,
-		Initialized,
-		Prepared,
-		Running
-	} State = Idle;
-
 	class AsioDevice : public AudioDevice {
+		enum AsioState {
+			Idle,
+			Loaded,
+			Initialized,
+			Prepared,
+			Running
+		} State = AsioState::Idle;
 
 		double CPU_Load( ) const { return current_cpu_load; }
 		
 		ASIO::DriverRecord driverInfo;
-		ASIO::ComRef<ASIO::IASIO> driver;
 		string deviceName;
 
 		unsigned numInputs, numOutputs;
@@ -71,6 +70,7 @@ namespace {
 		vector<ASIO::ChannelInfo> channelInfos;
 		vector<float> delegateBufferInput, delegateBufferOutput;
 		unsigned callbackBufferFrames, streamNumInputs, streamNumOutputs;
+		std::chrono::microseconds inputLatency, outputLatency;
 
 		AudioStreamConfiguration defaultMono, defaultStereo, defaultAll;
 		AudioStreamConfiguration DefaultMono( ) const { return defaultMono; }
@@ -78,32 +78,32 @@ namespace {
 		AudioStreamConfiguration DefaultAllChannels( ) const { return defaultAll; }
 
 		ASIO::IASIO& ASIO( ) {
-			if (driver.GetCount( ) < 1) {
-				THROW_FALSE(DeviceInitializationFailure, (driver = driverInfo.Load( )));
-				THROW_FALSE(DeviceInitializationFailure, driver->init(GetDesktopWindow( )));
+			if (State < Loaded) {
+				ASIO::Error err = driverInfo.driverObject->init(GetDesktopWindow());
+				State = Loaded;
 			}
-
-			return *driver;
+			return *driverInfo.driverObject.Get();
 		}
 
 		void _AsioUnwind(AsioState to) {
 			switch (State) {
 			case Running:
-				if (to == Running) break;
-				THROW_ERROR(DeviceStopStreamFailure, ASIO( ).stop( ));
-			case Prepared:
+				if (to >= Running) break;
+				THROW_ERROR(DeviceStopStreamFailure, ASIO().stop());
 				State = Prepared;
-				if (to == Prepared) break;
-				THROW_ERROR(DeviceCloseStreamFailure, ASIO( ).disposeBuffers( ));
-			case Initialized:
+			case Prepared:
+				if (to >= Prepared) break;
+				THROW_ERROR(DeviceCloseStreamFailure, ASIO().disposeBuffers());
 				State = Initialized;
+			case Initialized:
+				if (to >= Initialized) break;
 				callbacks.Release(*this);
-				if (to == Initialized) break;
-			case Loaded:
 				State = Loaded;
-				if (to == Loaded) break;
+			case Loaded:
+				if (to >= Loaded) break;
+				State = Idle;
 			case Idle:
-				driver = ASIO::ComRef<ASIO::IASIO>( );
+				if (to >= Idle) break;				
 				break;
 			}
 
@@ -158,17 +158,36 @@ namespace {
 		double current_cpu_load = 0.0;
 
 		void BufferSwitch(long doubleBufferIndex, ASIO::Bool directProcess) {
-			ASIO::Time time;
-			memset(&time, 0, sizeof(ASIO::Time));
-			time.timeInfo.flags = ASIO::SystemTimeValid | ASIO::SamplePositionValid | ASIO::SampleRateValid;
-			time.timeInfo.sampleRate = currentConfiguration.GetSampleRate( );
-			BufferSwitchTimeInfo(&time, doubleBufferIndex, directProcess);
+			try {
+				ASIO::Time time;
+				memset(&time, 0, sizeof(ASIO::Time));
+				time.timeInfo.flags = ASIO::SystemTimeValid | ASIO::SamplePositionValid | ASIO::SampleRateValid;
+				time.timeInfo.sampleRate = currentConfiguration.GetSampleRate();
+				ASIO().getSamplePosition(&time.timeInfo.samplePosition, &time.timeInfo.systemTime);
+				BufferSwitchTimeInfo(&time, doubleBufferIndex, directProcess);
+			} catch (...) {
+				OutputDebugStringA("exception in ASIO callback");
+			}
 		}
 
 		void SampleRateDidChange(ASIO::SampleRate sRate) {
 			currentConfiguration.SetSampleRate(sRate);
 			StreamConfigurationDidChange(AudioStreamConfiguration::SampleRateDidChange,
 				currentConfiguration);
+		}
+
+		void UpdateLatencies() {
+			ASIO::SampleRate sr = 44100;
+			ASIO().getSampleRate(&sr);
+			long inLatency = 0, outLatency = 0;
+			ASIO().getLatencies(&inLatency, &outLatency);
+			inputLatency  = std::chrono::microseconds(inLatency  * 1000'000ull / (std::int64_t)sr);
+			outputLatency = std::chrono::microseconds(outLatency * 1000'000ull / (std::int64_t)sr);
+		}
+
+		std::chrono::microseconds DeviceTimeNow() const {
+			std::chrono::milliseconds msTime(timeGetTime());
+			return msTime;
 		}
 
 		long AsioMessage(long selector, long value, void* message, double* opt) {
@@ -189,8 +208,10 @@ namespace {
 			case ASIO::ResetRequest:
 				return 1L;
 				break;
-			case ASIO::ResyncRequest:
 			case ASIO::LatenciesChanged:
+				UpdateLatencies();
+				break;
+			case ASIO::ResyncRequest:
 			case ASIO::SupportsTimeInfo:
 			case ASIO::SupportsTimeCode:
 				return 1L;
@@ -214,6 +235,9 @@ namespace {
 				THROW_ERROR(DeviceOpenStreamFailure, ASIO( ).getBufferSize(&minBuf, &maxBuf, &prefBuf, &bufGran));
 				callbackBufferFrames = prefBuf;
 
+				long numInputs, numOutputs;
+				ASIO().getChannels(&numInputs, &numOutputs);
+
 				bufferInfos.clear( );
 				for (unsigned i(0); i < GetNumInputs( ); ++i) {
 					if (currentConfiguration.IsInputEnabled(i)) {
@@ -235,23 +259,22 @@ namespace {
 				streamNumOutputs = (unsigned)bufferInfos.size( ) - streamNumInputs;
 				delegateBufferOutput.resize(callbackBufferFrames * streamNumOutputs);
 
-				THROW_ERROR(DeviceOpenStreamFailure, ASIO( ).createBuffers(bufferInfos.data( ), (long)bufferInfos.size( ), callbackBufferFrames, callbacks));
-				State = Prepared;
-
-				channelInfos.clear( );
-				channelInfos.resize(bufferInfos.size( ));
-				for (unsigned i(0); i < bufferInfos.size( ); ++i) {
+				channelInfos.clear();
+				channelInfos.resize(bufferInfos.size());
+				for (unsigned i(0); i < bufferInfos.size(); ++i) {
 					channelInfos[i].channel = bufferInfos[i].channelNum;
 					channelInfos[i].isInput = bufferInfos[i].isInput;
-					THROW_ERROR(DeviceOpenStreamFailure, ASIO( ).getChannelInfo(&channelInfos[i]));
+					THROW_ERROR(DeviceOpenStreamFailure, ASIO().getChannelInfo(&channelInfos[i]));
 				}
 
+				THROW_ERROR(DeviceOpenStreamFailure, ASIO( ).createBuffers(bufferInfos.data( ), (long)bufferInfos.size( ), callbackBufferFrames, callbacks));
+				State = Prepared;
 			}
 		}
 
 		void Run( ) {
 			if (State < Running) {
-				ASIO( ).start( );
+				THROW_ERROR(DeviceOpenStreamFailure, ASIO( ).start( ));
 				State = Running;
 			}
 		}
@@ -425,13 +448,17 @@ namespace {
 					Format<Input>(blockType, delegateBufferInput.data( ) + beg, (void**)bufferPtr, callbackBufferFrames, streamNumInputs - beg, streamNumInputs);
 				}
 			}
+			
+			// system time is in nanosecs
+			std::chrono::microseconds sysTime(params->timeInfo.systemTime / 1000);
 
 			IO io{
 				currentConfiguration,
 				delegateBufferInput.data( ),
 				delegateBufferOutput.data( ),
-				0ll,
-				callbackBufferFrames
+				callbackBufferFrames,
+				sysTime - inputLatency,
+				sysTime + outputLatency
 			};
 
 			AudioDevice::BufferSwitch(io);
@@ -470,7 +497,7 @@ namespace {
 			AsioUnwind(Initialized);
 
 			ASIO::SampleRate sr(0);
-			ASIO( ).getSampleRate(&sr);
+			ASIO::Error err = ASIO( ).getSampleRate(&sr);
 
 			if (sr != conf.GetSampleRate( )) ASIO( ).setSampleRate(conf.GetSampleRate( ));
 
@@ -478,13 +505,14 @@ namespace {
 
 			/* canonicalize passed format */
 			currentConfiguration = conf;
-			ASIO( ).getSampleRate(&sr);
+			err = ASIO( ).getSampleRate(&sr);
 			currentConfiguration.SetSampleRate(sr);
 			currentConfiguration.SetDeviceChannelLimits(GetNumInputs( ), GetNumOutputs( ));
 
 			Prepare( );
 
 			currentConfiguration.SetBufferSize(callbackBufferFrames);
+			UpdateLatencies();
 
 			AboutToBeginStream(currentConfiguration);
 
@@ -512,48 +540,62 @@ namespace {
 	struct AsioPublisher : public HostAPIPublisher {
 		vector<unique_ptr<recursive_mutex>> deviceMutex;
 		list<AsioDevice> devices;
-		int coInitializeCount;
-		AsioPublisher( ) :coInitializeCount(0) { }
-		~AsioPublisher( ) { devices.clear( ); while (coInitializeCount > 0) { CoUninitialize( ); coInitializeCount--; } }
 
-		void RegisterDevice(Session& PADInstance, AsioDevice dev) {
-			devices.push_back(dev);
+		COG::Handle initHandle;
+
+		std::vector<ASIO::DriverRecord> AsioRecords;
+		
+		AsioPublisher() {
+			CoInitialize(nullptr);
+			AsioRecords = ASIO::GetDrivers();
+		}
+
+		~AsioPublisher( ) { 
+			devices.clear( ); 
+			AsioRecords.clear();
+			CoUninitialize();
+		}
+
+		template <typename... ARGS>
+		void RegisterDevice(Session& PADInstance, ARGS&&... args) {
+			devices.emplace_back(std::forward<ARGS>(args)...);
 			PADInstance.Register(&devices.back( ));
 		}
 
 		const char* GetName( ) const { return "ASIO"; }
+
+		const std::thread::id mainThread = std::this_thread::get_id();
 
 		void Publish(Session& PADInstance, DeviceErrorDelegate& handler) {
 			const unsigned MaxNameLength = 64;
 			static  set<string> BlackList;
 			BlackList.insert("JackRouter");
 
-			std::vector<ASIO::DriverRecord> drivers = ASIO::GetDrivers( );
-			if (drivers.size( ) && coInitializeCount < 1) { CoInitialize(0); coInitializeCount++; }
+/*			if (std::this_thread::get_id() != mainThread) {
+				throw PAD::HardError(PAD::ErrorCode::DeviceDriverFailure, "ASIO drivers can not be initialized on secondary threads.");
+			}*/
 
-			for (auto drv : drivers) {
+			for (auto drv : AsioRecords) {
 				try {
 					if (BlackList.find(drv.driverName) == BlackList.end( )) {
 						long numInputs = 0;
 						long numOutputs = 0;
 
-						ASIO::ComRef<ASIO::IASIO> driver = drv.Load( );
-						if (driver) {
-							try {
-								ASIO::SampleRate currentSampleRate;
+						try {
+							auto driver = drv.driverObject;
+							if (driver.Get()) {
+									ASIO::SampleRate currentSampleRate;
 
-								THROW_FALSE(DeviceInitializationFailure, driver->init(GetDesktopWindow( )));
-								THROW_ERROR(DeviceInitializationFailure, driver->getChannels(&numInputs, &numOutputs));
-								THROW_ERROR(DeviceInitializationFailure, driver->getSampleRate(&currentSampleRate));
+									THROW_FALSE(DeviceInitializationFailure, driver->init(GetDesktopWindow( )));
+									THROW_ERROR(DeviceInitializationFailure, driver->getChannels(&numInputs, &numOutputs));
+									THROW_ERROR(DeviceInitializationFailure, driver->getSampleRate(&currentSampleRate));
 
-								RegisterDevice(PADInstance, AsioDevice(drv, make_shared<recursive_mutex>( ), currentSampleRate, drv.driverName, numInputs, numOutputs));
-							} catch (PAD::Error &) {
-								// device failed to open
-								char name[256];
-								driver->getDriverName(name);
-								cwindbg( ) << "[ASIO] " << name << " failed to initialize\n";
+									RegisterDevice(PADInstance, drv, make_shared<recursive_mutex>( ), currentSampleRate, drv.driverName, numInputs, numOutputs);					
 							}
-						}
+						} catch (std::exception& e) {
+							// device failed to open
+							cwindbg() << "[ASIO] " << drv.driverName << " failed to initialize: " << e.what() << "\n";
+						} 
 					}
 				} catch (SoftError s) {
 					handler.Catch(s);
@@ -565,15 +607,18 @@ namespace {
 
 		void Cleanup(PAD::Session&) {
 			devices.clear( );
-			if (coInitializeCount > 0) { coInitializeCount--; CoUninitialize( ); }
 		}
 	} publisher;
 
 	static ASIO::Time dummyTime;
 	template <int IDX> class CallbackForwarder {
 		static void bufferSwitch(long doubleBufferIndex, ASIO::Bool directProcess) {
-			AsioDevice* ad(GetDevice( ));
-			if (ad) ad->BufferSwitch(doubleBufferIndex, directProcess);
+			__try {
+				AsioDevice* ad(GetDevice());
+				if (ad) ad->BufferSwitch(doubleBufferIndex, directProcess);
+			} __except (EXCEPTION_EXECUTE_HANDLER) {
+				DWORD code = GetExceptionCode();
+			}
 		}
 
 		static void sampleRateDidChange(ASIO::SampleRate sRate) {

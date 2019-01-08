@@ -1,6 +1,6 @@
 #ifndef PAD_EXPORT_STATIC_LIB
 #include <iostream>
-#include "PAD.h"
+#include "pad.h"
 #define _USE_MATH_DEFINES
 #include <math.h>
 #include <thread>
@@ -32,12 +32,13 @@ int main()
             for(int c =0;c<nc;++c) {
               io.output[i*nc+c] = sin(phase);
             }
-            phase += 0.01;
+            phase += 0.02 * M_PI;
           }
         };
       }
-      d.Open(d.DefaultAllChannels());
-      std::this_thread::sleep_for(std::chrono::seconds(2));
+	  auto defaultConf = d.DefaultAllChannels();
+	  d.Open(defaultConf);
+      std::this_thread::sleep_for(std::chrono::seconds(10));
       d.Close();
       } catch(std::exception& e) {
         std::cout << "* ERROR " << e.what() << " *\n";

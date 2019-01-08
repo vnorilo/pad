@@ -1,4 +1,4 @@
-#include "PAD.h"
+#include "pad.h"
 #include <functional>
 #include <numeric>
 #include <ostream>
@@ -7,7 +7,7 @@
 
 namespace PAD {
 	using namespace std;
-	const char* VersionString( ) { return "1.0.0"; }
+	const char* VersionString( ) { return "1.1.0"; }
 
 	AudioStreamConfiguration::AudioStreamConfiguration(double samplerate, bool valid)
 		:sampleRate(samplerate), valid(valid), startSuspended(false), numStreamIns(0), numStreamOuts(0) { }
@@ -19,25 +19,8 @@ namespace PAD {
 		Above
 	};
 
-	bool ChannelRange::Overlaps(ChannelRange r) {
-		return r.begin( ) < end( ) && r.end( ) > begin( );
-	}
-
-	static void AddChannels(ChannelRange channels, vector<ChannelRange>& ranges) {
-		/* check for valid range */
-		for (auto r : ranges) {
-			if (r.Overlaps(channels)) throw SoftError(ChannelRangeOverlap, "Channel ranges must not overlap");
-		}
-
-		/* merge into another range if continuous */
-		for (auto& r : ranges) {
-			if (channels.end( ) == r.begin( )) {
-				r = ChannelRange(channels.begin( ), r.end( ));
-				return;
-			}
-		}
-
-		ranges.push_back(channels);
+	bool ChannelRange::Touches(ChannelRange r) {
+		return r.begin( ) <= end( ) && r.end( ) >= begin( );
 	}
 
 	static RangeFindResult IsChannelInRangeSet(unsigned idx, const vector<ChannelRange>& ranges) {
@@ -78,6 +61,34 @@ namespace PAD {
 		return max;
 	}
 
+	void AudioStreamConfiguration::Normalize(std::vector<ChannelRange>& cr) {
+		// put earliest, largest ranges first
+		std::sort(cr.begin(), cr.end(), [](ChannelRange a, ChannelRange b) {
+			if (a.begin() < b.begin()) return true;
+			if (a.begin() > b.begin()) return false;
+			return a.end() > b.end();
+		});
+		// combine overlapping ranges
+		bool testAgain;
+		do {
+			testAgain = false;
+			for (size_t i = 1;i < cr.size();++i) {
+				if (cr[i - 1].Touches(cr[i])) {
+					cr[i - 1] = {
+						std::min(cr[i - 1].begin(), cr[i].begin()),
+						std::max(cr[i - 1].end(), cr[i].end())
+					};
+					cr[i] = {};
+					testAgain = true;
+				}
+			}
+			// remove empty ranges
+			auto last = std::remove_if(cr.begin(), cr.end(), [](ChannelRange cr) { return cr.begin() == cr.end(); });
+			testAgain |= last != cr.end();
+			cr.erase(last, cr.end());
+		} while (testAgain);
+	}
+
 	bool AudioStreamConfiguration::IsInputEnabled(unsigned ch) const {
 		return IsChannelInRangeSet(ch, inputRanges) == In;
 	}
@@ -87,12 +98,14 @@ namespace PAD {
 	}
 
 	void AudioStreamConfiguration::AddDeviceInputs(ChannelRange channels) {
-		AddChannels(channels, inputRanges);
+		inputRanges.emplace_back(channels);
+		Normalize(inputRanges);
 		numStreamIns = GetNumChannels(inputRanges);
 	}
 
 	void AudioStreamConfiguration::AddDeviceOutputs(ChannelRange channels) {
-		AddChannels(channels, outputRanges);
+		outputRanges.emplace_back(channels);
+		Normalize(outputRanges);
 		numStreamOuts = GetNumChannels(outputRanges);
 	}
 
