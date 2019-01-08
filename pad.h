@@ -5,10 +5,10 @@
 #include <memory>
 #include <cstdint>
 #include <functional>
-#include <iosfwd>
 #include <cassert>
+#include <chrono>
 
-#include "PADErrors.h"
+#include "pad_errors.h"
 
 #define PAD_GUI_CONTROL_PANEL_SUPPORT 1
 
@@ -23,11 +23,12 @@ namespace PAD {
 	class ChannelRange {
 		unsigned b, e;
 	public:
-		ChannelRange(unsigned b = 0, unsigned e = -1) :b(b), e(e) { if (e < b) throw SoftError(ChannelRangeInvalid, "Invalid channel range"); }
+		ChannelRange() :b(-1), e(-1) {}
+		ChannelRange(unsigned c) :b(c), e(c + 1) {};
+		ChannelRange(unsigned b, unsigned e) :b(b), e(e) { if (e < b) throw SoftError(ChannelRangeInvalid, "Invalid channel range"); }
 		unsigned begin( ) const { return b; }
 		unsigned end( ) const { return e; }
-		bool Overlaps(ChannelRange);
-		bool Contains(unsigned);
+		bool Touches(ChannelRange);
 	};
 
 	struct Channel : public ChannelRange {
@@ -44,6 +45,7 @@ namespace PAD {
 		unsigned bufferSize;
 		bool startSuspended;
 		bool valid;
+		static void Normalize(std::vector<ChannelRange>&);
 	public:
 		AudioStreamConfiguration(double sampleRate = 44100.0, bool valid = true);
 		void SetSampleRate(double newRate) { sampleRate = newRate; }
@@ -91,8 +93,8 @@ namespace PAD {
 		const std::vector<ChannelRange> GetInputRanges( ) const { return inputRanges; }
 		const std::vector<ChannelRange> GetOutputRanges( ) const { return outputRanges; }
 
-		void SetInputRanges(std::vector<ChannelRange> cr = std::vector<ChannelRange>( )) { inputRanges = std::move(cr); }
-		void SetOutputRanges(std::vector<ChannelRange> cr = std::vector<ChannelRange>( )) { outputRanges = std::move(cr); }
+		void SetInputRanges(std::initializer_list<ChannelRange> cr) { inputRanges = std::move(cr); Normalize(inputRanges); }
+		void SetOutputRanges(std::initializer_list<ChannelRange> cr) { outputRanges = std::move(cr); Normalize(outputRanges); }
 
 		enum ConfigurationChangeFlags {
 			SampleRateDidChange = 0x0001,
@@ -116,17 +118,22 @@ namespace PAD {
 		friend class EventSubscriber;
 		std::forward_list<std::pair<IEventSubscriber*, std::function<void(ARGS...)>>> handlers;
 		void AddSubscriber(IEventSubscriber* sub, const std::function<void(ARGS...)>& func) {
-			handlers.push_back(std::make_pair(sub, func));
+			handlers.emplace_front(sub, func);
 		}
 
 		void RemoveSubscriber(IEventSubscriber *sub) {
 			handlers.remove_if(
 				[sub](const std::pair<IEventSubscriber*, std::function<void(ARGS...)>>& p) { return p.first == sub; });
 		}
-	public:
-		~Event( ) {
+
+		void Clear() {
 			for (auto& h : handlers) if (h.first) h.first->RemoveEvent(this);
 		}
+	public:
+		~Event( ) {
+			Clear();
+		}
+
 
 		void operator()(const ARGS&... args) {
 			for (auto& h : handlers) h.second(args...);
@@ -150,8 +157,13 @@ namespace PAD {
 
 		void RemoveEvent(IEvent *evt) { subscriptions.remove(evt); }
 
-		template <typename... ARGS> void When(Event<ARGS...>& evt, const std::function<void(ARGS...)>& f) {
+		void Reset() {
+			subscriptions.clear();
+		}
+
+		template <typename FN, typename... ARGS> void When(Event<ARGS...>& evt, const FN& f) {
 			evt.AddSubscriber(this, f);
+			subscriptions.emplace_front(&evt);
 		}
 	};
 
@@ -159,8 +171,8 @@ namespace PAD {
 		const AudioStreamConfiguration& config;
 		const float *input;
 		float *output;
-		uint64_t timeStamp;
 		unsigned numFrames;
+		std::chrono::microseconds inputBufferTime, outputBufferTime;
 	};
  
 	class AudioDevice {
@@ -203,6 +215,8 @@ namespace PAD {
 		std::shared_ptr<std::recursive_mutex>& GetBufferSwitchLock( ) { return deviceMutex; }
 		void SetBufferSwitchLock(std::shared_ptr<std::recursive_mutex> lock) { deviceMutex = std::move(lock); }
 
+		virtual std::chrono::microseconds DeviceTimeNow() const = 0;
+
 		Event<IO> BufferSwitch;
 		Event<AudioStreamConfiguration> AboutToBeginStream;
 		Event<> StreamDidEnd;
@@ -224,6 +238,7 @@ namespace PAD {
 		bool operator==(const AudioDeviceIterator& rhs) const { return ptr == rhs.ptr; }
 		bool operator!=(const AudioDeviceIterator& rhs) const { return !(*this == rhs); }
 		AudioDevice& operator*() { assert(ptr); return **ptr; }
+
 		AudioDevice* operator->() { assert(ptr); return *ptr; }
 		operator AudioDevice*() { assert(ptr);  return *ptr; }
 		AudioDeviceIterator& operator++() { ptr++; return *this; }
