@@ -541,8 +541,6 @@ namespace {
 		vector<unique_ptr<recursive_mutex>> deviceMutex;
 		list<AsioDevice> devices;
 
-		COG::Handle initHandle;
-
 		std::vector<ASIO::DriverRecord> AsioRecords;
 		
 		AsioPublisher() {
