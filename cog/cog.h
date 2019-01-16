@@ -211,7 +211,7 @@ namespace COG {
 		}
 
 		~Holder() {
-			CoUninitialize();
+			//CoUninitialize();
 		}
 
 		Holder(const Holder&) = delete;
