@@ -185,9 +185,17 @@ namespace {
 			outputLatency = std::chrono::microseconds(outLatency * 1000'000ull / (std::int64_t)sr);
 		}
 
-		std::chrono::microseconds DeviceTimeNow() const {
+		static std::chrono::microseconds GetTime() {
 			std::chrono::milliseconds msTime(timeGetTime());
 			return msTime;
+		}
+
+		std::chrono::microseconds DeviceTimeNow() const {
+			return GetTime();
+		}
+
+		GetDeviceTime GetDeviceTimeCallback() const {
+			return GetTime;
 		}
 
 		long AsioMessage(long selector, long value, void* message, double* opt) {

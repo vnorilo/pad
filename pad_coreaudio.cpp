@@ -159,12 +159,20 @@ namespace {
 			return noErr;
 		}
         
-        std::chrono::microseconds DeviceTimeNow() const override {
+        static std::chrono::microseconds GetTime() {
             auto sysTime = mach_absolute_time();
             sysTime *= timebaseInfo.numer;
             sysTime /= timebaseInfo.denom; // nanosec to usec
             return std::chrono::microseconds(sysTime / 1000);
         }
+
+		std::chrono::microseconds DeviceTimeNow() const override {
+			return GetTime();
+		}
+
+		GetDeviceTime GetDeviceTimeCallback() const override {
+			return GetTime;
+		}
 
 
 		static OSStatus AUHALCallback(void *inRefCon, AudioUnitRenderActionFlags* ioFlags, const AudioTimeStamp *timeStamp, UInt32 Bus, UInt32 frames, AudioBufferList *io) {
