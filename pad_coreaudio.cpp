@@ -85,7 +85,7 @@ namespace {
 			return c;
 		}
         
-        mach_timebase_info_data_t timebaseInfo;
+        static mach_timebase_info_data_t timebaseInfo;
 
 	public:
 		CoreAudioDevice(AudioDeviceID id)
@@ -327,6 +327,8 @@ namespace {
 		}
 		const char *GetName( ) const { return "CoreAudio"; }
 	} publisher;
+
+    mach_timebase_info_data_t CoreAudioDevice::timebaseInfo;
 }
 
 namespace PAD {
