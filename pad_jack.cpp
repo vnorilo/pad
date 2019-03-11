@@ -251,8 +251,16 @@ namespace{
 			return 0;
 		}
 
-		std::chrono::microseconds DeviceTimeNow() const {
+		static std::chrono::microseconds GetTime() {
 			return std::chrono::microseconds(jack_get_time());
+		}
+
+		virtual std::chrono::microseconds DeviceTimeNow() const {
+			return GetTime();
+		}
+
+		virtual GetDeviceTime GetDeviceTimeCallback() const {
+			return GetTime;
 		}
 
 		static int Process(jack_nframes_t frames, void *arg)

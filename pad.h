@@ -215,6 +215,8 @@ namespace PAD {
 		std::shared_ptr<std::recursive_mutex>& GetBufferSwitchLock( ) { return deviceMutex; }
 		void SetBufferSwitchLock(std::shared_ptr<std::recursive_mutex> lock) { deviceMutex = std::move(lock); }
 
+		using GetDeviceTime = std::chrono::microseconds(*)();
+		virtual GetDeviceTime GetDeviceTimeCallback() const = 0;
 		virtual std::chrono::microseconds DeviceTimeNow() const = 0;
 
 		Event<IO> BufferSwitch;

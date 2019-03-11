@@ -545,12 +545,20 @@ namespace {
 			return 0.0;
 		}
 
-		std::chrono::microseconds DeviceTimeNow() const {
+		static std::chrono::microseconds GetTime() {
 			LARGE_INTEGER pc, pcFreq;
 			QueryPerformanceCounter(&pc);
 			QueryPerformanceFrequency(&pcFreq);
 			double factor = 1'000'000. / pcFreq.QuadPart;
 			return std::chrono::microseconds(std::int64_t(pc.QuadPart * factor));
+		}
+
+		virtual std::chrono::microseconds DeviceTimeNow() const {
+			return GetTime();
+		}
+
+		virtual GetDeviceTime GetDeviceTimeCallback() const {
+			return GetTime;
 		}
 	};
 
