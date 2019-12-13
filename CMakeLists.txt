@@ -39,6 +39,7 @@ endif()
 include(FindJack.cmake)
 if (JACK_FOUND)
 	list(APPEND PAD_AVAILABLE_HOSTAPIS jack)
+	target_include_directories(JACK_INCLUDE_DIRS)
 endif (JACK_FOUND )
 
 if (PAD_AVAILABLE_HOSTAPIS)
