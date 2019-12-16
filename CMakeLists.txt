@@ -40,7 +40,7 @@ include(FindJack.cmake)
 if (JACK_FOUND)
 	list(APPEND PAD_AVAILABLE_HOSTAPIS jack)
 	if (JACK_INCLUDE_DIRS)
-		target_include_directories("${JACK_INCLUDE_DIRS}")
+		target_include_directories(pad PRIVATE "${JACK_INCLUDE_DIRS}")
 	endif()
 endif (JACK_FOUND )
 
