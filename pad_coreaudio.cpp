@@ -295,6 +295,7 @@ namespace {
                 kAudioObjectPropertyScopeGlobal,
                 kAudioObjectPropertyElementMaster };
             
+            AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &theAddress, 0, NULL, &propsize);
             AudioObjectGetPropertyData(kAudioObjectSystemObject,
                                        &theAddress,
                                        0,
