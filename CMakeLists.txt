@@ -19,21 +19,10 @@ else ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	add_definitions(-msse2 -fno-rtti -Wno-reorder -Wno-unused-function)
 endif()
 
-if(APPLE)
-	set(CMAKE_OSX_ARCHITECTURES "x86_64" CACHE STRING "Build architecture")
-endif()
-
-if(CMAKE_GENERATOR STREQUAL Xcode)
-    set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD "c++11")
-    set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")	
-endif()
-
 if (WIN32)
 	set(PAD_AVAILABLE_HOSTAPIS asio wasapi)
 elseif (APPLE)
 	set(PAD_AVAILABLE_HOSTAPIS coreaudio)
-	set(CMAKE_OSX_DEPLOYMENT_TARGET "10.8" CACHE STRING "OS X Deployment target")
-	set(CMAKE_OSX_BUILD_ARCHITECTURE "x86_64" CACHE STRING "Build architecture")
 endif()
 
 include(FindJack.cmake)
