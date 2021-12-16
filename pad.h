@@ -255,7 +255,11 @@ namespace PAD {
 
 	std::vector<IHostAPI*> GetLinkedAPIs( );
 
-	static inline void* LinkAPIs( ) { return GetLinkedAPIs( ).data( ); }
+	static inline void* LinkAPIs( ) {
+        static std::vector<IHostAPI*> apis = GetLinkedAPIs();
+        return apis.data( );
+        
+    }
 
 	class Session {
 		std::vector<AudioDevice*> devices;
