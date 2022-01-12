@@ -93,8 +93,8 @@ namespace PAD {
 		const std::vector<ChannelRange> GetInputRanges( ) const { return inputRanges; }
 		const std::vector<ChannelRange> GetOutputRanges( ) const { return outputRanges; }
 
-		void SetInputRanges(std::initializer_list<ChannelRange> cr) { inputRanges = std::move(cr); Normalize(inputRanges); }
-		void SetOutputRanges(std::initializer_list<ChannelRange> cr) { outputRanges = std::move(cr); Normalize(outputRanges); }
+        void SetInputRanges(std::initializer_list<ChannelRange> cr);
+        void SetOutputRanges(std::initializer_list<ChannelRange> cr);
 
 		enum ConfigurationChangeFlags {
 			SampleRateDidChange = 0x0001,

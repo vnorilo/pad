@@ -89,8 +89,11 @@ LIST_CONTAINS(contains coreaudio ${PAD_HOSTAPIS})
 if (contains)
 	find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
 	find_library(COREAUDIO_FRAMEWORK CoreAudio)
-	message(STATUS "Using ${AUDIOUNIT_FRAMEWORK} ${COREAUDIO_FRAMEWORK}")
-	target_link_libraries( pad ${AUDIOUNIT_FRAMEWORK} ${COREAUDIO_FRAMEWORK})
+    find_library(COREFOUNDATION_FRAMEWORK CoreFoundation)
+    find_library(SECURITY_FRAMEWORK Security)
+    set(FRAMEWORKS ${AUDIOUNIT_FRAMEWORK} ${COREAUDIO_FRAMEWORK} ${COREFOUNDATION_FRAMEWORK} ${SECURITY_FRAMEWORK})
+	message(STATUS "Using ${FRAMEWORKS}")
+	target_link_libraries( pad ${FRAMEWORKS} )
 endif()
 
 set_target_properties( pad 

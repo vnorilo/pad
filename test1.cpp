@@ -20,31 +20,39 @@ int main()
     //getchar();
     ErrorLogger el;
     Session myAudioSession(true,&el);
-
+    
     for(auto&& d : myAudioSession) {
-      std::cout << "Testing " << d.GetName() << "\n" << d.DefaultAllChannels() << "\n";
-      double phase = 0.0;
-      try {
-      if (d.DefaultAllChannels().GetNumStreamOutputs() > 0) {
-        d.BufferSwitch = [&](PAD::IO io) { 
-          int nc = io.config.GetNumStreamOutputs();
-          for(int i=0;i<io.numFrames;++i) {
-            for(int c =0;c<nc;++c) {
-              io.output[i*nc+c] = sin(phase);
+        std::cout << "Testing " << d.GetName() << "\n" << d.DefaultAllChannels() << "\n";
+        double phase = 0.0;
+        try {
+            float maxInput = 0;
+            if (d.DefaultAllChannels().GetNumStreamOutputs() > 0) {
+                d.BufferSwitch = [&](PAD::IO io) {
+                    int nc = io.config.GetNumStreamOutputs();
+                    int ni = io.config.GetNumStreamInputs();
+                    for(int c =0;c<nc;++c) {
+                        for(int i=0;i<io.numFrames;++i) {
+                            io.output[i*nc+c] = sin(phase + 0.02 * M_PI * i);
+                        }
+                    }
+                    phase += 0.02 * M_PI * io.numFrames;
+                    for(int c=0;c<ni*io.numFrames;++c) {
+                        maxInput = std::max(maxInput, io.input[c]);
+                    }
+                };
             }
-            phase += 0.02 * M_PI;
-          }
-        };
-      }
-	  auto defaultConf = d.DefaultAllChannels();
-	  d.Open(defaultConf);
-      std::this_thread::sleep_for(std::chrono::seconds(10));
-      d.Close();
-      } catch(std::exception& e) {
-        std::cout << "* ERROR " << e.what() << " *\n";
-      }
+            auto defaultConf = d.DefaultAllChannels();
+            d.Open(defaultConf);
+            std::this_thread::sleep_for(std::chrono::seconds(10));
+            d.Close();
+            if (defaultConf.GetNumStreamInputs()) {
+                std::cout << "Maximum input level: " << maxInput << std::endl;
+            }
+        } catch(std::exception& e) {
+            std::cout << "* ERROR " << e.what() << " *\n";
+        }
     }
-
+    
     return 0;
 }
 

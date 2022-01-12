@@ -109,6 +109,19 @@ namespace PAD {
 		numStreamOuts = GetNumChannels(outputRanges);
 	}
 
+    void AudioStreamConfiguration::SetInputRanges(std::initializer_list<ChannelRange> cr) {
+        inputRanges = std::move(cr);
+        Normalize(inputRanges);
+        numStreamIns = GetNumChannels(inputRanges);
+    }
+    
+    void AudioStreamConfiguration::SetOutputRanges(std::initializer_list<ChannelRange> cr) {
+        outputRanges = std::move(cr);
+        Normalize(outputRanges);
+        numStreamOuts = GetNumChannels(outputRanges);
+    }
+
+    
 	AudioStreamConfiguration AudioStreamConfiguration::SampleRate(double rate) const {
 		auto tmp(*this); tmp.SetSampleRate(rate); return tmp;
 	}
@@ -136,6 +149,11 @@ namespace PAD {
 	AudioStreamConfiguration AudioStreamConfiguration::Outputs(ChannelRange cr) const {
 		auto tmp(*this); tmp.AddDeviceOutputs(cr); return tmp;
 	}
+    
+    AudioStreamConfiguration AudioStreamConfiguration::StartSuspended( ) const {
+        auto tmp(*this); tmp.SetSuspendOnStartup(true); return tmp;
+    }
+
 
 	static void SetChannelLimits(vector<ChannelRange>& channelRanges, unsigned maxCh) {
 		vector<ChannelRange> newChannelRange;
@@ -196,7 +214,7 @@ namespace PAD {
 		unsigned devOuts(cfg.GetNumDeviceOutputs( ));
 
 		if (devIns < 32 && devOuts < 32 && (devIns > 0 || devOuts > 0)) {
-			stream << "Device[";
+			stream << "I/O [";
 			for (unsigned i(0); i < devIns; ++i) {
 				if (cfg.IsInputEnabled(i)) stream << "<" << i + 1 << ">";
 			}
