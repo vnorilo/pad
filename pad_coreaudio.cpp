@@ -15,8 +15,6 @@
 #include <functional>
 #include <algorithm>
 
-#include <iostream>
-
 #include <chrono>
 
 #define STRINGIZE(x) STR_EXPAND(x)
@@ -161,7 +159,7 @@ namespace {
 
                 OSStatus err = AudioUnitRender(AUHAL, ioFlags, timeStamp, 1, frames, &ab);
                 if (err != noErr) {
-
+                    for(auto &s : delegateInputBuffer) s = 0;
                 }
             }
             
@@ -217,7 +215,6 @@ namespace {
 
 			THROW_ERROR(DeviceInitializationFailure, AudioComponentInstanceNew(comp, &AUHAL));
 			//THROW_ERROR(DeviceInitializationFailure, AudioUnitInitialize(AUHAL));
-
 
             UInt32 numStreamIns = c.GetNumStreamInputs();
             UInt32 numStreamOuts = c.GetNumStreamOutputs();
@@ -365,6 +362,10 @@ namespace {
                                        NULL,
                                        &propsize,
                                        &defaultInputDevice);
+            
+            if (defaultInputDevice != defaultOutputDevice) {
+                devices.emplace_back(defaultInputDevice, defaultOutputDevice);
+            }
             
             for (auto dev : devids) {
 				try {
