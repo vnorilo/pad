@@ -10,7 +10,7 @@ namespace PAD {
 	const char* VersionString( ) { return "1.1.0"; }
 
 	AudioStreamConfiguration::AudioStreamConfiguration(double samplerate, bool valid)
-		:sampleRate(samplerate), valid(valid), startSuspended(false), numStreamIns(0), numStreamOuts(0) { }
+		:sampleRate(samplerate), valid(valid), startSuspended(false), numStreamIns(0), numStreamOuts(0), bufferSize(512) { }
 
 	enum RangeFindResult {
 		In,
