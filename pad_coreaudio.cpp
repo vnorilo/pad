@@ -89,7 +89,15 @@ namespace {
 		unsigned numInputs, numOutputs;
 		string devName;
 		AudioStreamConfiguration Conform(AudioStreamConfiguration c) const {
+            if (c.GetNumStreamInputs() > numInputs) {
+                c.SetInputRanges({ChannelRange{0, numInputs}});
+            }
+            
+            if (c.GetNumStreamOutputs() > numOutputs) {
+                    c.SetOutputRanges({ChannelRange{0, numOutputs}});
+            }
 			return c;
+            
 		}
         
         static mach_timebase_info_data_t timebaseInfo;
@@ -146,9 +154,19 @@ namespace {
 		unsigned GetNumOutputs( ) const override { return numOutputs; }
 		const char *GetHostAPI( ) const override { return "CoreAudio"; }
 
-		AudioStreamConfiguration DefaultMono( ) const override { return Conform(AudioStreamConfiguration(44100).Input(0).Output(0)); }
-		AudioStreamConfiguration DefaultStereo( ) const override  { return Conform(AudioStreamConfiguration(44100).StereoInput(0).StereoOutput(0)); }
-		AudioStreamConfiguration DefaultAllChannels( ) const override  { return Conform(AudioStreamConfiguration(44100).Inputs(ChannelRange(0, numInputs)).Outputs(ChannelRange(0, numOutputs))); }
+        float defaultSampleRate = 44100;
+
+        float GetDefaultSampleRate() {
+            return defaultSampleRate;
+        }
+        
+        void SetDefaultSampleRate(float sr) {
+            defaultSampleRate = sr;
+        }
+
+		AudioStreamConfiguration DefaultMono( ) const override { return Conform(AudioStreamConfiguration(defaultSampleRate).Input(0).Output(0)); }
+		AudioStreamConfiguration DefaultStereo( ) const override  { return Conform(AudioStreamConfiguration(defaultSampleRate).StereoInput(0).StereoOutput(0)); }
+		AudioStreamConfiguration DefaultAllChannels( ) const override  { return Conform(AudioStreamConfiguration(defaultSampleRate).Inputs(ChannelRange(0, numInputs)).Outputs(ChannelRange(0, numOutputs))); }
 
 		AudioStreamConfiguration currentConfiguration;
 
@@ -252,56 +270,21 @@ namespace {
 			// AUHAL unit inputs are hardware outputs and vice versa
             AURenderCallbackStruct cb = {AUHALCallback, this};
             
-            if (numStreamOuts) {
+            if (!numStreamOuts) {
                 THROW_ERROR(DeviceInitializationFailure,
                             AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_EnableIO,
-                                                 kAudioUnitScope_Output, 0, &enable, sizeof(enable)));
-            } else {
-                THROW_ERROR(DeviceInitializationFailure,
-                            AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_EnableIO,
-                                                 kAudioUnitScope_Output, 0, &disable, sizeof(enable)));
+                                                 kAudioUnitScope_Output, 0, &disable, sizeof(disable)));
             }
             
             if (numStreamIns) {
                 THROW_ERROR(DeviceInitializationFailure,
                             AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_EnableIO,
                                                  kAudioUnitScope_Input, 1, &enable, sizeof(enable)));
-            } else {
-                THROW_ERROR(DeviceInitializationFailure,
-                            AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_EnableIO,
-                                                 kAudioUnitScope_Input, 1, &disable, sizeof(enable)));
             }
-                        
-            if (numStreamIns) {
-                
-                AudioStreamBasicDescription inputFmt = {
-                    currentConfiguration.GetSampleRate( ), 'lpcm',
-                    kLinearPCMFormatFlagIsFloat + kLinearPCMFormatFlagIsPacked,
-                    UInt32(sizeof(float)*numStreamIns), 1,
-                    UInt32(sizeof(float)*numStreamIns), numStreamIns, 32, 0};
-
-                THROW_ERROR(DeviceInitializationFailure,
-                            AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 1, &inputId, sizeof(inputId)));
-                THROW_ERROR(DeviceInitializationFailure,
-                            AudioUnitSetProperty(AUHAL, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 1, &inputFmt, sizeof(AudioStreamBasicDescription)));
-
-                vector<SInt32> channelMap;
-                unsigned streamChannel(0);
-                unsigned numDevIns(currentConfiguration.GetNumDeviceInputs( ));
-                for (unsigned i(0); i < numDevIns; ++i) {
-                    if (currentConfiguration.IsInputEnabled(i)) channelMap.push_back(streamChannel++);
-                    else channelMap.push_back(-1);
-                }
-                
-                THROW_ERROR(DeviceInitializationFailure,
-                            AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, 1, channelMap.data( ), UInt32(channelMap.size( )*sizeof(SInt32))));
-                
-                if (!numStreamOuts) {
-                    callbackBus = 1;
-                    THROW_ERROR(DeviceInitializationFailure,
-                                AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_SetInputCallback, kAudioUnitScope_Global, 1, &cb, sizeof(AURenderCallbackStruct)));
-                }
-            }
+            
+            callbackBus = 1;
+            AudioUnitPropertyID callbackStyle = kAudioOutputUnitProperty_SetInputCallback;
+            UInt32 maximumFrames = 1024;
 
             if (numStreamOuts) {
 
@@ -315,7 +298,11 @@ namespace {
                             AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &outputId, sizeof(outputId)));
                 THROW_ERROR(DeviceInitializationFailure,
                             AudioUnitSetProperty(AUHAL, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &outputFmt, sizeof(AudioStreamBasicDescription)));
-                
+                UInt32 size = sizeof(maximumFrames);
+                THROW_ERROR(DeviceInitializationFailure,
+                            AudioUnitGetProperty(AUHAL, kAudioUnitProperty_MaximumFramesPerSlice,
+                                                 kAudioUnitScope_Global, 0, &maximumFrames, &size));
+
                 vector<SInt32> channelMap;
                 unsigned numDevOuts(currentConfiguration.GetNumDeviceOutputs( ));
                 unsigned streamChannel(0);
@@ -325,10 +312,44 @@ namespace {
                 }
                 
                 callbackBus = 0;
+                callbackStyle = kAudioUnitProperty_SetRenderCallback;
+                
                 THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Input, 0, channelMap.data( ), UInt32(channelMap.size( )*sizeof(SInt32))));
-                THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Global, 0, &cb, sizeof(AURenderCallbackStruct)));
             }
 
+            if (numStreamIns) {
+                
+                AudioStreamBasicDescription inputFmt = {
+                    currentConfiguration.GetSampleRate( ), 'lpcm',
+                    kLinearPCMFormatFlagIsFloat + kLinearPCMFormatFlagIsPacked,
+                    UInt32(sizeof(float)*numStreamIns), 1,
+                    UInt32(sizeof(float)*numStreamIns), numStreamIns, 32, 0};
+                
+                THROW_ERROR(DeviceInitializationFailure,
+                            AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 1, &inputId, sizeof(inputId)));
+                THROW_ERROR(DeviceInitializationFailure,
+                            AudioUnitSetProperty(AUHAL, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 1, &inputFmt, sizeof(AudioStreamBasicDescription)));
+                THROW_ERROR(DeviceInitializationFailure,
+                            AudioUnitSetProperty(AUHAL, kAudioUnitProperty_MaximumFramesPerSlice, kAudioUnitScope_Output, 1, &maximumFrames, sizeof(maximumFrames)));
+                
+                vector<SInt32> channelMap;
+                unsigned streamChannel(0);
+                unsigned numDevIns(currentConfiguration.GetNumDeviceInputs( ));
+                for (unsigned i(0); i < numDevIns; ++i) {
+                    if (currentConfiguration.IsInputEnabled(i)) channelMap.push_back(streamChannel++);
+                    else channelMap.push_back(-1);
+                }
+                
+                THROW_ERROR(DeviceInitializationFailure,
+                            AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, 1, channelMap.data( ), UInt32(channelMap.size( )*sizeof(SInt32))));
+                
+            }
+
+            THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL, callbackStyle,
+                                                                          kAudioUnitScope_Global,
+                                                                          callbackBus,
+                                                                          &cb, sizeof(AURenderCallbackStruct)));
+            
 			THROW_ERROR(DeviceInitializationFailure, AudioUnitInitialize(AUHAL));
 
 			if (currentConfiguration.HasSuspendOnStartup( ) == false) Resume( );
@@ -361,49 +382,58 @@ namespace {
 		double CPU_Load( ) const override { return 0.0; }
 	};
 
+    AudioObjectPropertySelector mSelector;
+    AudioObjectPropertyScope    mScope;
+    AudioObjectPropertyElement  mElement;
+
+    template <typename T>
+    std::vector<T> GetPropertyVector(AudioObjectID object,
+                                     AudioObjectPropertySelector sel,
+                                     AudioObjectPropertyScope scope = kAudioObjectPropertyScopeGlobal) {
+        
+        AudioObjectPropertyAddress theAddress = { sel, scope, object };
+        
+        UInt32 size = 0;
+        THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyDataSize(object, &theAddress, 0, nullptr, &size));
+        std::vector<T> data(size / sizeof(T));
+        THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyData(object, &theAddress, 0, nullptr, &size, data.data()));
+        return data;
+    }
+
+    template <typename T> T GetProperty(AudioObjectID object,
+                                        AudioObjectPropertySelector sel,
+                                        AudioObjectPropertyScope scope = kAudioObjectPropertyScopeGlobal) {
+        
+        AudioObjectPropertyAddress theAddress = { sel, scope, object };
+        
+        UInt32 size = 0;
+        THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyDataSize(object, &theAddress, 0, nullptr, &size));
+        T data;
+        THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyData(object, &theAddress, 0, nullptr, &size, &data));
+        return data;
+    }
+
+
 
 	class CoreaudioPublisher : public HostAPIPublisher {
 		list<CoreAudioDevice> devices;
 	public:
+        
 		void Publish(Session& PADInstance, DeviceErrorDelegate& errorHandler) {
-			UInt32 propsize(0);
-			AudioObjectPropertyAddress theAddress = {kAudioHardwarePropertyDevices,
-				kAudioObjectPropertyScopeGlobal,
-				kAudioObjectPropertyElementMaster};
-
-			THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &theAddress, 0, NULL, &propsize));
-
-			vector<AudioDeviceID> devids(propsize / sizeof(AudioDeviceID));
-			THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyData(kAudioObjectSystemObject, &theAddress, 0, NULL, &propsize, devids.data( )));
             
-            AudioDeviceID defaultOutputDevice = 0, defaultInputDevice = 0;
-            theAddress = { kAudioHardwarePropertyDefaultOutputDevice,
-                kAudioObjectPropertyScopeGlobal,
-                kAudioObjectPropertyElementMaster };
-            
-            AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &theAddress, 0, NULL, &propsize);
-            AudioObjectGetPropertyData(kAudioObjectSystemObject,
-                                       &theAddress,
-                                       0,
-                                       NULL,
-                                       &propsize,
-                                       &defaultOutputDevice);
-
-            theAddress = { kAudioHardwarePropertyDefaultInputDevice,
-                kAudioObjectPropertyScopeGlobal,
-                kAudioObjectPropertyElementMaster };
-
-            AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &theAddress, 0, NULL, &propsize);
-            AudioObjectGetPropertyData(kAudioObjectSystemObject,
-                                       &theAddress,
-                                       0,
-                                       NULL,
-                                       &propsize,
-                                       &defaultInputDevice);
-                        
+            auto devids = GetPropertyVector<AudioDeviceID>(kAudioObjectSystemObject, kAudioHardwarePropertyDevices);
+            auto defaultOutputDevice = GetProperty<AudioDeviceID>(kAudioObjectSystemObject, kAudioHardwarePropertyDefaultOutputDevice);
+            auto defaultInputDevice = GetProperty<AudioDeviceID>(kAudioObjectSystemObject, kAudioHardwarePropertyDefaultInputDevice);
+                                    
             for (auto dev : devids) {
 				try {
 					devices.emplace_back(dev, dev);
+                    
+                    try {
+                        devices.back().SetDefaultSampleRate(GetProperty<Float64>(dev, kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal));
+                        devices.back().SetDefaultSampleRate(GetProperty<Float64>(dev, kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeInput));
+                    } catch(...) { }
+                    
 				} catch (SoftError se) {
 					errorHandler.Catch(se);
 				} catch (HardError he) {
