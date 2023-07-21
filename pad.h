@@ -185,6 +185,7 @@ namespace PAD {
 		virtual unsigned GetNumOutputs( ) const = 0;
 		virtual const char *GetName( ) const = 0;
 		virtual const char *GetHostAPI( ) const = 0;
+        virtual bool IsDefault( ) const { return false; }
 
 		virtual bool Supports(const AudioStreamConfiguration&) const = 0;
 

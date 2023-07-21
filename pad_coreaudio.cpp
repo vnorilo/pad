@@ -37,6 +37,29 @@ namespace {
         CFRelease(str);
         return s;
 	}
+    
+    static bool AggregateContains(AudioDeviceID aggregate, AudioDeviceID device) {
+        
+        if (aggregate == device) return true;
+        
+        AudioObjectPropertyAddress addr = {
+            kAudioAggregateDevicePropertyActiveSubDeviceList,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMain
+        };
+        
+        UInt32 size = 0;
+        if (AudioObjectGetPropertyDataSize(aggregate, &addr, 0, NULL, &size) == noErr) {
+            std::vector<AudioDeviceID> devices(size / sizeof(AudioDeviceID));
+            if (AudioObjectGetPropertyData(aggregate, &addr, 0, NULL, &size, devices.data()) == noErr) {
+                return std::find(devices.begin(), devices.end(), device) != devices.end();
+            }
+        }
+        
+        return false;
+        
+    }
+
 
 	struct ChannelPackage {
 		unsigned bufIndex, startChannel, numChannels;
@@ -49,6 +72,7 @@ namespace {
 		vector<ChannelPackage> inputChannelFormat;
 		vector<ChannelPackage> outputChannelFormat;
 
+        bool isSystemDefault;
 
 		unsigned CountChannels(AudioDeviceID caID, bool inputs, vector<ChannelPackage>& channels) {
 			UInt32 propsize;
@@ -103,10 +127,11 @@ namespace {
         static mach_timebase_info_data_t timebaseInfo;
 
 	public:
-		CoreAudioDevice(AudioDeviceID input, AudioDeviceID output)
+		CoreAudioDevice(AudioDeviceID input, AudioDeviceID output, bool systemDefault)
 			:inputId(input), outputId(output),
              numInputs(CountChannels(input, true, inputChannelFormat)),
-             numOutputs(CountChannels(output, false, outputChannelFormat)) {
+             numOutputs(CountChannels(output, false, outputChannelFormat)),
+             isSystemDefault(systemDefault) {
                 
             auto inputName = GetName(input, true);
             auto outputName = GetName(output, false);
@@ -119,28 +144,10 @@ namespace {
 
         ~CoreAudioDevice() { Close(); }
         
-        bool AggregateContains(AudioDeviceID aggregate, AudioDeviceID device) const {
-            
-            if (aggregate == device) return true;
-
-            AudioObjectPropertyAddress addr = {
-                kAudioAggregateDevicePropertyActiveSubDeviceList,
-                kAudioObjectPropertyScopeGlobal,
-                kAudioObjectPropertyElementMaster
-            };
-
-            UInt32 size = 0;
-            if (AudioObjectGetPropertyDataSize(aggregate, &addr, 0, NULL, &size) == noErr) {
-                std::vector<AudioDeviceID> devices(size / sizeof(AudioDeviceID));
-                if (AudioObjectGetPropertyData(aggregate, &addr, 0, NULL, &size, devices.data()) == noErr) {
-                    return std::find(devices.begin(), devices.end(), device) != devices.end();
-                }
-            }
-            
-            return false;
-
+        bool IsDefault( ) const override {
+            return isSystemDefault;
         }
-                
+                        
         bool ContainsInputId(AudioDeviceID input) const {
             return AggregateContains(inputId, input);
         }
@@ -427,7 +434,7 @@ namespace {
                                     
             for (auto dev : devids) {
 				try {
-					devices.emplace_back(dev, dev);
+					devices.emplace_back(dev, dev, AggregateContains(defaultOutputDevice, dev) || AggregateContains(defaultInputDevice, dev));
                     
                     try {
                         devices.back().SetDefaultSampleRate(GetProperty<Float64>(dev, kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal));
