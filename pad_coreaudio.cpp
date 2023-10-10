@@ -33,7 +33,9 @@ namespace {
 
 	string StatusString(OSStatus code) {
         CFStringRef str = SecCopyErrorMessageString(code, nullptr);
-        std::string s {CFStringGetCStringPtr(str, kCFStringEncodingUTF8)};
+        const char* cstr = CFStringGetCStringPtr(str, kCFStringEncodingUTF8);
+        if (!cstr) cstr = "unknown error";
+        std::string s { cstr };
         CFRelease(str);
         return s;
 	}
