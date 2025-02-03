@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.2)
 
 set(CPACK_PACKAGE_VERSION 0.1.0)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
@@ -16,7 +16,7 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 			-D_UNICODE -DUNICODE
 			 "/wd4458" "/wd4457" "/wd4456")
 else ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-	add_definitions(-msse2 -fno-rtti -Wno-reorder -Wno-unused-function)
+	add_definitions(-fno-rtti -Wno-reorder -Wno-unused-function)
 endif()
 
 if (WIN32)
@@ -33,7 +33,7 @@ if (JACK_FOUND)
 	endif()
 endif (JACK_FOUND )
 
-if (PAD_AVAILABLE_HOSTAPIS)
+if (NOT PAD_HOSTAPIS)
 	set(PAD_HOSTAPIS ${PAD_AVAILABLE_HOSTAPIS} CACHE STRING "Build PAD for a subset of asio;wasapi;coreaudio;jack")
 endif (PAD_AVAILABLE_HOSTAPIS)
 
@@ -83,6 +83,11 @@ add_library(pad STATIC ${PAD_SOURCES})
 LIST_CONTAINS(contains jack ${PAD_HOSTAPIS})
 if (contains)
 	target_link_libraries( pad ${JACK_LIBRARY} )
+endif()
+
+LIST_CONTAINS(contains wasapi ${PAD_HOSTAPIS})
+if (contains)
+	target_link_libraries( pad mfplat ksuser )
 endif()
 
 LIST_CONTAINS(contains coreaudio ${PAD_HOSTAPIS})

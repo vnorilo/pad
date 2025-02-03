@@ -70,7 +70,7 @@ namespace COG {
 		}
 
 		static std::string Format(HRESULT err) {
-			LPTSTR errorText = nullptr;
+			wchar_t* errorText = nullptr;
 			FormatMessage(
 				FORMAT_MESSAGE_FROM_SYSTEM |
 				FORMAT_MESSAGE_ALLOCATE_BUFFER |
