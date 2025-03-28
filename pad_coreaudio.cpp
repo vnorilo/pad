@@ -480,4 +480,15 @@ namespace PAD {
 	IHostAPI* LinkCoreAudio( ) {
 		return &publisher;
 	}
+    
+    std::shared_ptr<AudioDevice> MakeCoreAudioDevice(AudioDeviceID dev) {
+        auto device = std::make_shared<CoreAudioDevice>(dev, dev, false);
+        try {
+            device->SetDefaultSampleRate(GetProperty<Float64>(dev, kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal));
+            device->SetDefaultSampleRate(GetProperty<Float64>(dev, kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeInput));
+        } catch(...) {
+            
+        }
+        return device;
+    }
 }
