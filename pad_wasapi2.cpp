@@ -609,20 +609,24 @@ namespace {
 				}
 			}
 
-			defaultDevice = std::make_unique<WasapiDevice>("System");
-
-			auto defaultOut = deviceEnumerator.GetObject(
-				&IMMDeviceEnumerator::GetDefaultAudioEndpoint, eRender, eMultimedia);
-			auto defaultIn = deviceEnumerator.GetObject(
-				&IMMDeviceEnumerator::GetDefaultAudioEndpoint, eCapture, eMultimedia);			
-
-			defaultDevice->outputPorts.emplace_back(
-				TransferObjectOwnership<IAudioClient>(&IMMDevice::Activate, defaultOut.Get(),
-										__uuidof(IAudioClient), CLSCTX_ALL, nullptr));
-			defaultDevice->inputPorts.emplace_back(
-				TransferObjectOwnership<IAudioClient>(&IMMDevice::Activate, defaultIn.Get(),
-										__uuidof(IAudioClient), CLSCTX_ALL, nullptr));
+            defaultDevice = ConstructDefaultDevice();
 		}
+        
+        std::unique_ptr<WasapiDevice> ConstructDefaultDevice() {
+            auto deviceEnumerator = ComRef<IMMDeviceEnumerator>::Make(ID::DeviceEnumerator, CLSCTX_ALL);
+            auto defaultDevice = std::make_unique<WasapiDevice>("System");
+            auto defaultOut = deviceEnumerator.GetObject(&IMMDeviceEnumerator::GetDefaultAudioEndpoint, eRender, eMultimedia);
+            auto defaultIn = deviceEnumerator.GetObject(&IMMDeviceEnumerator::GetDefaultAudioEndpoint, eCapture, eMultimedia);
+            
+            defaultDevice->outputPorts.emplace_back(
+                TransferObjectOwnership<IAudioClient>(&IMMDevice::Activate, defaultOut.Get(),
+                                                      __uuidof(IAudioClient), CLSCTX_ALL, nullptr));
+            defaultDevice->inputPorts.emplace_back(
+                TransferObjectOwnership<IAudioClient>(&IMMDevice::Activate, defaultIn.Get(),
+                                                      __uuidof(IAudioClient), CLSCTX_ALL, nullptr));
+            
+            return std::move(defaultDevice);
+        }
 
 		void Configure() {
 			defaultDevice->Configure();
@@ -654,4 +658,8 @@ namespace PAD {
 	IHostAPI* LinkWASAPI() {
 		return &publisher;
 	}
+    
+    std::shared_ptr<AudioDevice> MakeWasapiDefaultDevice() {
+        return publisher.ConstructDefaultDevice();
+    }
 }
