@@ -477,9 +477,9 @@ namespace {
 }
 
 namespace PAD {
-	IHostAPI* LinkCoreAudio( ) {
-		return &publisher;
-	}
+    IHostAPI* LinkCoreAudio( ) {
+        return &publisher;
+    }
     
     std::shared_ptr<AudioDevice> MakeCoreAudioDevice(AudioDeviceID dev) {
         auto device = std::make_unique<CoreAudioDevice>(dev, dev, false);
@@ -491,4 +491,16 @@ namespace PAD {
         }
         return device;
     }
+    
+    std::shared_ptr<AudioDevice> MakeCoreAudioDuplexDevice(AudioDeviceID devIn, AudioDeviceID devOut) {
+        auto device = std::make_unique<CoreAudioDevice>(devIn, devOut, false);
+        try {
+            device->SetDefaultSampleRate(GetProperty<Float64>(devIn, kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal));
+            device->SetDefaultSampleRate(GetProperty<Float64>(devOut, kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeInput));
+        } catch(...) {
+            
+        }
+        return device;
+    }
+
 }
