@@ -65,14 +65,46 @@ namespace {
 
 	struct ChannelPackage {
 		unsigned bufIndex, startChannel, numChannels;
-
 	};
+    
+    AudioObjectPropertySelector mSelector;
+    AudioObjectPropertyScope    mScope;
+    AudioObjectPropertyElement  mElement;
+    
+    template <typename T>
+    std::vector<T> GetPropertyVector(AudioObjectID object,
+                                     AudioObjectPropertySelector sel,
+                                     AudioObjectPropertyScope scope = kAudioObjectPropertyScopeGlobal) {
+        
+        AudioObjectPropertyAddress theAddress = { sel, scope, object };
+        
+        UInt32 size = 0;
+        THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyDataSize(object, &theAddress, 0, nullptr, &size));
+        std::vector<T> data(size / sizeof(T));
+        THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyData(object, &theAddress, 0, nullptr, &size, data.data()));
+        return data;
+    }
+    
+    template <typename T> T GetProperty(AudioObjectID object,
+                                        AudioObjectPropertySelector sel,
+                                        AudioObjectPropertyScope scope = kAudioObjectPropertyScopeGlobal) {
+        
+        AudioObjectPropertyAddress theAddress = { sel, scope, object };
+        
+        UInt32 size = 0;
+        THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyDataSize(object, &theAddress, 0, nullptr, &size));
+        T data;
+        THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyData(object, &theAddress, 0, nullptr, &size, &data));
+        return data;
+    }
+
 
 	class CoreAudioDevice : public AudioDevice {
 		AudioDeviceID inputId, outputId;
 
 		vector<ChannelPackage> inputChannelFormat;
 		vector<ChannelPackage> outputChannelFormat;
+        double inputLatency, outputLatency;
 
         bool isSystemDefault;
 
@@ -208,6 +240,9 @@ namespace {
             auto outputTime = std::chrono::microseconds((sysTime + 500) / 1000);
             auto inputTime = outputTime; // todo: compute latency!!
             
+            outputTime += std::chrono::microseconds((long long)(outputLatency * 1000000.));
+            inputTime  -= std::chrono::microseconds((long long)(inputLatency * 1000000.));
+            
             if (currentConfiguration.GetNumStreamInputs( ) > 0) {
                 AudioBufferList ab;
                 ab.mNumberBuffers = 1;
@@ -323,6 +358,12 @@ namespace {
                 callbackBus = 0;
                 callbackStyle = kAudioUnitProperty_SetRenderCallback;
                 
+                outputLatency = (
+                    GetProperty<UInt32>(outputId, kAudioDevicePropertyLatency, kAudioDevicePropertyScopeOutput) +
+                    GetProperty<UInt32>(outputId, kAudioDevicePropertySafetyOffset, kAudioDevicePropertyScopeOutput)
+                ) / currentConfiguration.GetSampleRate();
+
+                
                 THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Input, 0, channelMap.data( ), UInt32(channelMap.size( )*sizeof(SInt32))));
             }
 
@@ -352,6 +393,10 @@ namespace {
                 THROW_ERROR(DeviceInitializationFailure,
                             AudioUnitSetProperty(AUHAL, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Output, 1, channelMap.data( ), UInt32(channelMap.size( )*sizeof(SInt32))));
                 
+                inputLatency = (
+                    GetProperty<UInt32>(inputId, kAudioDevicePropertyLatency, kAudioDevicePropertyScopeInput) +
+                    GetProperty<UInt32>(inputId, kAudioDevicePropertySafetyOffset, kAudioDevicePropertyScopeInput)
+                ) / currentConfiguration.GetSampleRate();
             }
 
             THROW_ERROR(DeviceInitializationFailure, AudioUnitSetProperty(AUHAL, callbackStyle,
@@ -390,39 +435,6 @@ namespace {
 
 		double CPU_Load( ) const override { return 0.0; }
 	};
-
-    AudioObjectPropertySelector mSelector;
-    AudioObjectPropertyScope    mScope;
-    AudioObjectPropertyElement  mElement;
-
-    template <typename T>
-    std::vector<T> GetPropertyVector(AudioObjectID object,
-                                     AudioObjectPropertySelector sel,
-                                     AudioObjectPropertyScope scope = kAudioObjectPropertyScopeGlobal) {
-        
-        AudioObjectPropertyAddress theAddress = { sel, scope, object };
-        
-        UInt32 size = 0;
-        THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyDataSize(object, &theAddress, 0, nullptr, &size));
-        std::vector<T> data(size / sizeof(T));
-        THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyData(object, &theAddress, 0, nullptr, &size, data.data()));
-        return data;
-    }
-
-    template <typename T> T GetProperty(AudioObjectID object,
-                                        AudioObjectPropertySelector sel,
-                                        AudioObjectPropertyScope scope = kAudioObjectPropertyScopeGlobal) {
-        
-        AudioObjectPropertyAddress theAddress = { sel, scope, object };
-        
-        UInt32 size = 0;
-        THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyDataSize(object, &theAddress, 0, nullptr, &size));
-        T data;
-        THROW_ERROR(DeviceInitializationFailure, AudioObjectGetPropertyData(object, &theAddress, 0, nullptr, &size, &data));
-        return data;
-    }
-
-
 
 	class CoreaudioPublisher : public HostAPIPublisher {
 		list<CoreAudioDevice> devices;
@@ -482,6 +494,7 @@ namespace PAD {
     }
     
     std::shared_ptr<AudioDevice> MakeCoreAudioDevice(AudioDeviceID dev) {
+        
         auto device = std::make_unique<CoreAudioDevice>(dev, dev, false);
         try {
             device->SetDefaultSampleRate(GetProperty<Float64>(dev, kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal));
